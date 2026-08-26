@@ -1,0 +1,9 @@
+{
+  "database_is_source_of_truth": true,
+  "entities": [],
+  "graph_projection_is_epistemic_authority": false,
+  "relationships": [],
+  "saved_at": "2026-08-26T07:36:51.875898+00:00",
+  "schema_version": "graph-schema-v2.0",
+  "service_version": "graph-service-v3.0"
+}
