@@ -1,0 +1,6 @@
+Blind event: B036
+Source: S003
+
+--- Evidence 1 ---
+type: source_excerpt
+We've seen similar approaches adopted successfully in other markets to improve contractor confidence and reduce project delays.

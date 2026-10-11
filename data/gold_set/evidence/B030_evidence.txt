@@ -1,0 +1,14 @@
+Blind event: B030
+Source: S002
+
+--- Evidence 1 ---
+type: source_excerpt
+In January, the Company announced a US$66 million global co-development collaboration with Hygtia Therapeutics to jointly develop ISM8969, an innovative brain-penetrant NLRP3 inhibitor. In the same month, Insilico Medicine reached an R&D collaboration with Qilu Pharmaceutical totaling nearly $120 million, enhancing the synergistic model from software platform services to joint R&D.
+
+--- Evidence 2 ---
+type: quantitative_claim
+stated_quantity $120 million
+
+--- Evidence 3 ---
+type: quantitative_claim
+stated_quantity $66 million

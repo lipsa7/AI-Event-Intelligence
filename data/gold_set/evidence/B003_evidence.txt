@@ -1,0 +1,6 @@
+Blind event: B003
+Source: S003
+
+--- Evidence 1 ---
+type: source_excerpt
+When infrastructure expands, businesses grow, investments increase and communities become more connected and productive.

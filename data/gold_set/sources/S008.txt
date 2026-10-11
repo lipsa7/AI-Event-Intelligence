@@ -1,0 +1,37 @@
+[[ type === 'moc' ? 'MARKET ON CLOSE' : 'FREE WEBINAR' ]]
+[[ timeLabel ]] WATCH LIVE :
+Your browser of choice has not been tested for use with Barchart.com. If you have issues, please download one of the browsers listed here .
+Watchlist | Portfolio | Dashboard
+Site News
+Contact
+Market:
+Canada
+Australia
+Europe
+Related Symbols
+Symbol
+Last
+Chg
+%Chg
+NVDA
+227.98
++18.32
++8.74%
+Nvidia Corp
+SUPX
+9.78
++0.41
++4.38%
+Superx AI Technology Limited
+Most Popular News
+1
+Nvidia Reports $7.8 Billion in Q2 Gains on Equity Portfolio That Includes SpaceX, Intel, CoreWeave, and More
+2
+Corn Closing in on 3-year Highs
+3
+A $6 Billion Reason to Buy Nvidia Stock Now
+4
+Extreme Speculators Should Keep Close Tabs on Intuitive Machines (LUNR) Stock
+5
+How to Play AAPL Stock as Apple Unveils New Macs
+A Nearly $40 Million Reason to Buy Little-Known SuperX AI Stock

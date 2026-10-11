@@ -78,14 +78,17 @@ from decimal import Decimal, InvalidOperation
 from typing import Any, Mapping
 
 from services.llm_service import LLMService
+from services.event_context_audit_service import (
+    audit_extraction_call, audit_extraction_decision, set_extraction_audit_context,
+)
 from utils.logger import get_logger
 
 
 logger = get_logger(__name__)
 
 
-AGENT_VERSION = "extraction-agent-v5.3-deep-anchor-first"
-PATCH_BUILD_ID = "EXTRACT-V53-DEEP-ANCHOR-FIRST-20260824"
+AGENT_VERSION = "extraction-agent-v5.3.3-deep-actor-recall-boundary-precision"
+PATCH_BUILD_ID = "EXTRACT-V533-DEEP-ACTOR-RECALL-BOUNDARY-PRECISION-20260828"
 DEFAULT_EXTRACTION_TIMEOUT_SECONDS = 120.0
 MAX_EXTRACTION_TIMEOUT_SECONDS = 180.0
 
@@ -131,7 +134,7 @@ class ExtractionAgent:
     AGENT_VERSION = AGENT_VERSION
 
     PROMPT_VERSION = (
-        "extraction-agent-v5.3-deep-anchor-first"
+        "extraction-agent-v5.3.3-deep-actor-recall-boundary-precision"
     )
 
     PATCH_BUILD_ID = PATCH_BUILD_ID
@@ -3081,9 +3084,19 @@ Return only the repaired JSON object.
         if text in exact:
             return True
 
+        # Generic definite-article variants are equally anonymous:
+        # "The Company", "The Firm", "The Organization", etc.
+        without_article = re.sub(r"^the\s+", "", text).strip()
+        if without_article in {
+            "actor", "company", "firm", "operator", "provider",
+            "issuer", "business", "organization", "organisation",
+            "institution", "entity", "party", "startup",
+        }:
+            return True
+
         return bool(
             re.match(
-                r"^(?:unnamed|unknown|unidentified|another|separate)\s+"
+                r"^(?:the\s+)?(?:unnamed|unknown|unidentified|another|separate)\s+"
                 r"(?:actor|company|firm|issuer|operator|provider|entity)\b",
                 text,
             )
@@ -3184,6 +3197,10 @@ Return only the repaired JSON object.
                 "malformed_event_count"
             ] += 1
 
+            audit_extraction_decision("rejected", "malformed_event",
+                record_type="validation_decision", source_id=source_id,
+                source_content_fingerprint=content_fingerprint, chunk_index=chunk_index,
+                candidate=item)
             return None
 
         title = self._clean_text(
@@ -3392,6 +3409,10 @@ Return only the repaired JSON object.
                     "event_without_valid_source_snippet_count"
                 ] += 1
 
+            audit_extraction_decision("rejected", "required_event_fields_or_source_snippets_missing",
+                record_type="validation_decision", source_id=source_id,
+                source_content_fingerprint=content_fingerprint, chunk_index=chunk_index,
+                candidate=item, missing_event_type=not bool(event_type), missing_summary=not bool(summary), missing_valid_snippets=not bool(snippets))
             return None
 
         if not title:
@@ -3434,6 +3455,10 @@ Return only the repaired JSON object.
                 self._validation_diagnostics[
                     "rejected_event_count"
                 ] += 1
+                audit_extraction_decision("rejected", "material_event_missing_named_actor",
+                    record_type="validation_decision", source_id=source_id,
+                    source_content_fingerprint=content_fingerprint, chunk_index=chunk_index,
+                    candidate=item, normalized_entity_mentions=entity_mentions)
                 return None
 
         # --------------------------------------------------------------
@@ -5289,6 +5314,9 @@ JSON schema:
             return {}
         flag = str(os.getenv("EVENT_INTELLIGENCE_FAST_SEMANTIC_GATE", "1")).strip().casefold()
         if flag in {"0", "false", "off", "no"}:
+            audit_extraction_decision("not_called", "semantic_gate_disabled",
+                record_type="semantic_gate_status", diagnostic_prefix=diagnostic_prefix,
+                ambiguous_candidate_count=len(candidates))
             return {}
 
         payload = [
@@ -5317,6 +5345,8 @@ Return JSON only: {"classifications":[{"index":0,"taxonomy":"observed_event"}]}"
 
         ask = getattr(self.fast_gate_llm, "ask", None)
         if not callable(ask):
+            audit_extraction_decision("not_called", "semantic_gate_unavailable",
+                record_type="semantic_gate_status", diagnostic_prefix=diagnostic_prefix)
             return {}
         kwargs: dict[str, Any] = {}
         try:
@@ -5349,6 +5379,9 @@ Return JSON only: {"classifications":[{"index":0,"taxonomy":"observed_event"}]}"
             parsed = self._extract_json_object(str(raw or ""))
         except Exception as exc:
             self._validation_diagnostics[f"{diagnostic_prefix}_semantic_gate_failure_count"] += 1
+            audit_extraction_decision("failed", "semantic_gate_failed",
+                record_type="semantic_gate_status", diagnostic_prefix=diagnostic_prefix,
+                error_type=type(exc).__name__, classifier_payload=payload)
             logger.warning("Semantic event-boundary gate failed; ambiguous candidates rejected. prefix=%s error=%s message=%s", diagnostic_prefix, type(exc).__name__, str(exc))
             return {}
 
@@ -5365,6 +5398,9 @@ Return JSON only: {"classifications":[{"index":0,"taxonomy":"observed_event"}]}"
             if taxonomy in allowed:
                 result[idx] = taxonomy
         self._validation_diagnostics[f"{diagnostic_prefix}_semantic_gate_call_count"] += 1
+        audit_extraction_decision("completed", "semantic_gate_completed",
+            record_type="semantic_gate_status", diagnostic_prefix=diagnostic_prefix,
+            classifier_payload=payload, classifications=result)
         return result
 
     @staticmethod
@@ -5426,15 +5462,35 @@ Return JSON only: {"classifications":[{"index":0,"taxonomy":"observed_event"}]}"
             if candidate.strip()
         ]
 
+        audit_extraction_decision(
+            "started", "source_scan_started", record_type="source_scan",
+            diagnostic_prefix=diagnostic_prefix, validation_text=source_text,
+            validation_text_sha256=hashlib.sha256(source_text.encode("utf-8")).hexdigest(),
+            candidate_count=len(raw_candidates), maximum_events=maximum_events,
+        )
+        audit_candidates: dict[str, dict[str, Any]] = {}
+
+        def audit_candidate(decision: str, reason: str, snippet: str, **details: Any) -> None:
+            audit_extraction_decision(
+                decision, reason, diagnostic_prefix=diagnostic_prefix,
+                candidate_text=snippet,
+                **{**audit_candidates.get(snippet, {}), **details},
+            )
+
         ranked: list[tuple[float, str, str, str, str]] = []
         ambiguous: list[dict[str, Any]] = []
         seen: set[str] = set()
         rejected_taxonomies = {"background", "marketing", "document_structure", "roundup_or_listing", "scenario", "opinion"}
 
-        for raw in raw_candidates:
+        for candidate_index, raw in enumerate(raw_candidates):
             snippet = self._clean_text(raw, 700)
             snippet = self._fast_repair_press_release_glue(snippet)
+            audit_candidates.setdefault(snippet, {
+                "candidate_index": candidate_index, "raw_text": raw,
+            })
             if len(snippet) < 35:
+                audit_candidate("rejected", "candidate_shorter_than_35_characters", snippet,
+                                candidate_index=candidate_index, raw_text=raw)
                 continue
 
             taxonomy, taxonomy_reason = self._fast_event_taxonomy(
@@ -5443,14 +5499,21 @@ Return JSON only: {"classifications":[{"index":0,"taxonomy":"observed_event"}]}"
             )
             if taxonomy in rejected_taxonomies:
                 self._validation_diagnostics[f"{diagnostic_prefix}_taxonomy_rejected_{taxonomy}"] += 1
+                audit_candidate("rejected", "taxonomy_rejected", snippet, taxonomy=taxonomy,
+                                taxonomy_reason=taxonomy_reason, candidate_index=candidate_index, raw_text=raw)
                 continue
 
             event_type = self._fast_event_type_from_text(snippet)
             if not event_type:
+                audit_candidate("rejected", "event_type_not_detected", snippet,
+                                taxonomy=taxonomy, taxonomy_reason=taxonomy_reason,
+                                candidate_index=candidate_index, raw_text=raw)
                 continue
 
             fingerprint = self._canonical_text(snippet)
             if not fingerprint or fingerprint in seen:
+                audit_candidate("rejected", "empty_or_duplicate_candidate", snippet,
+                                candidate_index=candidate_index, raw_text=raw)
                 continue
             seen.add(fingerprint)
 
@@ -5506,6 +5569,9 @@ Return JSON only: {"classifications":[{"index":0,"taxonomy":"observed_event"}]}"
             taxonomy = adjudicated.get(idx, "")
             if taxonomy not in {"observed_event", "future_commitment"}:
                 self._validation_diagnostics[f"{diagnostic_prefix}_ambiguous_candidate_rejected_count"] += 1
+                audit_candidate("rejected", "ambiguous_candidate_not_accepted", str(row["snippet"]),
+                                taxonomy=taxonomy or "unresolved", taxonomy_reason="semantic_gate",
+                                ambiguity_index=idx)
                 continue
             ranked.append((
                 float(row["score"]),
@@ -5515,14 +5581,19 @@ Return JSON only: {"classifications":[{"index":0,"taxonomy":"observed_event"}]}"
                 "semantic_gate",
             ))
 
+        for idx, row in enumerate(ambiguous[8:], start=8):
+            audit_candidate("not_processed", "ambiguity_budget_exhausted", str(row["snippet"]),
+                            taxonomy="ambiguous", ambiguity_index=idx, ambiguity_budget=8)
+
         ranked.sort(key=lambda item: item[0], reverse=True)
 
         output: list[dict[str, Any]] = []
         semantic_seen: set[str] = set()
         semantic_token_sets: list[set[str]] = []
-        for _, snippet, event_type, taxonomy, taxonomy_reason in ranked:
+        for rank_index, (_, snippet, event_type, taxonomy, taxonomy_reason) in enumerate(ranked):
             semantic_key = self._canonical_text(snippet)
             if semantic_key in semantic_seen:
+                audit_candidate("rejected", "duplicate_ranked_candidate", snippet, event_type=event_type)
                 continue
             token_set = set(semantic_key.split())
             if token_set and any(
@@ -5530,6 +5601,7 @@ Return JSON only: {"classifications":[{"index":0,"taxonomy":"observed_event"}]}"
                 for prior in semantic_token_sets
             ):
                 self._validation_diagnostics[f"{diagnostic_prefix}_near_duplicate_event_rejected_count"] += 1
+                audit_candidate("rejected", "near_duplicate_candidate", snippet, event_type=event_type)
                 continue
             semantic_seen.add(semantic_key)
             semantic_token_sets.append(token_set)
@@ -5562,7 +5634,14 @@ Return JSON only: {"classifications":[{"index":0,"taxonomy":"observed_event"}]}"
                 "_fast_taxonomy_reason": taxonomy_reason,
             })
 
+            audit_candidate("selected", "anchor_selected_for_validation", snippet,
+                            event_type=event_type, taxonomy=taxonomy, taxonomy_reason=taxonomy_reason,
+                            entity_mentions=output[-1]["entity_mentions"])
             if len(output) >= max(1, int(maximum_events)):
+                for _, remaining_snippet, remaining_type, remaining_taxonomy, _ in ranked[rank_index + 1:]:
+                    audit_candidate("not_processed", "event_limit_reached", remaining_snippet,
+                                    event_type=remaining_type, taxonomy=remaining_taxonomy,
+                                    maximum_events=maximum_events)
                 break
 
         return output
@@ -5607,27 +5686,131 @@ Return JSON only: {"classifications":[{"index":0,"taxonomy":"observed_event"}]}"
             r"build(?:s|ing|built)?|form(?:s|ed|ing)?|create(?:s|d|ing)?"
         )
 
-        # Capture the accountable proper-name subject immediately before an action.
-        # Examples: "Blackstone-backed Company X acquired...", "Nscale raised...".
-        subject_pattern = re.compile(
-            rf"(?:^|[.!?]\s+)(?P<actor>[A-Z][A-Za-z0-9&.'’\-]*(?:\s+[A-Z][A-Za-z0-9&.'’\-]*){{0,6}})\s+(?:{action})\b"
-        )
-        for match in subject_pattern.finditer(value):
-            mention = match.group("actor").strip(" ,.;:()[]{}")
+        # Institutional candidate recall with placeholder-precision guard.
+        #
+        # V5.3 required the actor to appear at the literal beginning of a sentence.
+        # That misses ordinary source-grounded constructions such as:
+        #     "In June, Insilico Medicine announced ..."
+        #     "... transactions announced by Insilico Medicine ..."
+        #     "Insilico Medicine (HKEX: 3696), a ... company, recently released ..."
+        #
+        # This block ONLY adds exact proper-name spans already present in the event
+        # anchor, while refusing the extractor's existing placeholder actor names.
+        # It does not change _named_actor_mentions(), Strategic Admission, topic
+        # thresholds, acronym handling, or source-context resolution. The known
+        # V5.3 behavior for unrelated `unknown` acronyms therefore remains unchanged.
+        # A recovered institutional span must preserve proper-name boundaries.
+        #
+        # V5.3.2 allowed "." inside every proper token and compiled the appositive
+        # matcher case-insensitively. Together those rules could swallow prose and
+        # a sentence boundary, e.g.:
+        #     "scenarios for pioneering AI application. In March"
+        #
+        # Ordinary name tokens are therefore case-sensitive and cannot contain a
+        # free-standing period. Dotted acronyms such as "U.S." remain allowed.
+        proper_word = r"[A-Z][A-Za-z0-9&'’\-]*"
+        dotted_acronym = r"(?:[A-Z]\.){2,}"
+        proper_token = rf"(?:{proper_word}|{dotted_acronym})"
+        proper_name = rf"{proper_token}(?:\s+{proper_token}){{0,6}}"
+
+        def add_recovered_actor(mention: str, context: str) -> None:
+            mention = mention.strip(" ,.;:()[]{}")
             key = mention.casefold()
             if not mention or key in seen:
-                continue
+                return
             if key in {"the", "a", "an", "this", "these", "today"}:
-                continue
+                return
+
+            # V5.3.2 precision correction:
+            # never promote generic/anonymous labels such as "Company", "Firm",
+            # "The Company", "Unknown Company", etc. into an institutional actor.
+            #
+            # This reuses the extractor's pre-existing attribution trust rule rather
+            # than inventing a new vocabulary. Importantly, the mention may still
+            # exist in source text; it simply cannot be added by this recall helper
+            # as a named institutional candidate.
+            if cls._is_placeholder_actor_name(mention):
+                return
+
+            # A recovered actor is a source span, never a sentence fragment.
+            # Reject internal sentence punctuation and prose-boundary artifacts.
+            if re.search(r"[!?;:]", mention):
+                return
+            if re.search(r"\.\s+", mention):
+                return
+
+            # Do not manufacture actors from temporal lead-ins accidentally captured
+            # by a broad proper-name span. The actor span itself must remain proper.
+            if re.fullmatch(
+                r"(?:In|On|By|As|At|From|During|After|Before|Since|For)"
+                r"(?:\s+(?:January|February|March|April|May|June|July|August|"
+                r"September|October|November|December|20\d{2}|the|this|last|next))*",
+                mention,
+                flags=re.IGNORECASE,
+            ):
+                return
             seen.add(key)
             output.append({
                 "mention": mention,
                 "entity_type": "organization",
                 "source_span": mention,
-                "context": "",
+                "context": context,
             })
+
+        # 1) Explicit action subject anywhere in the anchored proposition, not only
+        # at the literal sentence start. Punctuation/temporal prefixes naturally end
+        # before the proper-name subject, so "In June, Insilico Medicine announced"
+        # resolves to exactly "Insilico Medicine".
+        subject_pattern = re.compile(
+            rf"(?<![A-Za-z0-9&.'’\-])(?P<actor>{proper_name})\s+(?:"
+            rf"{action}|reach(?:es|ed|ing)?|enter(?:s|ed|ing)?"
+            rf")\b"
+        )
+        for match in subject_pattern.finditer(value):
+            add_recovered_actor(
+                match.group("actor"),
+                "explicit_action_subject",
+            )
             if len(output) >= 10:
                 break
+
+        # 2) Passive attribution: "transactions announced by Insilico Medicine".
+        # The name is still an explicit source-grounded agent even though it follows
+        # the action rather than preceding it.
+        if len(output) < 10:
+            passive_pattern = re.compile(
+                rf"\b(?:announced|acquired|funded|financed|regulated|approved|"
+                rf"banned|signed|awarded|issued|published|released|developed|"
+                rf"launched|deployed|built|created|formed|introduced|restricted)"
+                rf"\s+by\s+(?P<actor>{proper_name})\b"
+            )
+            for match in passive_pattern.finditer(value):
+                add_recovered_actor(
+                    match.group("actor"),
+                    "explicit_passive_agent",
+                )
+                if len(output) >= 10:
+                    break
+
+        # 3) Explicit company appositive. This recovers forms such as:
+        # "Insilico Medicine (HKEX: 3696), a clinical-stage ... company, ..."
+        # without relying on a hard-coded organization name list.
+        if len(output) < 10:
+            appositive_pattern = re.compile(
+                rf"(?<![A-Za-z0-9&'’\-])(?P<actor>{proper_name})"
+                rf"(?:\s*\([^)]{{1,80}}\))?\s*,\s*"
+                rf"(?:(?i:an?)\s+)?[^,.;:]{{0,180}}\b"
+                rf"(?i:company|corporation|firm|startup|developer|manufacturer|"
+                rf"provider|operator|bank|university|institute|agency|authority|"
+                rf"commission)\b"
+            )
+            for match in appositive_pattern.finditer(value):
+                add_recovered_actor(
+                    match.group("actor"),
+                    "explicit_institution_appositive",
+                )
+                if len(output) >= 10:
+                    break
 
         # Country/government and named institutional forms that are frequently
         # lower-case after an acronym or proper modifier.
@@ -5969,6 +6152,7 @@ JSON schema:
     # Main execution
     # ------------------------------------------------------------------
 
+    @audit_extraction_call(agent_version=AGENT_VERSION, build_id=PATCH_BUILD_ID)
     def extract(
         self,
         article: Any,
@@ -6108,6 +6292,11 @@ JSON schema:
                     content_fingerprint
                 ),
             )
+        )
+
+        set_extraction_audit_context(
+            source_id=source_id, article_title=title, research_depth=normalized_depth,
+            source_content_fingerprint=content_fingerprint, run_fingerprint=run_fingerprint,
         )
 
         default_result = (

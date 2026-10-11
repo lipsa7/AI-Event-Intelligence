@@ -132,7 +132,7 @@ from typing import Any, Callable, Dict, Iterable, Mapping, Optional, Sequence, S
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 
-PROMPT_VERSION = "evidence-discovery-v2.0"
+PROMPT_VERSION = "evidence-discovery-v2.1-context-research"
 
 ALLOWED_INSIGHT_TYPES = {
     "descriptive",
@@ -724,6 +724,7 @@ class EvidenceDiscoveryAgent:
                     "round": round_number,
                     **deepcopy(query),
                     "search_status": item["status"],
+                    "provider_stats": deepcopy(item.get("provider_stats") or {}),
                     "search_elapsed_seconds": item["elapsed_seconds"],
                     "results_seen": deepcopy(item["results"]),
                     "source_fetches": [],
@@ -827,6 +828,8 @@ class EvidenceDiscoveryAgent:
                     ),
                     "result_rank": fetched["result"]["rank"],
                     "search_result": deepcopy(fetched["result"]),
+                    "from_date": fetched["query"].get("from_date", ""),
+                    "to_date": fetched["query"].get("to_date", ""),
                 }
 
                 process_budget = self._operation_budget(
@@ -924,6 +927,8 @@ class EvidenceDiscoveryAgent:
                     rejected_candidates.append(rejection)
                     fetch_trace["rejected_candidates"].append(rejection)
                     trace["rejected_candidates"].append(rejection)
+
+                fetch_trace["processing_status"] = processed.get("status", "complete")
 
                 accepted_records = (
                     processed.get("accepted_evidence") or []
@@ -1396,6 +1401,7 @@ Rules:
         for query in queries:
             budget = self._operation_budget(
                 action="web_search",
+                total_timeout=policy["max_elapsed_seconds_per_insight"],
                 local_timeout=min(
                     policy["search_timeout_seconds"],
                     policy["max_elapsed_seconds_per_insight"],
@@ -1446,6 +1452,8 @@ Rules:
                     query=query["query"],
                     max_results=policy["max_results_per_query"],
                     timeout_seconds=timeout_seconds,
+                    from_date=query.get("from_date", ""),
+                    to_date=query.get("to_date", ""),
                 )
 
                 raw_results = payload["results"]
@@ -1459,7 +1467,8 @@ Rules:
 
                 return {
                     "query": deepcopy(dict(query)),
-                    "status": "complete",
+                    "status": payload.get("status", "complete"),
+                    "provider_stats": payload.get("provider_stats") or {},
                     "results": normalized,
                     "usage": payload.get("usage") or {},
                     "elapsed_seconds": time.monotonic() - started,
@@ -1608,6 +1617,7 @@ Rules:
         for candidate in candidates:
             budget = self._operation_budget(
                 action="source_fetch",
+                total_timeout=policy["max_elapsed_seconds_per_insight"],
                 local_timeout=min(
                     policy["fetch_timeout_seconds"],
                     policy["max_elapsed_seconds_per_insight"],
@@ -1917,10 +1927,11 @@ Rules:
         local_timeout: float,
         started_at: float,
         metadata: Mapping[str, Any],
+        total_timeout: Optional[float] = None,
     ) -> OperationBudget:
         local_remaining = max(
             0.0,
-            float(local_timeout) - (time.monotonic() - started_at),
+            float(total_timeout if total_timeout is not None else local_timeout) - (time.monotonic() - started_at),
         )
 
         if local_remaining <= 0.0:
@@ -1965,6 +1976,7 @@ Rules:
                     expected_seconds=min(
                         local_remaining,
                         global_remaining,
+                        float(local_timeout),
                     ),
                     metadata=dict(metadata),
                 )
@@ -1989,6 +2001,7 @@ Rules:
         timeout = min(
             local_remaining,
             global_remaining,
+            float(local_timeout),
         )
 
         # Leave a tiny local margin instead of starting work at effectively zero.
@@ -2054,6 +2067,8 @@ Rules:
         query: str,
         max_results: int,
         timeout_seconds: float,
+        from_date: str = "",
+        to_date: str = "",
     ) -> Dict[str, Any]:
         service = self.web_search_service
 
@@ -2063,6 +2078,8 @@ Rules:
                 query=query,
                 max_results=max_results,
                 timeout_seconds=timeout_seconds,
+                **({"from_date": from_date} if from_date else {}),
+                **({"to_date": to_date} if to_date else {}),
             )
         else:
             method = getattr(service, "search", None)
@@ -2077,10 +2094,14 @@ Rules:
                 query=query,
                 max_results=max_results,
                 timeout_seconds=timeout_seconds,
+                **({"from_date": from_date} if from_date else {}),
+                **({"to_date": to_date} if to_date else {}),
             )
 
         if isinstance(raw, Mapping):
-            results = raw.get("results") or []
+            if "results" not in raw or raw.get("status") in {"error", "failed", "incomplete"}:
+                raise EvidenceDiscoveryValidationError("Search returned an error or malformed envelope")
+            results = raw["results"]
             usage = raw.get("usage") or {}
         else:
             results = raw
@@ -2094,10 +2115,36 @@ Rules:
                 "web_search_service must return a sequence of results."
             )
 
+        provider_stats = dict(raw.get("provider_stats") or {}) if isinstance(raw, Mapping) else {}
         return {
             "results": list(results),
             "usage": usage,
+            "provider_stats": provider_stats,
+            "status": self._search_status(provider_stats),
         }
+
+    @staticmethod
+    def _search_status(provider_stats: Mapping[str, Any]) -> str:
+        """Search-level status from per-source outcomes.
+
+        complete: every source that covers the dates answered.
+        complete_with_limitations: at least one covering source answered;
+            others were rate limited, timed out, errored or switched off
+            (recorded per source, not hidden).
+        incomplete: no covering source answered.
+        Sources that cannot search the requested dates (OUT_OF_COVERAGE)
+        were not asked and do not count either way.
+        """
+        if not provider_stats:
+            return "complete"
+        asked = {
+            name: item for name, item in provider_stats.items()
+            if isinstance(item, Mapping) and item.get("status") != "out_of_coverage"
+        }
+        answered = [name for name, item in asked.items() if item.get("status") in {"ok", "complete"}]
+        if not answered:
+            return "incomplete"
+        return "complete" if len(answered) == len(asked) else "complete_with_limitations"
 
     def _invoke_fetch(
         self,
@@ -2353,6 +2400,8 @@ Rules:
                     "query": query_text,
                     "target_premise_ids": targets,
                     "rationale": _clean(query.get("rationale")),
+                    "from_date": _clean(query.get("from_date")),
+                    "to_date": _clean(query.get("to_date")),
                 }
             )
 
@@ -2402,6 +2451,7 @@ Rules:
                 raw.get("provider")
                 or raw.get("source")
             ),
+            "published_at": _clean(raw.get("published_at") or raw.get("publishedAt") or raw.get("date")),
             "is_grounding_evidence": False,
         }
 
@@ -2734,6 +2784,10 @@ Rules:
                 "material_similarity_threshold must be in [0, 1]."
             )
 
+        # An explicit data-policy denial takes precedence over a default
+        # discovery-policy enable flag.
+        if data_policy.get("allow_external_search") is False:
+            policy["external_search_enabled"] = False
         return policy
 
     # ------------------------------------------------------------------
@@ -2952,6 +3006,15 @@ Rules:
             status = "saturated"
         elif stop_reason == "external_search_disabled":
             status = "not_run"
+
+        if status not in {"not_run", "budget_exhausted"} and (
+            any(t.get("search_status") not in {"complete", "complete_with_limitations"} for t in search_manifest)
+            or any(f.get("fetch_status") != "complete" or f.get("processing_status") != "complete"
+                   for t in search_manifest for f in t.get("source_fetches", []))
+            or any(x.get("reason") != "duplicate_url" for x in unprocessed_search_results)
+            or any(x.get("reason") != "duplicate_query" for x in unexecuted_queries)
+        ):
+            status = "incomplete"
 
         blueprint_id = (
             _clean(blueprint.get("blueprint_id"))

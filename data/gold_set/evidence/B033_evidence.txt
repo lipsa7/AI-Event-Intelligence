@@ -1,0 +1,6 @@
+Blind event: B033
+Source: S006
+
+--- Evidence 1 ---
+type: source_excerpt
+bring cloud, data, governance and enterprise integration - but they introduce platform, jurisdiction and roadmap dependencies.

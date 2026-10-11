@@ -1,0 +1,6 @@
+Blind event: B020
+Source: S001
+
+--- Evidence 1 ---
+type: source_excerpt
+A second major win - an eight-digit ACV agreement with one of the largest healthcare organizations in the United States, with Accenture handling deployment - also surfaced during the Q2 2026 earnings call.

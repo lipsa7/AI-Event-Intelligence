@@ -1,0 +1,30 @@
+Blind event: B023
+Source: S005
+
+--- Evidence 1 ---
+type: quantitative_claim
+stated_quantity 61 billion
+
+--- Evidence 2 ---
+type: quantitative_claim
+stated_quantity 77 billion
+
+--- Evidence 3 ---
+type: source_excerpt
+As of June 30, 2026, the Company had RMB16.94 billion (US$2.50 billion) in cash, cash equivalents, and restricted cash, compared with RMB22.81 billion as of March 31, 2026. As of June 30, 2026, the Company's net accounts receivable was RMB12.61 billion (US$1.86 billion), compared with RMB13.77 billion as of March 31, 2026.
+
+--- Evidence 4 ---
+type: quantitative_claim
+stated_quantity 94 billion
+
+--- Evidence 5 ---
+type: quantitative_claim
+stated_quantity $1.86 billion
+
+--- Evidence 6 ---
+type: quantitative_claim
+stated_quantity 81 billion
+
+--- Evidence 7 ---
+type: quantitative_claim
+stated_quantity $2.50 billion

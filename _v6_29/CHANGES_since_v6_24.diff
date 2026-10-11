@@ -1,0 +1,297 @@
+--- a/services/research_orchestrator_service.py
++++ b/services/research_orchestrator_service.py
+@@ -26,7 +26,7 @@
+ # decisions, terminal outcomes) reach data/logs/system.log.
+ logger = logging.getLogger("event_intelligence." + __name__)
+ 
+-SERVICE_VERSION = "research-orchestrator-service-v3.26.4.16-v624-search-budget"
++SERVICE_VERSION = "research-orchestrator-service-v3.26.4.17-v625-disclose-unsearched"
+ PATCH_BUILD_ID = "ORCH-V326411-20261009-V6207-FORECAST-MERGED"
+ CONTEXT_INTEGRITY_PATCH = "v6.10.1"
+ REASONING_RESEARCH_PATCH = "v6.11.0"
+@@ -16775,10 +16775,20 @@
+                     )
+                     research = _as_mapping(attempt.get("final_claim_research"))
+                     if verdict.get("passed") and research.get("research_status") not in FINAL_RESEARCH_COMPLETE:
+-                        # Fail closed: an unsearched or half-searched wording is not released.
+-                        verdict = {**verdict, "passed": False, "repairable": False,
+-                                   "reasons": ["final_wording_research_incomplete:" + _clean(research.get("status"))]}
+-                        stop_retries = True
++                        # v6.25 (product decision, agreed with the user): an insight whose
++                        # claims passed is SHOWN even when the counter-evidence search could
++                        # not be completed, labelled as such with confidence capped at
++                        # moderate (ICD 203: disclose, do not hide). Until v6.24 it failed
++                        # closed, which withheld the strongest candidate of replay
++                        # RUN-FB8AB22DBDD548B5BB6D4898 because the search allowance ran out.
++                        attempt["counterevidence_check"] = _clean(research.get("status")) or "not_searched"
++                        meta = dict(_as_mapping(candidate.get("metadata")))
++                        meta["counterevidence_check"] = {
++                            "status": attempt["counterevidence_check"],
++                            "note": ("The search for contrary evidence could not be completed for this wording "
++                                     f"({attempt['counterevidence_check']}); the insight rests on the sources shown."),
++                        }
++                        candidate = {**candidate, "metadata": meta}
+                 if verdict.get("passed"):
+                     leak = self._forecast_leak_reason(candidate, evidence)
+                     if leak:
+@@ -16866,6 +16876,16 @@
+                     # v6.23: claims-and-evidence table for the reader (Consensus / AlphaSense style).
+                     try:
+                         meta = dict(_as_mapping(out.get("metadata")))
++                        check = _as_mapping(meta.get("counterevidence_check"))
++                        if check:
++                            # v6.25: an incomplete counter-evidence search caps confidence.
++                            confidence = dict(_as_mapping(meta.get("analytic_confidence")))
++                            if confidence:
++                                confidence["level"] = "moderate"
++                                confidence["basis"] = _clean(confidence.get("basis")).replace(
++                                    "no counterevidence was found in the search.",
++                                    "the counter-evidence search could not be completed.")
++                                meta["analytic_confidence"] = confidence
+                         meta["evidence_table"] = gate.evidence_table(
+                             out_grounding, evidence, meta.get("key_assumptions") or [],
+                             list(out.get("counterevidence_ids") or []), reference=self._source_reference)
+@@ -19101,6 +19121,7 @@
+                 "insight_route": _clean(insight_metadata.get("insight_route")),  # v6.21.8
+                 "expert_commentary_checked": int(insight_metadata.get("expert_commentary_checked") or 0),  # v6.22
+                 "evidence_table": _json_safe(insight_metadata.get("evidence_table", {})),  # v6.23
++                "counterevidence_check": _json_safe(insight_metadata.get("counterevidence_check", {})),  # v6.25
+             }
+             if text:
+                 strategic_findings.append(finding_record)
+--- a/services/claim_support_gate.py
++++ b/services/claim_support_gate.py
+@@ -952,9 +952,11 @@
+ 
+ 
+ def counterevidence_exemption(research_status: str, candidate: Mapping[str, Any]) -> tuple[str, ...]:
+-    """Dimensions to ignore: counterevidence_quality only after a completed
+-    search that found nothing, with no counterevidence attached."""
+-    if _clean(research_status) == "completed_none_found" and not _unique(candidate.get("counterevidence_ids") or []):
++    """Dimensions to ignore: counterevidence_quality after a completed search that
++    found nothing, or (v6.25) a search that could not be completed - the insight
++    is then shown with that disclosed - with no counterevidence attached."""
++    status = _clean(research_status)
++    if status and status != "completed_found" and not _unique(candidate.get("counterevidence_ids") or []):
+         return ("counterevidence_quality",)
+     return ()
+ 
+--- a/services/pattern_grid.py
++++ b/services/pattern_grid.py
+@@ -151,6 +151,15 @@
+ # NAMED party (a proper name: a capitalised word that does not start the phrase,
+ # or an acronym), and a repeat needs the SAME action (same lead verb).
+ _NOT_NAMES = {"the", "a", "an", "that", "this", "these", "those", "its", "their", "his", "her", "our", "it"}
++# v6.25 (GPT review): a capitalised GENERIC group ("Government officials", "Users") is not a named party.
++_GENERIC_GROUPS = {"government", "governments", "officials", "official", "users", "user", "companies", "company",
++                   "customers", "regulators", "regulator", "lawmakers", "agencies", "agency", "experts", "analysts",
++                   "people", "staff", "employees", "workers", "investors", "researchers", "authorities", "states",
++                   "countries", "firms", "developers", "providers", "operators", "critics", "officers", "ministers",
++                   "minister", "departments", "department", "industry", "public", "citizens", "residents", "members",
++                   # generic modifiers: "Tech Companies", "AI firms", "Federal agencies"
++                   "tech", "ai", "big", "major", "federal", "local", "foreign", "global", "national", "private",
++                   "senior", "top", "leading", "several", "many", "other", "some", "various", "new", "tech companies"}
+ 
+ 
+ def is_named_party(value: Any) -> bool:
+@@ -158,8 +167,8 @@
+     words = [w for w in words if w]
+     if not words or len(words) > 8 or words[0].casefold() in {"that", "which", "whether", "how", "what"}:
+         return False
+-    named = [w for w in words if (w[:1].isupper() and w.casefold() not in _NOT_NAMES) or
+-             (len(w) >= 2 and w.isupper() and w.isalpha())]
++    named = [w for w in words if w.casefold() not in _GENERIC_GROUPS and (
++        (w[:1].isupper() and w.casefold() not in _NOT_NAMES) or (len(w) >= 2 and w.isupper() and w.isalpha()))]
+     return bool(named)
+ 
+ 
+--- a/services/grounded_search.py
++++ b/services/grounded_search.py
+@@ -64,6 +64,10 @@
+                      "twitter.com", "reddit.com", "pinterest.com", "vimeo.com", "spotify.com", "podcasts.apple.com")
+ 
+ 
++NON_ARTICLE_NAMES = frozenset({"youtube", "youtu.be", "tiktok", "instagram", "facebook", "x", "twitter", "reddit",
++                               "pinterest", "vimeo", "spotify", "apple podcasts"})
++
++
+ def is_article_source(result: Mapping[str, Any]) -> bool:
+     """False for video/social pages. Grounded results carry the site in `title`
+     (the URL is a Google redirect), so both are checked."""
+@@ -73,7 +77,8 @@
+     for blocked in NON_ARTICLE_HOSTS:
+         if host == blocked or host.endswith("." + blocked) or title == blocked or title.endswith("." + blocked):
+             return False
+-    return True
++    # v6.25 (GPT review): grounding titles can be the site NAME ("YouTube", "Reddit").
++    return title not in NON_ARTICLE_NAMES
+ 
+ 
+ class GeminiGroundedSearch:
+--- a/frontend/dashboard.py
++++ b/frontend/dashboard.py
+@@ -3232,6 +3232,10 @@
+     route = clean_text(item.get("insight_route"))
+     if route in ROUTE_NOTES:
+         st.markdown(ROUTE_NOTES[route])
++    check = item.get("counterevidence_check") if isinstance(item.get("counterevidence_check"), Mapping) else {}
++    if clean_text(check.get("note")):
++        # v6.25: shown, not hidden, when the contrary-evidence search could not finish.
++        st.markdown("**Counter-evidence check incomplete:** " + _markdown_safe(check.get("note")))
+     render_evidence_table(item)
+     checked = item.get("expert_commentary_checked")
+     if isinstance(checked, int) and checked > 0:
+--- a/tests/test_claim_support_gate.py
++++ b/tests/test_claim_support_gate.py
+@@ -409,17 +409,18 @@
+         self.assertEqual([r["insight_id"] for r in released], ["INSIGHT-TWO"])
+         self.assertIn("EVID-COUNTER", released[0]["counterevidence_ids"])
+ 
+-    def test_research_limit_blocks_release(self):
+-        # Fail closed: a wording that could not be searched is not released.
++    def test_research_limit_releases_with_disclosure(self):
++        # v6.25 (agreed with the user; was fail-closed since v6.14): a wording that
++        # could not be searched is released, labelled, confidence capped at moderate.
+         state = {"warnings": [], "final_claim_research": [{"claim_fingerprint": x} for x in "abc"]}
+         obj = make_orchestrator(verdicts={"INSIGHTREV-ONE": PASSING}, new_candidates=[[candidate("TWO")]])
+         (released, _, _), state = release(obj, [candidate("ONE")], state=state)
+-        self.assertEqual(released, [])
++        self.assertEqual([r["insight_id"] for r in released], ["INSIGHT-ONE"])
+         self.assertEqual(obj.hypothesis_evidence_service.calls, [])
+         attempt = state["claim_support_gate"]["attempts"][0]
+         self.assertEqual(attempt["final_claim_research"]["status"], "not_run_limit_reached")
+-        self.assertEqual(attempt["reasons"], ["final_wording_research_incomplete:not_run_limit_reached"])
+-        self.assertEqual(state["claim_support_gate"]["stopped"], "research_incomplete")
++        self.assertEqual(attempt["counterevidence_check"], "not_run_limit_reached")
++        self.assertEqual(released[0]["metadata"]["counterevidence_check"]["status"], "not_run_limit_reached")
+         self.assertEqual(obj.analyze_calls, [])
+ 
+     def test_misattributed_alternative_loses_its_citation(self):
+@@ -516,7 +517,8 @@
+         self.assertEqual(len(obj.hypothesis_evidence_service.calls), 1)
+         self.assertEqual(len(released), 1)
+ 
+-    def test_incomplete_final_search_blocks_release_and_stops_retries(self):
++    def test_incomplete_final_search_releases_with_disclosure(self):
++        # v6.25: shown with "counter-evidence check incomplete", not withheld.
+         class Failing(Investigator):
+             def investigate(self, **kw):
+                 receipt = super().investigate(**kw)
+@@ -525,9 +527,10 @@
+         obj = make_orchestrator(verdicts={"INSIGHTREV-ONE": PASSING}, investigator=Failing(),
+                                 new_candidates=[[candidate("TWO")]])
+         (released, _, _), state = release(obj, [candidate("ONE")])
+-        self.assertEqual(released, [])
+-        self.assertEqual(state["claim_support_gate"]["attempts"][0]["reasons"],
+-                         ["final_wording_research_incomplete:incomplete"])
++        self.assertEqual([r["insight_id"] for r in released], ["INSIGHT-ONE"])
++        note = released[0]["metadata"]["counterevidence_check"]
++        self.assertEqual(note["status"], "incomplete")
++        self.assertIn("could not be completed", note["note"])
+         self.assertEqual(obj.analyze_calls, [])
+ 
+     def test_research_support_is_attached_and_rechecked(self):
+--- a/docs/PRODUCT_SPEC.md
++++ b/docs/PRODUCT_SPEC.md
+@@ -104,6 +104,7 @@
+ ## v6.20.10 fixes from the v6.20.9 replay (RUN-DFA27E66C51C4CDE8CD46B04)
+ 
+ - Briefing sentences are checked one at a time: a check that returns invalid output removes only its own sentence (fail closed) and is logged with its error; before, one such check removed every sentence.
++- Counter-evidence disclosure (v6.25, product decision): an insight whose claims pass is shown even when its counter-evidence search could not be completed; it is labelled "Counter-evidence check incomplete" and its confidence is capped at moderate. A completed search that finds counterevidence still counts against it.
+ - Search allowance (v6.24): Google-grounded search allows 30 prompts per run for gap research and 24 for challenge searches (env GROUNDED_SEARCH_MAX_CALLS / GROUNDED_SEARCH_CHALLENGE_MAX_CALLS); a spent allowance is logged (grounded_search_budget_exhausted) and counted in the run log. Video and social pages are not research sources.
+ - Pattern grid (v6.23): per development, the same fields (actor, action, target, when, when reported, amount, rule) are extracted from every report, each cell copied from its report; patterns across rows (repeated actor, shared target, reporting delay, shared rule) are computed and become citeable "pattern" records (never observations).
+ - Claims-and-evidence table (v6.23): a released hidden insight shows each claim with how it is backed (stated / follows / assumption), publisher, date, quote and link, plus records pointing the other way.
+--- a/tests/test_v6_25_disclose_unsearched.py
++++ b/tests/test_v6_25_disclose_unsearched.py
+@@ -0,0 +1,91 @@
++"""v6.25: an insight is shown even when its counter-evidence search could not
++be completed - disclosed, with confidence capped at moderate - and GPT's two
++v6.24 review points.
++
++Product decision (agreed with the user): an insight backed by its evidence is
++shown, saying which evidence backs it, even when contrary evidence cannot be
++found or searched. This is how comparable products work (Consensus shows a
++claim with its supporting and disputing sources; AlphaSense and Perplexity
++cite each statement; ICD 203 publishes judgments with confidence levels and
++stated information gaps). Until v6.24 the app withheld such an insight
++(fail closed), which hid the strongest candidate of replay
++RUN-FB8AB22DBDD548B5BB6D4898 when the search allowance ran out.
++"""
++
++from __future__ import annotations
++
++import pathlib
++
++import services.research_orchestrator_service as ros
++from services import claim_support_gate as gate
++from services import grounded_search as gs
++from services import pattern_grid as grid
++from tests.test_claim_support_gate import DEEP_PROFILE, PASSING, Investigator, candidate, make_orchestrator
++from tests.test_v6_21_4_search_coverage import _events_and_evidence
++
++
++class Incomplete(Investigator):
++    def investigate(self, **kw):
++        receipt = super().investigate(**kw)
++        receipt["assessment"]["status"] = "incomplete"
++        return receipt
++
++
++def _release(investigator, monkeypatch):
++    monkeypatch.setattr(ros, "DEEP_CLAIM_GATE_EXTRA_SYNTHESES", 0)
++    obj = make_orchestrator(verdicts={"INSIGHTREV-U": PASSING}, investigator=investigator)
++    obj._source_reference = lambda sid: {}
++    events, evidence = _events_and_evidence()
++    released, _, _ = obj._claim_supported_release(
++        topic="ai", candidates=[candidate("U")], grounded={"INSIGHTREV-U": PASSING()}, events=events,
++        evidence=evidence, graph_context={}, constraints={}, blueprint={}, profile=DEEP_PROFILE,
++        state={"warnings": [], "run_id": "RUN-U"})
++    return released
++
++
++def test_unsearched_insight_is_shown_labelled_with_confidence_capped(monkeypatch):
++    released = _release(Incomplete(), monkeypatch)
++    assert len(released) == 1
++    meta = released[0]["metadata"]
++    assert meta["counterevidence_check"]["status"] == "incomplete"
++    confidence = meta.get("analytic_confidence") or {}
++    if confidence:
++        assert confidence["level"] == "moderate"
++        assert "could not be completed" in confidence["basis"] and "no counterevidence was found" not in confidence["basis"]
++
++
++def test_completed_search_is_not_labelled(monkeypatch):
++    released = _release(Investigator(), monkeypatch)
++    assert len(released) == 1 and "counterevidence_check" not in released[0]["metadata"]
++
++
++def test_found_counterevidence_still_counts_against_quality():
++    item = {"counterevidence_ids": ["EVID-C"]}
++    assert gate.counterevidence_exemption("incomplete", item) == ()
++    assert gate.counterevidence_exemption("completed_found", {}) == ()
++    assert gate.counterevidence_exemption("incomplete", {}) == ("counterevidence_quality",)
++    assert gate.counterevidence_exemption("", {}) == ()
++
++
++def test_report_and_dashboard_show_the_disclosure():
++    import inspect
++    source = inspect.getsource(ros.ResearchOrchestratorService)
++    assert '"counterevidence_check": _json_safe(insight_metadata.get("counterevidence_check", {}))' in source
++    dash = (pathlib.Path(__file__).resolve().parents[1] / "frontend" / "dashboard.py").read_text(encoding="utf-8")
++    assert "**Counter-evidence check incomplete:**" in dash
++
++
++# GPT review of v6.24 ----------------------------------------------------------
++
++def test_site_names_as_titles_are_dropped():
++    redirect = "https://vertexaisearch.cloud.google.com/grounding-api-redirect/Z"
++    for title in ("YouTube", "Reddit", "TikTok", "X"):
++        assert not gs.is_article_source({"url": redirect, "title": title}), title
++    assert gs.is_article_source({"url": redirect, "title": "Reuters"})
++
++
++def test_generic_capitalised_groups_are_not_named_parties():
++    for generic in ("Government officials", "Users", "Regulators", "Tech Companies"):
++        assert not grid.is_named_party(generic), generic
++    for named in ("US government", "Department of Home Affairs", "AIHW", "Services Australia"):
++        assert grid.is_named_party(named), named

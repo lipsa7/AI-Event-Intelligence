@@ -1,0 +1,10 @@
+Blind event: B029
+Source: S002
+
+--- Evidence 1 ---
+type: quantitative_claim
+stated_quantity $7.3 billion
+
+--- Evidence 2 ---
+type: source_excerpt
+As of the Latest Practicable Date, the total contract value of transactions announced by Insilico Medicine in 2026 was approximately US$7.3 billion.

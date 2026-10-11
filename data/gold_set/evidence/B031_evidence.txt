@@ -1,0 +1,6 @@
+Blind event: B031
+Source: S002
+
+--- Evidence 1 ---
+type: source_excerpt
+26, 2026 /PRNewswire/ -- Insilico Medicine (HKEX: 3696), a clinical-stage generative artificial intelligence (AI)-driven drug discovery company , recently released its interim results report for 2026.

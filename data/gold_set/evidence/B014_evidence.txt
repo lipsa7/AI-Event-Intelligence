@@ -1,0 +1,6 @@
+Blind event: B014
+Source: S007
+
+--- Evidence 1 ---
+type: source_excerpt
+If you could talk about some of the recent AI-linked projects that you might have rolled out internally.

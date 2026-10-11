@@ -137,7 +137,7 @@ from dataclasses import asdict, dataclass
 from typing import Any, Dict, Mapping, Optional, Sequence, Set
 
 
-SERVICE_VERSION = "policy-enforcement-service-v2.0"
+SERVICE_VERSION = "policy-enforcement-service-v2.1-verified-connection-release"
 OUTPUT_SCHEMA_VERSION = "policy-enforcement-schema-v2.0"
 
 HARD_COST_FLOOR = {
@@ -216,6 +216,17 @@ ALLOWED_RELEASE_EPISTEMIC_STATUSES = {
     "supported",
     "partially_supported",
     "inference_supported",
+}
+
+# A Deep report may release a verified cross-event connection instead of a
+# hidden insight. It then has an empty hidden_insights section, which the
+# output contract would otherwise always reject. That is allowed only when the
+# report says so explicitly, the claim-level gate released the finding as a
+# verified connection, and every finding is fully supported by grounding.
+STRATEGIC_FINDING_RELEASE_OUTCOME = "strategic_finding_released"
+VERIFIED_CONNECTION_RELEASE = "verified_connection"
+VERIFIED_CONNECTION_GROUNDING_STATUSES = {
+    "supported",
 }
 
 BLOCKED_RELEASE_EPISTEMIC_STATUSES = {
@@ -1495,12 +1506,36 @@ class PolicyEnforcementService:
         # --------------------------------------------------------------
         # Report/output contract
         # --------------------------------------------------------------
+        fully_supported_revision_ids = {
+            _clean(
+                assessment.get(
+                    "insight_revision_id"
+                )
+            ).upper()
+            for assessment in grounding_list
+            if _clean(
+                assessment.get(
+                    "insight_revision_id"
+                )
+            )
+            and _enum(
+                assessment.get(
+                    "epistemic_status"
+                )
+                or assessment.get(
+                    "grounding_status"
+                )
+            )
+            in VERIFIED_CONNECTION_GROUNDING_STATUSES
+        }
+
         self._validate_report_contract(
             report=report,
             output_contract=output_contract,
             violations=violations,
             warnings=warnings,
             final_evidence_ids=final_evidence_ids,
+            fully_supported_revision_ids=fully_supported_revision_ids,
         )
 
         # --------------------------------------------------------------
@@ -2534,6 +2569,7 @@ class PolicyEnforcementService:
         violations: list[Dict[str, Any]],
         warnings: list[Dict[str, Any]],
         final_evidence_ids: Optional[set[str]],
+        fully_supported_revision_ids: Optional[set[str]] = None,
     ) -> None:
         output_type = _enum(
             output_contract.get(
@@ -2625,6 +2661,45 @@ class PolicyEnforcementService:
                         section,
                     ),
                 ):
+                    if (
+                        section == "hidden_insights"
+                        and self._verified_connection_release(
+                            report,
+                            fully_supported_revision_ids,
+                        )
+                    ):
+                        warnings.append(
+                            _violation(
+                                "VERIFIED_CONNECTION_RELEASE",
+                                "No hidden insight was released; the report "
+                                "releases fully supported, claim-gated "
+                                "strategic findings instead.",
+                                path="report.hidden_insights",
+                                severity="monitor",
+                            )
+                        )
+                        continue
+
+                    if (
+                        section in {"connections", "what_is_happening_underneath"}
+                        and self._has_nonempty_section(report, ("hidden_insights",))
+                    ):
+                        # v6.20.11: a released hidden insight carries its own
+                        # cross-actor chain (premises, mechanism, conclusion,
+                        # each claim-checked). Blocking it because the
+                        # separate connections/underlying lists are empty
+                        # would discard the product's main finding.
+                        warnings.append(
+                            _violation(
+                                "SECTION_COVERED_BY_HIDDEN_INSIGHT",
+                                f"Report section {section!r} is empty; the released hidden "
+                                "insight states the connection itself.",
+                                path=f"report.{section}",
+                                severity="monitor",
+                            )
+                        )
+                        continue
+
                     violations.append(
                         _violation(
                             "REQUIRED_REPORT_SECTION_MISSING",
@@ -2966,9 +3041,131 @@ class PolicyEnforcementService:
         return False
 
     @staticmethod
+    def _verified_connection_release(
+        report: Mapping[str, Any],
+        fully_supported_revision_ids: Optional[set[str]],
+    ) -> bool:
+        """
+        True only for an explicit, claim-gated verified-connection release
+        whose every finding is fully supported by its grounding assessment.
+        """
+
+        if not fully_supported_revision_ids:
+            return False
+
+        if _enum(
+            report.get(
+                "outcome"
+            )
+            or report.get(
+                "research_outcome"
+            )
+        ) != STRATEGIC_FINDING_RELEASE_OUTCOME:
+            return False
+
+        metadata = report.get(
+            "analysis_metadata"
+        )
+        gate = (
+            metadata.get(
+                "claim_support_gate"
+            )
+            if isinstance(
+                metadata,
+                Mapping,
+            )
+            else None
+        )
+        if not isinstance(
+            gate,
+            Mapping,
+        ):
+            return False
+        if _enum(
+            gate.get(
+                "released_as"
+            )
+        ) != VERIFIED_CONNECTION_RELEASE:
+            return False
+        if not gate.get(
+            "released"
+        ):
+            return False
+
+        findings = report.get(
+            "strategic_findings"
+        )
+        if not isinstance(
+            findings,
+            list,
+        ) or not findings:
+            return False
+
+        for item in findings:
+            if not isinstance(
+                item,
+                Mapping,
+            ):
+                return False
+            if not _clean(
+                item.get(
+                    "text"
+                )
+            ):
+                return False
+            if not _clean(
+                item.get(
+                    "insight_id"
+                )
+            ):
+                return False
+            revision_id = _clean(
+                item.get(
+                    "insight_revision_id"
+                )
+            ).upper()
+            if (
+                not revision_id
+                or revision_id
+                not in fully_supported_revision_ids
+            ):
+                return False
+            if not _unique_strings(
+                item.get(
+                    "evidence_ids"
+                )
+            ):
+                return False
+
+        return True
+
+    @staticmethod
     def _extract_report_insights(
         report: Mapping[str, Any],
     ) -> list[Mapping[str, Any]]:
+        hidden = report.get(
+            "hidden_insights"
+        )
+        findings = report.get(
+            "strategic_findings"
+        )
+        if (
+            isinstance(hidden, list)
+            and not hidden
+            and isinstance(findings, list)
+            and findings
+        ):
+            # A strategic-finding release still needs stable ids and
+            # revision lineage on every released finding.
+            return [
+                item
+                for item in findings
+                if isinstance(
+                    item,
+                    Mapping,
+                )
+            ]
+
         for key in (
             "hidden_insights",
             "insights",

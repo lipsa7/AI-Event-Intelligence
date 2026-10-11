@@ -1,0 +1,14 @@
+Blind event: B024
+Source: S002
+
+--- Evidence 1 ---
+type: quantitative_claim
+stated_quantity $2.75 billion
+
+--- Evidence 2 ---
+type: quantitative_claim
+stated_quantity $115 million
+
+--- Evidence 3 ---
+type: source_excerpt
+In March, the Company signed a global out-licensing and R&D collaboration agreement with Lilly valued up to US$2.75 billion, including an upfront payment of US$115 million. This marks Lilly's role transformation from a platform user to an R&D partner, cornerstone investor, and ultimately an in-depth collaborator, reflecting the continued strategic investment by multinational pharmaceutical companies (MNCs) on AI-driven drug discovery.

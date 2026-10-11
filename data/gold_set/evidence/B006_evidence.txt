@@ -1,0 +1,6 @@
+Blind event: B006
+Source: S006
+
+--- Evidence 1 ---
+type: source_excerpt
+Uber , unlike Microsoft, where there is an element of coopetition with Anthropic, viewed that partnership as a straightforward one: Use state-of-the-art models for the highest and best use of its engineering talent.

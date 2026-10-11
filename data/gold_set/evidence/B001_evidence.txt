@@ -1,0 +1,6 @@
+Blind event: B001
+Source: S001
+
+--- Evidence 1 ---
+type: source_excerpt
+For marketing teams using Claude to generate content at scale, the watermarking system introduces a new disclosure dimension: any content Claude touched - not just content Claude wrote entirely - may carry a detectable signal.

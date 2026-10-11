@@ -1,0 +1,6 @@
+Blind event: B025
+Source: S001
+
+--- Evidence 1 ---
+type: source_excerpt
+Zeotap Launches Composable CDP Native App on Snowflake Marketplace - Zeotap went live on the Snowflake Marketplace with a fully composable native app that runs identity resolution, audience segmentation, journey orchestration, and AI modeling entirely within a customer's own Snowflake account.

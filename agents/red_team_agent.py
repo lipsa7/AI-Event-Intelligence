@@ -39,6 +39,7 @@ import hashlib
 import inspect
 import json
 import logging
+import os
 import re
 import time
 from collections import Counter
@@ -251,6 +252,31 @@ class RedTeamAgent:
         "research_question",
         *CANONICAL_REPORT_SECTIONS,
     )
+
+    # v6.21.1: the semantic (model) review covers the analysis a reader sees.
+    # Live replay RUN-353F7E74B4E94FCD820FAFC4 spent 751 of 892 Gemini calls
+    # (14.3M of 15.0M input tokens) here, mostly reviewing the evidence trail
+    # (the source records themselves), the event landscape (source statements,
+    # grounded as facts by the report grounding) and analysis_metadata
+    # (internal diagnostics), each against up to every evidence record.
+    # Deterministic checks still run on the whole report.
+    # EVENT_INTELLIGENCE_RED_TEAM_FULL=1 restores the full review.
+    SEMANTIC_REVIEW_SECTIONS = frozenset({
+        "connections",
+        "what_is_happening_underneath",
+        "hidden_insights",
+        "strategic_findings",
+        "second_order_effects",
+        "counterevidence_and_alternative_explanations",
+        "what_to_watch",
+        "editorial_briefing",
+        "historical_analogies",
+        "forecast_followups",
+    })
+    # Not in the semantic scope: evidence_trail and event_landscape (the source
+    # records and statements themselves), analysis_metadata (diagnostics),
+    # critical_unknowns and abstention_summary (statements of what is NOT
+    # known; with no citation each was reviewed against every evidence record).
 
     REQUIRED_NON_EMPTY_KEYS = {
         "research_question",
@@ -607,6 +633,22 @@ class RedTeamAgent:
             record_type="report",
             base_path="$",
         )
+        skipped_report_paths: List[str] = []
+        # An empty section asserts nothing; with no IDs it was reviewed against
+        # every context record (v6.21.1).
+        report_records = [record for record in report_records
+                          if record.get("content") not in (None, "", [], {})]
+        if os.getenv("EVENT_INTELLIGENCE_RED_TEAM_FULL", "0") != "1":
+            in_scope = []
+            for record in report_records:
+                path = str(record.get("path", ""))
+                match = re.match(r"^\$\.([^.\[]+)", path)
+                key = match.group(1) if match else ""
+                if key in self.SEMANTIC_REVIEW_SECTIONS:
+                    in_scope.append(record)
+                else:
+                    skipped_report_paths.append(path)
+            report_records = in_scope
         evidence_records = self._as_complete_records(
             evidence,
             record_type="evidence",
@@ -710,6 +752,8 @@ class RedTeamAgent:
             "grounding_record_count": len(grounding_records),
             "semantic_batch_count": len(batches),
             "oversized_complete_record_count": oversized_count,
+            "semantic_review_scope": "reader_facing_analysis" if skipped_report_paths else "full_report",
+            "semantic_review_skipped_record_count": len(skipped_report_paths),
             "all_report_records_scheduled": True,
             "input_truncated": False,
         }
@@ -1662,6 +1706,15 @@ A conditional future state, never an established fact.
 
 WHAT TO WATCH
 An observable confirming/disconfirming signal, not an unsupported prediction.
+
+COMPETING EXPLANATIONS
+Search first, finding an alternative is optional. An empty alternative_explanations
+list is not itself a defect. Check hypothesis_research receipts in findings and
+analysis_metadata: completed_none_found means no credible alternative was
+established within the stated bounded search, not proof that none exists.
+An incomplete or failed search must be disclosed, not presented as absence.
+Do not demand invented counter-cases. Assess a supported conclusion on its cited
+premises and mechanism even when no alternative was established.
 
 REVIEW OBJECTIVES
 

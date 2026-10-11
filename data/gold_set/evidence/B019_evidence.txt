@@ -1,0 +1,6 @@
+Blind event: B019
+Source: S001
+
+--- Evidence 1 ---
+type: source_excerpt
+The strategic decisions CMOs need to make this week: (1) Audit whether your CDP architecture requires data copies - if it does, you have a compliance liability and a deployment bottleneck that composable alternatives now solve.

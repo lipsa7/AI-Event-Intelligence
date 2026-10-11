@@ -160,7 +160,7 @@ import time
 import threading
 from pathlib import Path
 from copy import deepcopy
-from typing import Any, Dict, Iterable, Mapping, Optional, Sequence
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence
 
 
 logger = logging.getLogger(__name__)
@@ -287,6 +287,25 @@ STRATEGIC_MODEL_SPECS: tuple[dict[str, Any], ...] = (
     # permanent model-route 404 is memoized for the rest of the run. 3.6 is deliberately
     # demoted after an 11-minute MALFORMED_RESPONSE run. 3.7 remains LAST after
     # repeated live 503/high-demand failures.
+    # v6.26: the insight-writing step is the hardest reasoning in the app and
+    # uses only a few calls per run, so it runs on the Pro model first (the
+    # user does not want quality cut for cost). Pro reasons longer, so it gets
+    # a longer timeout; any provider failure falls through to the Flash models.
+    # STRATEGIC_MODEL_CHAIN still overrides the order.
+    {
+        "model": "gemini-3.1-pro-preview",
+        "thinking_level": "high",
+        "status": "preview",
+        "quality_tier": "frontier_pro",
+        "timeout_seconds": 150.0,
+    },
+    {
+        "model": "gemini-3.8-flash",
+        "thinking_level": "high",
+        "status": "ga",
+        "quality_tier": "frontier_flash",
+        "timeout_seconds": 65.0,
+    },
     {
         "model": "gemini-3.5-flash",
         "thinking_level": "high",
@@ -320,13 +339,6 @@ STRATEGIC_MODEL_SPECS: tuple[dict[str, Any], ...] = (
         "thinking_level": "high",
         "status": "ga",
         "quality_tier": "degraded_frontier_flash",
-        "timeout_seconds": 35.0,
-    },
-    {
-        "model": "gemini-3.1-pro-preview",
-        "thinking_level": "high",
-        "status": "preview",
-        "quality_tier": "degraded_preview_pro",
         "timeout_seconds": 35.0,
     },
     {
@@ -2057,7 +2069,7 @@ class StrategicInferenceAgent:
             # even for models intentionally configured for a larger/smaller cap.
             timeout_seconds = max(
                 30.0,
-                min(90.0, configured_timeout),
+                min(180.0, configured_timeout),  # v6.27: Pro needs its 150 s
             )
             try:
                 service = GeminiLLMService(
@@ -2127,6 +2139,15 @@ class StrategicInferenceAgent:
         text = " ".join(fragments).casefold()
 
         retryable_markers = (
+            # v6.14: dropped/reset connections (httpx ReadError, WinError
+            # 10054) are transient transport failures.
+            "readerror",
+            "remoteprotocolerror",
+            "connection reset",
+            "connection aborted",
+            "forcibly closed",
+            "10054",
+            "server disconnected",
             "503",
             "502",
             "504",
@@ -2195,6 +2216,15 @@ class StrategicInferenceAgent:
             return False
 
         failover_markers = (
+            # v6.14: a dropped/reset connection is a route failure; another
+            # model (or a fresh connection to it) may succeed.
+            "readerror",
+            "remoteprotocolerror",
+            "connection reset",
+            "connection aborted",
+            "forcibly closed",
+            "10054",
+            "server disconnected",
             "429",
             "500",
             "502",
@@ -3347,6 +3377,16 @@ class StrategicInferenceAgent:
             "priority_score": round(float(priority_score), 3),
         }
 
+        if record.get("analytical_context_only"):
+            compact.update({
+                "analytical_context_only": True, "direct_event_evidence": False,
+                "claim": claim, "evidence_role": record.get("evidence_role"),
+                "gap_type": _clean(record.get("gap_type")),  # v6.22: commentary = published expert analysis
+                "historical_case": deepcopy(record.get("historical_case")),
+                "context_assessment": deepcopy(record.get("structured_payload") or {}),
+                "source_url": record.get("source_url"),
+            })
+
         # Preserve small scalar fields that often carry the concrete magnitude or actor.
         for key in (
             "metric_name", "value", "unit", "currency", "actor", "company",
@@ -3618,116 +3658,47 @@ class StrategicInferenceAgent:
         highly likely to describe the same real-world action, using actor, coarse
         event family, source/date proximity and distinctive lexical overlap.
         """
+        # v6.20: one definition of "same real-world occurrence" for the whole
+        # app. Prefer the orchestrator's resolved underlying_event_id on every
+        # event; otherwise resolve here with the same shared resolver
+        # (complete linkage, fact-based stable IDs).
+        from services.underlying_event_resolver import UnderlyingEventResolver
         event_ids = [str(k).upper() for k in event_context_by_id if str(k).upper().startswith("EVENT-")]
-        parent = {eid: eid for eid in event_ids}
-
-        def find(x: str) -> str:
-            while parent[x] != x:
-                parent[x] = parent[parent[x]]
-                x = parent[x]
-            return x
-
-        def union(a: str, b: str) -> None:
-            ra, rb = find(a), find(b)
-            if ra != rb:
-                parent[rb] = ra
-
-        topic_stop = cls._query_derived_stopterms(research_question)
-        generic = {
-            "about", "after", "again", "against", "also", "among", "because",
-            "being", "between", "could", "current", "during", "from", "have",
-            "into", "more", "most", "other", "over", "said", "says", "than",
-            "that", "their", "there", "these", "this", "those", "through",
-            "under", "using", "which", "while", "with", "would", "report",
-            "reports", "source", "sources", "event", "events", "company",
-            "companies", "market", "industry", "technology", "technologies",
-        }
-
-        def tokens(event: Mapping[str, Any]) -> set[str]:
-            blob = " ".join(
-                _clean(event.get(k))
-                for k in ("title", "summary", "event_type", "event_time_text")
-                if _clean(event.get(k))
-            ).casefold()
-            return {
-                t for t in re.findall(r"[a-z0-9][a-z0-9_-]{3,}", blob)
-                if t not in generic and t not in topic_stop and not t.isdigit()
+        events = []
+        for eid in event_ids:
+            event = dict(event_context_by_id[eid])
+            event.setdefault("event_id", eid)
+            events.append(event)
+        if events and all(_clean(e.get("underlying_event_id")) for e in events):
+            event_to_underlying = {
+                _clean(e.get("event_id")).upper(): _clean(e.get("underlying_event_id")).upper() for e in events
             }
-
-        def date_key(event: Mapping[str, Any]) -> str:
-            raw = _clean(
-                event.get("event_date") or event.get("date") or event.get("published_at")
-                or event.get("event_time") or event.get("event_time_text")
+        else:
+            resolver = UnderlyingEventResolver(
+                actor_key=lambda event: cls._canonical_actor_key(cls._primary_acting_institution(event)),
+                family=cls._event_type_family,
+                topic=research_question,
             )
-            m = re.search(r"\b(20\d{2})[-/](\d{1,2})[-/](\d{1,2})\b", raw)
-            if m:
-                return f"{m.group(1)}-{int(m.group(2)):02d}-{int(m.group(3)):02d}"
-            return ""
-
-        features: dict[str, dict[str, Any]] = {}
-        for eid in event_ids:
-            event = event_context_by_id[eid]
-            actor = cls._primary_acting_institution(event)
-            features[eid] = {
-                "actor": cls._canonical_actor_key(actor),
-                "actor_display": actor,
-                "family": cls._event_type_family(event),
-                "source": _clean(event.get("source_id")).upper(),
-                "date": date_key(event),
-                "tokens": tokens(event),
-            }
-
-        for i, left_id in enumerate(event_ids):
-            left = features[left_id]
-            for right_id in event_ids[i + 1:]:
-                right = features[right_id]
-                shared = left["tokens"] & right["tokens"]
-                union_tokens = left["tokens"] | right["tokens"]
-                jaccard = (len(shared) / len(union_tokens)) if union_tokens else 0.0
-                same_family = bool(
-                    left["family"] and left["family"] == right["family"]
-                    and left["family"] not in {"other", "unknown"}
-                )
-                same_actor = bool(left["actor"] and left["actor"] == right["actor"])
-                same_source = bool(left["source"] and left["source"] == right["source"])
-                same_date = bool(left["date"] and left["date"] == right["date"])
-
-                duplicate = False
-                if same_source and same_family and (len(shared) >= 2 or jaccard >= 0.35):
-                    duplicate = True
-                elif same_actor and same_family and same_date and (len(shared) >= 1 or jaccard >= 0.22):
-                    duplicate = True
-                elif same_actor and same_family and (len(shared) >= 3 or jaccard >= 0.45):
-                    duplicate = True
-
-                if duplicate:
-                    union(left_id, right_id)
-
-        root_members: dict[str, list[str]] = {}
-        for eid in event_ids:
-            root_members.setdefault(find(eid), []).append(eid)
-
-        event_to_underlying: dict[str, str] = {}
+            event_to_underlying, _ = resolver.resolve(events)
         groups: dict[str, dict[str, Any]] = {}
-        for members in root_members.values():
-            members = sorted(set(members))
-            payload = {
-                "member_event_ids": members,
-                "actors": sorted({features[e]["actor"] for e in members if features[e]["actor"]}),
-                "families": sorted({features[e]["family"] for e in members if features[e]["family"]}),
-                "dates": sorted({features[e]["date"] for e in members if features[e]["date"]}),
-            }
-            group_id = _stable_id("UNDERLYINGEVENT", payload)
-            groups[group_id] = {
-                "underlying_event_id": group_id,
-                "member_event_ids": members,
-                "primary_actor_keys": payload["actors"],
-                "event_families": payload["families"],
-                "dates": payload["dates"],
-                "member_count": len(members),
-            }
-            for eid in members:
-                event_to_underlying[eid] = group_id
+        for eid, group_id in sorted(event_to_underlying.items()):
+            event = event_context_by_id.get(eid) or {}
+            group = groups.setdefault(group_id, {
+                "underlying_event_id": group_id, "member_event_ids": [], "primary_actor_keys": [],
+                "event_families": [], "dates": [], "member_count": 0,
+            })
+            group["member_event_ids"].append(eid)
+            actor = cls._canonical_actor_key(cls._primary_acting_institution(event))
+            family = cls._event_type_family(event)
+            date_text = _clean(event.get("event_date") or event.get("date") or event.get("published_at"))[:10]
+            for key, value in (("primary_actor_keys", actor), ("event_families", family), ("dates", date_text)):
+                if value and value not in group[key]:
+                    group[key].append(value)
+        for group in groups.values():
+            group["member_event_ids"] = sorted(group["member_event_ids"])
+            group["member_count"] = len(group["member_event_ids"])
+            for key in ("primary_actor_keys", "event_families", "dates"):
+                group[key] = sorted(group[key])
         return event_to_underlying, groups
 
     @staticmethod
@@ -4400,6 +4371,57 @@ class StrategicInferenceAgent:
     # Synthesis
     # ------------------------------------------------------------------
 
+    # v6.20.1: gap-research context (policy, dependency, numbers, precedent,
+    # earlier coverage) must reach the synthesis prompt; it is added after the
+    # ranked event evidence, capped so it cannot crowd the event evidence out.
+    GAP_CONTEXT_SYNTHESIS_MAX = 12  # v6.22: room for expert commentary and its reported facts
+
+    def _synthesis_digest(
+        self,
+        *,
+        research_question: str,
+        evidence_records: Sequence[Mapping[str, Any]],
+        evidence_review: Mapping[str, Any],
+        maximum: int,
+    ) -> List[Dict[str, Any]]:
+        digest = self._strategic_evidence_subset(
+            research_question=research_question,
+            evidence_records=evidence_records,
+            evidence_review=evidence_review,
+            maximum=maximum,
+        )
+        packet_ids = {item["evidence_id"] for item in digest}
+        # Candidate research must reach synthesis even if lexical event ranking
+        # places cross-topic counterevidence or older comparisons below top-k.
+        for record in evidence_records:
+            if record.get("discovery_metadata") and record.get("analytical_context_only"):
+                eid = self._evidence_id(record)
+                if eid not in packet_ids:
+                    digest.append(self._compact_evidence_for_synthesis(record=record, priority_score=0.0))
+                    packet_ids.add(eid)
+        # Gap research: one record per gap type in turn (round robin), up to the cap.
+        by_type: Dict[str, List[Mapping[str, Any]]] = {}
+        for record in evidence_records:
+            if record.get("analytical_context_only") and _clean(record.get("gap_type")) \
+                    and self._evidence_id(record) not in packet_ids:
+                by_type.setdefault(_clean(record.get("gap_type")), []).append(record)
+        added = 0
+        while added < self.GAP_CONTEXT_SYNTHESIS_MAX and any(by_type.values()):
+            for gap_type in sorted(by_type):
+                if not by_type[gap_type] or added >= self.GAP_CONTEXT_SYNTHESIS_MAX:
+                    continue
+                record = by_type[gap_type].pop(0)
+                eid = self._evidence_id(record)
+                if eid in packet_ids:
+                    continue
+                item = self._compact_evidence_for_synthesis(record=record, priority_score=0.0)
+                item["gap_type"] = gap_type
+                item["gap_for"] = _clean(record.get("gap_for"))[:200]
+                digest.append(item)
+                packet_ids.add(eid)
+                added += 1
+        return digest
+
     def _generate_synthesis(
         self,
         *,
@@ -4419,7 +4441,7 @@ class StrategicInferenceAgent:
         desired_depth = _enum(reasoning_guidance.get("desired_depth") or "standard")
         evidence_packet_maximum = 24 if desired_depth in {"deep", "very_deep"} else 16
 
-        digest = self._strategic_evidence_subset(
+        digest = self._synthesis_digest(
             research_question=research_question,
             evidence_records=evidence_records,
             evidence_review=evidence_review,
@@ -4433,7 +4455,7 @@ class StrategicInferenceAgent:
         ]
 
         support_clusters = self._supportable_evidence_clusters(
-            digest,
+            [item for item in digest if not item.get("analytical_context_only")],
             research_question=research_question,
             maximum_clusters=STRATEGIC_SUPPORT_CLUSTER_MAXIMUM,
             require_cross_source=False,
@@ -4462,6 +4484,29 @@ class StrategicInferenceAgent:
             "relationship, transaction term, financing covenant, accounting treatment, motive, market share, customer commitment, "
             "causal link, quantitative fact or historical outcome. Typical industry practice may support a hypothesis; it may never "
             "be converted into a claim about what this specific actor actually did.\n\n"
+
+            # v6.15: state the release rules up front, so candidates are
+            # written to survive the claim-support gate instead of failing it.
+            "RELEASE CONTRACT - AN INDEPENDENT CHECKER VERIFIES EVERY SENTENCE BEFORE ANYTHING IS SHOWN\n"
+            "Each premise must say exactly what its cited evidence says. Each mechanism step and each sentence of the "
+            "insight must be backed by at least two cited records from at least two different sources - stated in them, "
+            "or following directly from them. Exception (v6.21, convergent evidence): a reasoning step that no record "
+            "states may stay as a labelled ASSUMPTION when the premises come from at least three different news events "
+            "reported by at least two different publishers and all point the same way; at most three steps may be "
+            "assumptions, each one short sentence, and the reader sees them marked as analysis. The CONCLUSION itself must "
+            "follow from the facts: a conclusion that asserts a cause no record states (why something happened) is "
+            "rejected, so state what the independent facts jointly show and put any proposed cause in an assumption. "
+            "Never attribute a motive, intent, strategy or cause to an actor unless a "
+            "cited record states it. A cause must not be dated after its effect. Every sentence shown to the reader "
+            "(novel proposition, triggering anomaly, why it is easy to miss, derivation, likelihood basis, historical "
+            "cases, counter-cases) is checked the same way; historical cases without cited evidence are removed. A "
+            "conclusion that a source already states is a connection, not a hidden insight: the insight must be an "
+            "inference that combining at least two sources supports but none of them states. A forecast must ask about "
+            "an outcome the evidence does not already report. Unsupported material is removed and the candidate may be "
+            "rejected, so prefer a narrower supported inference over a broader unsupported one. A company's statement "
+            "that demand, a need or a problem exists for its own product is that company's claim: attribute it "
+            "(\"Ascerta says ...\") rather than stating it as fact. Do not link unrelated events (for example separate "
+            "funding rounds) unless a cited record connects them.\n\n"
 
             "TARGET QUALITY OF HIDDEN INSIGHT\n"
             "The goal is NOT to summarize events, identify their obvious common theme, or write an intelligent explanation of why "
@@ -4511,9 +4556,31 @@ class StrategicInferenceAgent:
             "What to learn: contradictions can be more valuable than similarities; follow the contradiction through the dependency graph; distinguish allegation from established fact; "
             "and do not publish a dramatic downstream number unless the calculation or rule connecting the steps is evidenced.\n\n"
 
+            "EXEMPLAR 4 — CONSENSUS VS CONSTRAINT → FORCED OUTCOME → CHECKABLE SIGNAL (v6.21.8)\n"
+            "Weak explanation: 'Regulators are concerned about the incident and may tighten rules.' Equally weak: two facts "
+            "side by side ('X is happening while Y') with nothing said about what follows.\n"
+            "Insight-quality reasoning: start from what a headline reader expects (more scrutiny, a review). Then find a "
+            "binding constraint in the context records - an existing rule with a deadline, a contract dependency, a "
+            "capacity number, a past case - that the expectation ignores. Ask what that constraint FORCES for a named "
+            "actor regardless of anyone's stated intentions: which obligation is now unmeetable, which party must change "
+            "a process or bear a cost, which option is closed. State the forced outcome, for whom, and a dated forecast "
+            "or a watch signal that would confirm or refute it. One development plus one cited constraint is enough.\n"
+            "What to learn: preferences are optional, constraints are not; the value is the gap between the consensus "
+            "expectation and what the constraint makes unavoidable. Always say what follows and for whom.\n\n"
+
+            "EXEMPLAR 5 — LEVERAGE + INCENTIVES → PREDICTED MOVE (v6.26)\n"
+            "Weak: 'A port strike and a new emissions rule both affect shipping.' (two facts side by side)\n"
+            "Insight-quality reasoning: a port operator controls berth slots that two shipping lines need (leverage). A new rule fines "
+            "the LINES, not the port, for every hour a ship idles at anchor (the lines' incentive), while the port is paid per container "
+            "moved, not per hour saved (the port's incentive). So the port can sell priority berthing to whichever line pays most, and the "
+            "line with the larger fine exposure will pay it: expect paid priority-berthing contracts, signed first by the most exposed line, "
+            "within the rule's first compliance quarter. Watch: berth-priority fees in the port's next tariff filing.\n"
+            "What to learn: name who holds what, who needs it, what each side's cited rule or money makes them want, and what that "
+            "combination makes someone do next. Abstract the structure, not the story.\n\n"
+
             "EXEMPLAR QUALITY TEST\n"
             "A candidate Hidden Insight should reach comparable reasoning depth when the evidence permits. It need not resemble any exemplar's subject matter. Ask whether the candidate "
-            "contains: (1) a non-obvious trigger or anomaly; (2) an explicit hidden mechanism; (3) evidence or precedent supporting that mechanism; (4) an alternative or counter-case; "
+            "contains: (1) a non-obvious trigger or anomaly; (2) an explicit hidden mechanism; (3) evidence or precedent supporting that mechanism; (4) an explicit search for alternatives or counter-cases (none found is a valid result); "
             "(5) at least one meaningful downstream implication; and (6) a falsifier or watch signal. A shorter insight may still qualify when one event is an existence proof or when a "
             "forensic contradiction is unusually strong. Never pad weak evidence merely to imitate exemplar complexity.\n\n"
 
@@ -4574,17 +4641,48 @@ class StrategicInferenceAgent:
             "evidence is a question-generating signal, not automatic proof of wrongdoing or failure.\n"
             "S. NECESSARY-CONDITION TEST: If this thesis is true, what else must also be true? Turn those dependencies into validation targets.\n"
             "T. FORWARD PREDICTION: If the mechanism is real, what measurable event, actor behavior or metric should appear next, and what would "
-            "materially weaken or falsify the thesis?\n\n"
+            "materially weaken or falsify the thesis?\n"
+            "U. CONSENSUS VS CONSTRAINT: What does the headline consensus expect, which cited rule, deadline, dependency, number or past case "
+            "(context records: evidence marked analytical_context_only) does it ignore, and what does that constraint force for a named actor? "
+            "Prefer this lens when context records exist.\n\n"
 
-            "THREE VALID INSIGHT MODES\n"
+            "FOUR VALID INSIGHT MODES\n"
             "1. CROSS-ACTOR STRUCTURAL MODE: multiple independent actors/events reveal a shared or divergent mechanism.\n"
             "2. FORENSIC CONTRADICTION MODE: one actor is sufficient when multiple independent documents/fact types do not reconcile. In this "
             "mode, source-type diversity and contradiction strength can substitute for actor diversity, but the contradiction, mechanism, "
             "downstream consequence and falsifiable resolution condition must be specific.\n"
             "3. SEQUENCE / TRANSITION MODE: one or a few actors may reveal a meaningful path-dependent transition over time. Do not count repeated "
-            "events from one actor as independent cross-actor support.\n\n"
+            "events from one actor as independent cross-actor support.\n"
+            "4. CONSENSUS VS CONSTRAINT MODE: one development is sufficient when a cited context record (rule, deadline, dependency, number, past "
+            "case) changes what it implies; the conclusion must cite that record and must not be stated by the development's own reports.\n"
+            "EVERY MODE: say what follows (second_order_effect and/or forecast_contract) - for whom and by when. A candidate that only places "
+            "facts side by side is rejected.\n"
+            "THE ANALYSIS THE READER PAYS FOR (v6.26) - LEVERAGE PLUS INCENTIVES. Every hidden insight is a leverage-and-incentive "
+            "judgment, filled in leverage_analysis: (1) a named HOLDER controls something - a resource, access, information, a rule position, "
+            "a contract, a deadline - that a named DEPENDENT needs (cite the records that state both); (2) the HOLDER'S INCENTIVE: a cited rule, "
+            "penalty, cost, revenue or obligation that decides what the holder gains or loses (and the dependent's, if it differs); (3) the "
+            "PREDICTED MOVE: what the holder or dependent will therefore rationally do, which the headlines do not say. The insight sentence "
+            "states the predicted move and why. Two facts side by side, a theme, or 'X while Y' is not an insight. Strong wording does not "
+            "make a thin point deep: the insight is judged on its plain meaning.\n"
+            "THE EXPERT FRONTIER (v6.22): evidence with gap_type \"commentary\" is PUBLISHED EXPERT ANALYSIS of these developments. It is "
+            "already known to informed readers, so a candidate that it states or implies is rejected. Never cite it as a premise or as proof of "
+            "a fact. Use it as the starting line: derive what follows from it that the experts have not said, or show with cited facts where "
+            "they are wrong or incomplete (a fact they missed, a constraint they ignored, an actor they did not consider).\n"
+            "PATTERNS ACROSS REPORTS (v6.23): evidence with gap_type \"pattern\" was COMPUTED from a table of the same questions asked "
+            "of every report (a repeated actor across targets, one target hit by several actors, a reporting delay across cases, one rule "
+            "named across actors). No single article shows these. Prefer insights that rest on a pattern plus what it forces for a named "
+            "actor, cite the pattern record, and say what the count or delay implies.\n\n"
 
             "PROSPECTIVE / FORWARD-LOOKING INSIGHT MODE\n"
+            "Search for credible competing explanations and counterevidence before a final conclusion, but never "
+            "invent an alternative or withhold a supported insight merely because alternative_explanations is empty. "
+            "Use supplied hypothesis_research receipts: completed_none_found is limited to the documented search, "
+            "while incomplete/not_searched must be disclosed. Do not equate failed search with no alternatives. "
+            "Historical examples must be grounded in admitted EVID citations, with similarities and differences; "
+            "retrieved news examples are not a representative reference class or a numerical base rate. "
+            "For prospective findings, expose forecast_contract with an observable binary question, explicit "
+            "deadline with timezone, and resolution criteria when justified. Missing numerical support allows "
+            "a qualitative forecast; do not fabricate a probability to make it scoreable. "
             "A Hidden Insight does NOT need direct evidence that the predicted outcome has already happened. For a prospective insight, support "
             "the PREMISES and MECHANISM rather than pretending the future is observed. Assess: current facts; inferred mechanism; relevant historical "
             "or analogical precedent; base rate where actually available; mechanism transferability; technical/economic/legal/operational feasibility; "
@@ -4700,7 +4798,7 @@ class StrategicInferenceAgent:
             "Control guidance (NOT evidence):\n"
             + json.dumps(compact_control, ensure_ascii=False, separators=(",", ":"))
             + "\n\nRefinement context (NOT evidence):\n"
-            + self._bounded_json(normalized_refinement, 1800)
+            + json.dumps(normalized_refinement, ensure_ascii=False, default=str)
             + "\n\nPrior report context (NOT evidence):\n"
             + self._bounded_json(previous_report, 1800)
             + "\n\nAuxiliary event/graph context (NOT grounding evidence):\n"
@@ -4709,6 +4807,12 @@ class StrategicInferenceAgent:
             + json.dumps(support_clusters, ensure_ascii=False, separators=(",", ":"), default=str)
             + "\n\nADMITTED EVIDENCE DIGEST:\n"
             + json.dumps(digest, ensure_ascii=False, separators=(",", ":"), default=str)
+            + ("\n\nRecords with a gap_type were researched to fill gaps in this run's coverage "
+               "(policy = a rule or incentive in force; dependency = who relies on whom; numbers = figures; "
+               "precedent = a past case; earlier = coverage from earlier runs). They are citable evidence of "
+               "context, not events of this run: use them to explain incentives, leverage, constraints and "
+               "precedents that connect the events."
+               if any(item.get("gap_type") for item in digest) else "")
             + "\n\nAllowed evidence IDs: "
             + json.dumps(selected_evidence_ids, ensure_ascii=False)
             + "\nAllowed event IDs: "
@@ -4771,7 +4875,17 @@ class StrategicInferenceAgent:
             '    "supporting_evidence_ids":[],\n'
             '    "counterevidence_ids":[],\n'
             '    "counter_incentive_evidence_ids":[],\n'
-            '    "alternative_explanations":[{"alternative_id":"ALT1","text":"Serious competing explanation.","evidence_ids":[]}],\n'
+            '    "alternative_explanations":[],\n'
+            '    "forecast_contract":{"question":"Binary observable outcome, for prospective insights only",'
+            '"deadline":"ISO 8601 deadline with UTC offset, or empty when not defensible",'
+            '"resolution_criteria":"Observable yes/no rule and suitable resolution source; no vague success claims"},\n' 
+            '    "leverage_analysis":{"holder":"named actor that holds the leverage","controls":"the resource, access, '
+            'information, rule position or contract it controls","dependent":"named actor that depends on it",'
+            '"leverage_evidence_ids":["EVID ids stating the control and the dependence"],'
+            '"holder_incentive":"the sourced rule, cost, revenue or penalty that shapes what the holder gains or loses",'
+            '"holder_incentive_evidence_ids":[],"dependent_incentive":"the same for the dependent party, or empty",'
+            '"dependent_incentive_evidence_ids":[],"predicted_move":"what the holder (or dependent) will therefore '
+            'rationally do, that the headlines do not say"},\n'
             '    "event_ids":[],"constraint_ids":[],\n'
             '    "analytical_lenses":[],\n'
             '    "reasoning_patterns":["cross_event_synthesis","mechanism","consequence_propagation","falsification"],\n'
@@ -7344,10 +7458,11 @@ class StrategicInferenceAgent:
             comparable_cases = None
         if outcome_cases is not None and outcome_cases < 0:
             outcome_cases = None
-        if comparable_cases is not None and outcome_cases is not None:
-            outcome_cases = min(outcome_cases, comparable_cases)
+        if (comparable_cases is not None and outcome_cases is not None
+                and outcome_cases <= comparable_cases and base_rate_evidence_ids):
             derived_rate = outcome_cases / comparable_cases
         else:
+            comparable_cases = outcome_cases = None
             derived_rate = None
 
         numeric_basis = _clean(likelihood_raw.get("numeric_basis"))[:2200]
@@ -7673,12 +7788,33 @@ class StrategicInferenceAgent:
                 "insight_quality_check": insight_quality_check,
                 "insight_derivation": derivation_summary,
                 "likelihood_assessment": likelihood_assessment,
+                "forecast_contract": {
+                    key: _clean((raw.get("forecast_contract") or {}).get(key))
+                    for key in ("question", "deadline", "resolution_criteria")
+                } if isinstance(raw.get("forecast_contract"), Mapping) else {},
+                # v6.26: the product's core analysis - leverage plus incentives.
+                "leverage_analysis": self._normalize_leverage(raw.get("leverage_analysis")),
                 "alternative_analysis": alternative_analysis,
                 "evidence_linkage_diagnostics": evidence_linkage_diagnostics,
             },
         }
 
         return self._canonicalize_insight(candidate)
+
+    LEVERAGE_TEXT_FIELDS = ("holder", "controls", "dependent", "holder_incentive", "dependent_incentive",
+                            "predicted_move")
+    LEVERAGE_ID_FIELDS = ("leverage_evidence_ids", "holder_incentive_evidence_ids", "dependent_incentive_evidence_ids")
+
+    @classmethod
+    def _normalize_leverage(cls, raw: Any) -> Dict[str, Any]:
+        """v6.26: leverage_analysis as plain strings and EVID id lists; {} when absent."""
+        if not isinstance(raw, Mapping):
+            return {}
+        out: Dict[str, Any] = {key: _clean(raw.get(key))[:600] for key in cls.LEVERAGE_TEXT_FIELDS}
+        for key in cls.LEVERAGE_ID_FIELDS:
+            values = raw.get(key) if isinstance(raw.get(key), (list, tuple)) else []
+            out[key] = [_clean(v).upper() for v in values if _clean(v)][:8]
+        return out if any(out[key] for key in cls.LEVERAGE_TEXT_FIELDS) else {}
 
     def _canonicalize_insight(
         self,
@@ -7767,6 +7903,9 @@ class StrategicInferenceAgent:
                 "insight_quality_check",
                 "insight_derivation",
                 "likelihood_assessment",
+                "forecast_contract",
+                "leverage_analysis",
+                "hypothesis_research",
                 "alternative_analysis",
                 "evidence_linkage_diagnostics",
                 "finding_tier",
@@ -8130,6 +8269,9 @@ class StrategicInferenceAgent:
             ),
             "target_insight_ids": target_ids,
             "target_revision_by_insight": target_revision_by_insight,
+            "instruction": _clean(value.get("instruction")),
+            "target_insights": deepcopy(value.get("target_insights") or []),
+            "hypothesis_research": deepcopy(value.get("hypothesis_research") or []),
             "quality_weaknesses": self._normalize_text_list(
                 value.get(
                     "quality_weaknesses"

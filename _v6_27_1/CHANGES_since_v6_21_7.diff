@@ -1,0 +1,626 @@
+--- a/services/research_orchestrator_service.py
++++ b/services/research_orchestrator_service.py
+@@ -26,7 +26,7 @@
+ # decisions, terminal outcomes) reach data/logs/system.log.
+ logger = logging.getLogger("event_intelligence." + __name__)
+ 
+-SERVICE_VERSION = "research-orchestrator-service-v3.26.4.12-v6217-promote-topup"
++SERVICE_VERSION = "research-orchestrator-service-v3.26.4.13-v6218-constraint-sowhat"
+ PATCH_BUILD_ID = "ORCH-V326411-20261009-V6207-FORECAST-MERGED"
+ CONTEXT_INTEGRITY_PATCH = "v6.10.1"
+ REASONING_RESEARCH_PATCH = "v6.11.0"
+@@ -141,7 +141,10 @@
+     "following directly from them). Delete or narrow each listed claim; do not replace it with a "
+     "different unsupported claim and do not add facts, motives, technical details or causes that no "
+     "cited record states. Keep the insight ID. If what remains is no longer a non-obvious insight, "
+-    "return it at the lower finding tier it supports, or return no candidate."
++    "return it at the lower finding tier it supports, or return no candidate. v6.21.8: NEVER delete the "
++    "consequence (what this forces or changes, for whom, by when) to pass the check - a finding that only "
++    "places facts side by side ('X while Y') is rejected. Narrow the consequence, or keep its unsourced step "
++    "as one short mechanism step, which may stand as a labelled assumption."
+ )
+ CLAIM_ALTERNATIVE_INSTRUCTION = (
+     "DIFFERENT CANDIDATE. The theses below were not released because an independent checker found "
+@@ -153,7 +156,11 @@
+     "no candidate if the evidence supports none. v6.21.2: do not reuse a rejected thesis's causal story or "
+     "its central figure (for example the same cost number); build from different developments. Prefer a "
+     "conclusion about what several independent facts jointly show over a claim about WHY something happened: "
+-    "a cause no source states is the most common reason for rejection."
++    "a cause no source states is the most common reason for rejection. v6.21.8: the strongest shape is "
++    "CONSENSUS VS CONSTRAINT - what headline readers expect, the cited rule, deadline, dependency, number or "
++    "past case (a context record) that the expectation ignores, and what that constraint therefore forces for "
++    "a named company, agency or group, with a dated forecast or watch signal. One development plus a cited "
++    "context record is enough for this shape. Always keep a consequence; never only juxtapose facts."
+ )
+ 
+ 
+@@ -175,7 +182,26 @@
+     "Premises must quote their records; cite records from at least three different news events and two "
+     "publishers; keep any unstated reasoning step short and mark it as an assumption; do not claim a cause no "
+     "record states. Do not reuse these rejected theses: {rejected}. Return no candidate if these developments "
+-    "do not jointly show anything beyond what their headlines say."
++    "do not jointly show anything beyond what their headlines say. State the consequence: what this forces or "
++    "changes, for which named company, agency or group, and a dated forecast or watch signal; a finding that "
++    "only places facts side by side is rejected. Prefer a cited rule, deadline, dependency or number (context "
++    "records) that the headlines ignore."
++)
++
++# v6.21.8: consensus vs constraint (Papic's constraints-over-preferences method;
++# the intelligence "so what" standard). Used for a single development read
++# against the run's context records.
++INSIGHT_CONSTRAINT_INSTRUCTION = (
++    "CONSENSUS VS CONSTRAINT. Look at this development: {developments}, together with the CONTEXT records "
++    "(rules, deadlines, dependencies, numbers and past cases found by follow-up research). Derive at most one "
++    "hidden insight in this shape: (1) what a headline reader expects to happen next; (2) a cited context "
++    "record - a rule, deadline, dependency, number or past case - that this expectation ignores; (3) what "
++    "that constraint therefore forces or makes likely, for a named company, agency or group; (4) a forecast "
++    "question with a deadline, or a concrete watch signal. Premises must quote their records and the "
++    "conclusion must cite the context record: the development's own reports alone must not already say it. "
++    "Discount stated intentions; weigh what the constraint makes unavoidable. Do not claim a cause no record "
++    "states. Do not reuse these rejected theses: {rejected}. Return no candidate if no context record changes "
++    "what the headlines imply."
+ )
+ 
+ # V3.26.4: authoritative analytical material is useful research context, but it
+@@ -16018,7 +16044,8 @@
+         )
+ 
+     NONOBVIOUS_MIN_SECONDS = 60.0
+-    SINGLE_DEVELOPMENT_REASONS = ("conclusion_single_development", "conclusion_follows_from_one_development")
++    SINGLE_DEVELOPMENT_REASONS = ("conclusion_single_development", "conclusion_follows_from_one_development",
++                                  "conclusion_does_not_need_the_constraint")
+ 
+     @classmethod
+     def _connection_downgrade_rejection(cls, candidate: Mapping[str, Any], attempt: Mapping[str, Any],
+@@ -16404,10 +16431,18 @@
+                 tried_sets.add(keys_used)
+         combos = [list(c) for c in combinations(ranked, 2)] + ([ranked[:3]] if len(ranked) >= 3 else [])
+         combos.sort(key=lambda c: -sum(len(g["underlying"]) for g in c))
++        # v6.21.8: the consensus-vs-constraint route - the top development on its own,
++        # read against the run's context records (rules, deadlines, dependencies,
++        # numbers, past cases). Tried second, after the top multi-development combination.
++        has_context = any(isinstance(r, Mapping) and r.get("analytical_context_only") for r in evidence or [])
++        if has_context and ranked:
++            combos.insert(1 if combos else 0, [ranked[0]])
+         out = []
+         for combo in combos:
+             keys = {g["key"] for g in combo}
+-            if frozenset(keys) in tried_sets or sum(len(g["underlying"]) for g in combo) < 3:
++            if frozenset(keys) in tried_sets:
++                continue
++            if len(combo) > 1 and sum(len(g["underlying"]) for g in combo) < 3:
+                 continue
+             out.append({"keys": sorted(keys), "labels": [g["label"] or g["key"] for g in combo],
+                         "event_ids": [e for g in combo for e in g["event_ids"]],
+@@ -16441,7 +16476,8 @@
+                     graph_context=graph_context, constraints=constraints, blueprint=blueprint,
+                     refinement_context={
+                         "quality_weaknesses": [],
+-                        "instruction": INSIGHT_EXPLORATION_INSTRUCTION.format(
++                        "instruction": (INSIGHT_CONSTRAINT_INSTRUCTION if len(combo["keys"]) == 1
++                                        else INSIGHT_EXPLORATION_INSTRUCTION).format(
+                             developments=" | ".join(combo["labels"]), rejected=rejected),
+                     },
+                     budget_service=self.execution_budget_service, execution_stage="refinement",
+@@ -16752,6 +16788,19 @@
+                         restatement = True
+                         downgrade_reasons = ["not_a_hidden_insight:" + r for r in nonobvious.get("reasons") or []] \
+                             or ["not_a_hidden_insight"]
++                    else:
++                        # v6.21.8: the "so what" test on the copy the reader would see. A
++                        # finding whose consequence was removed only juxtaposes facts.
++                        route = _clean(nonobvious.get("route"))
++                        so_what = gate.so_what_reasons(out, route)
++                        attempt["so_what"] = {"route": route, "reasons": so_what,
++                                              "parts": gate.consequence_parts(out)}
++                        if so_what:
++                            post_problems = list(so_what)
++                        else:
++                            meta = dict(_as_mapping(out.get("metadata")))
++                            meta["insight_route"] = route
++                            out["metadata"] = meta
+                 if not post_problems and not restatement:
+                     out["quality_assessment"] = final_quality
+                     state["strategic_connections"] = kept_connections
+@@ -16778,6 +16827,7 @@
+                     verdict = {**verdict, "passed": False, "repairable": True,
+                                "reasons": ["after_display_check:" + reason for reason in post_problems],
+                                "brief_extra": gate.quality_brief(final_quality)
++                               + gate.so_what_brief(post_problems)
+                                + [f"[removed as unsupported] {text}" for text in (display_notes.get("removed") or [])[:6]]}
+                     attempt.update({"passed": False, "reasons": list(verdict["reasons"]), "release_notes": notes})
+             logger.warning(
+@@ -18979,6 +19029,7 @@
+                 # the ICD 203-style confidence in the judgment.
+                 "key_assumptions": _json_safe(insight_metadata.get("key_assumptions", [])),
+                 "analytic_confidence": _json_safe(insight_metadata.get("analytic_confidence", {})),
++                "insight_route": _clean(insight_metadata.get("insight_route")),  # v6.21.8
+             }
+             if text:
+                 strategic_findings.append(finding_record)
+--- a/services/claim_support_gate.py
++++ b/services/claim_support_gate.py
+@@ -588,6 +588,57 @@
+     return _unique(value if isinstance(value, (list, tuple)) else [])
+ 
+ 
++SO_WHAT_BRIEF = {
++    "no_consequence_so_what": (
++        "[so what] Every consequence was removed or never stated, so the finding only places facts side by "
++        "side ('X while Y'). Keep a consequence: what this forces or changes, for which named company, agency "
++        "or group, and when. If no record states that step, keep it as a short mechanism step (it may stand "
++        "as a labelled assumption) - never delete the consequence to pass the check."),
++    "constraint_insight_needs_checkable_signal": (
++        "[so what] A conclusion built on a rule, deadline, dependency or number must say how it can be "
++        "checked: a forecast question with a deadline, or a concrete watch signal."),
++}
++
++
++def consequence_parts(candidate: Mapping[str, Any]) -> dict[str, Any]:
++    """v6.21.8: the parts of a finding that say what follows from it (the 'so what')."""
++    contract = candidate.get("forecast_contract")
++    if not isinstance(contract, Mapping):
++        contract = _metadata(candidate).get("forecast_contract")
++    contract = contract if isinstance(contract, Mapping) else {}
++    derivation = _derivation(candidate)
++    return {
++        "second_order_effect": _clean(candidate.get("second_order_effect")),
++        "forecast_question": _clean(contract.get("question")),
++        "forecast_deadline": _clean(contract.get("deadline")),
++        "watch_signals": [_clean(x) for x in (derivation.get("watch_signals") or candidate.get("watch_signals") or [])
++                          if _clean(x)],
++    }
++
++
++def so_what_reasons(candidate: Mapping[str, Any], route: str = "") -> list[str]:
++    """v6.21.8 'so what' test (intelligence writing standard: a fact without what it
++    changes, for whom, is noise). Applied to the copy the reader would see.
++
++    - every hidden insight keeps at least one consequence (second-order effect or
++      forecast question);
++    - a constraint-route insight (one development + a cited rule/number) also needs
++      a checkable signal: a dated forecast or a watch signal.
++    """
++    parts = consequence_parts(candidate)
++    reasons = []
++    if not parts["second_order_effect"] and not parts["forecast_question"]:
++        reasons.append("no_consequence_so_what")
++    if route == "constraint" and not (
++            (parts["forecast_question"] and parts["forecast_deadline"]) or parts["watch_signals"]):
++        reasons.append("constraint_insight_needs_checkable_signal")
++    return reasons
++
++
++def so_what_brief(reasons: Sequence[str]) -> list[str]:
++    return [SO_WHAT_BRIEF[r] for r in reasons if r in SO_WHAT_BRIEF]
++
++
+ def display_claims(candidate: Mapping[str, Any], insight_evidence_ids: Sequence[str],
+                    connections: Sequence[Mapping[str, Any]] = (),
+                    counter_ids_to_check: Sequence[str] = ()) -> list[dict[str, Any]]:
+--- a/services/non_obviousness.py
++++ b/services/non_obviousness.py
+@@ -21,6 +21,16 @@
+      development alone already supports the conclusion, it is not a
+      cross-event insight.)
+ 
++v2 (v6.21.8) - the CONSTRAINT route (consensus vs constraint, after Papic's
++constraints-over-preferences method and the intelligence "so what" test):
++a conclusion resting on ONE development also qualifies when its support
++includes a sourced constraint record found by gap research (a rule, deadline,
++dependency, number or past case) and it passes tests 2 and 3, where test 3
++removes the constraint: if the development's own records already support the
++conclusion without it, the constraint added nothing and the test fails.
++(The strategic prompt has always allowed single-actor forensic / constraint
++insights; v1 rejected all of them - replay RUN-7CD0B58AA15D4B5E83571188.)
++
+ Fail closed: a check that cannot run (model error, no time) fails the
+ candidate, which is then shown as a verified connection, not dropped.
+ """
+@@ -33,7 +43,8 @@
+ from datetime import datetime, timezone
+ from typing import Any, Callable, Mapping, Sequence
+ 
+-VERSION = "non-obviousness-v1"
++VERSION = "non-obviousness-v2-constraint-route"
++CONSTRAINT_GAPS = frozenset({"policy", "dependency", "numbers", "precedent"})
+ SUFFICIENT = frozenset({"supported", "inference_supported"})
+ MAX_CONCLUSIONS = 2      # inferred conclusion sentences tested per candidate
+ MAX_DEVELOPMENTS = 3     # single-development re-checks per conclusion sentence
+@@ -43,7 +54,12 @@
+ BRIEF = {
+     "conclusion_single_development": (
+         "[non-obvious] The conclusion is backed by one development only (several reports of one story "
+-        "count once). Derive a conclusion that needs at least two different developments."),
++        "count once). Derive a conclusion that needs at least two different developments, OR one that "
++        "follows from a cited rule, deadline, dependency, number or past case (a CONTEXT record) applied "
++        "to the development - what that constraint forces, for whom, that headline readers do not expect."),
++    "conclusion_does_not_need_the_constraint": (
++        "[non-obvious] The development's own reports already support this conclusion without the cited "
++        "rule or number. State what the constraint FORCES that the reports alone do not show."),
+     "conclusion_obvious_from_headlines": (
+         "[non-obvious] A plain reading of the headlines already says this. Derive what follows from "
+         "combining the developments that a headline reader would not conclude."),
+@@ -82,6 +98,14 @@
+     return out
+ 
+ 
++def is_constraint(record: Any) -> bool:
++    """A gap-research context record: a rule, dependency, number or past case, not a news event."""
++    if not isinstance(record, Mapping) or _clean(record.get("event_id")):
++        return False
++    return bool(record.get("analytical_context_only") or record.get("historical_case")
++                or _clean(record.get("gap_type")).casefold() in CONSTRAINT_GAPS)
++
++
+ def inferred_conclusions(grounding: Any) -> list[Mapping[str, Any]]:
+     claims = grounding.get("claims") if isinstance(grounding, Mapping) else None
+     return [c for c in claims or [] if isinstance(c, Mapping)
+@@ -146,10 +170,16 @@
+         support = _ids(claim.get("supporting_evidence_ids"))
+         devs = Counter(dev_of.get(eid, "") for eid in support)
+         devs.pop("", None)
++        constraints = [eid for eid in support if not dev_of.get(eid) and is_constraint(by_id.get(eid))]
+         entry = {"claim_id": _clean(claim.get("claim_id")), "claim_text": _clean(claim.get("claim_text"))[:400],
+                  "developments": sorted(devs)}
+         result["claims"].append(entry)
+         if len(devs) >= 2:
++            entry["route"] = "cross_development"
++            spanning.append((claim, devs, entry))
++        elif len(devs) == 1 and constraints:
++            entry["route"] = "constraint"
++            entry["constraint_evidence_ids"] = constraints
+             spanning.append((claim, devs, entry))
+         else:
+             entry["failed"] = "conclusion_single_development"
+@@ -210,6 +240,9 @@
+         cited = _ids(claim.get("cited_evidence_ids")) or _ids(claim.get("evidence_ids"))
+         cited = list(dict.fromkeys(cited + _ids(claim.get("supporting_evidence_ids"))))
+         background = [eid for eid in cited if not dev_of.get(eid)]
++        if entry.get("route") == "constraint":
++            # Ablate the constraint: the development's records alone must NOT suffice.
++            background = [eid for eid in background if not is_constraint(by_id.get(eid))]
+         alone = {}
+         for dev, _ in devs.most_common(MAX_DEVELOPMENTS):
+             ids = [eid for eid in cited if dev_of.get(eid) == dev] + background
+@@ -230,7 +263,8 @@
+                 break
+         entry["single_development_status"] = alone
+         if any(s in SUFFICIENT for s in alone.values()):
+-            entry["failed"] = "conclusion_follows_from_one_development"
++            entry["failed"] = ("conclusion_does_not_need_the_constraint" if entry.get("route") == "constraint"
++                               else "conclusion_follows_from_one_development")
+         elif any(s.startswith("error") or not s for s in alone.values()):
+             entry["failed"] = "non_obviousness_untested:single_development_check"
+         else:
+@@ -238,6 +272,8 @@
+     if passing:
+         result["passed"] = True
+         result["passing_claim_ids"] = [e["claim_id"] for e in passing]
++        result["route"] = ("cross_development" if any(e.get("route") == "cross_development" for e in passing)
++                           else "constraint")
+         return result
+     result["reasons"] = sorted({e.get("failed", "") for _, _, e in survivors} - {""}) or ["no_claim_passed"]
+     return result
+--- a/agents/strategic_inference_agent.py
++++ b/agents/strategic_inference_agent.py
+@@ -4543,6 +4543,18 @@
+             "What to learn: contradictions can be more valuable than similarities; follow the contradiction through the dependency graph; distinguish allegation from established fact; "
+             "and do not publish a dramatic downstream number unless the calculation or rule connecting the steps is evidenced.\n\n"
+ 
++            "EXEMPLAR 4 — CONSENSUS VS CONSTRAINT → FORCED OUTCOME → CHECKABLE SIGNAL (v6.21.8)\n"
++            "Weak explanation: 'Regulators are concerned about the incident and may tighten rules.' Equally weak: two facts "
++            "side by side ('X is happening while Y') with nothing said about what follows.\n"
++            "Insight-quality reasoning: start from what a headline reader expects (more scrutiny, a review). Then find a "
++            "binding constraint in the context records - an existing rule with a deadline, a contract dependency, a "
++            "capacity number, a past case - that the expectation ignores. Ask what that constraint FORCES for a named "
++            "actor regardless of anyone's stated intentions: which obligation is now unmeetable, which party must change "
++            "a process or bear a cost, which option is closed. State the forced outcome, for whom, and a dated forecast "
++            "or a watch signal that would confirm or refute it. One development plus one cited constraint is enough.\n"
++            "What to learn: preferences are optional, constraints are not; the value is the gap between the consensus "
++            "expectation and what the constraint makes unavoidable. Always say what follows and for whom.\n\n"
++
+             "EXEMPLAR QUALITY TEST\n"
+             "A candidate Hidden Insight should reach comparable reasoning depth when the evidence permits. It need not resemble any exemplar's subject matter. Ask whether the candidate "
+             "contains: (1) a non-obvious trigger or anomaly; (2) an explicit hidden mechanism; (3) evidence or precedent supporting that mechanism; (4) an explicit search for alternatives or counter-cases (none found is a valid result); "
+@@ -4606,15 +4618,22 @@
+             "evidence is a question-generating signal, not automatic proof of wrongdoing or failure.\n"
+             "S. NECESSARY-CONDITION TEST: If this thesis is true, what else must also be true? Turn those dependencies into validation targets.\n"
+             "T. FORWARD PREDICTION: If the mechanism is real, what measurable event, actor behavior or metric should appear next, and what would "
+-            "materially weaken or falsify the thesis?\n\n"
++            "materially weaken or falsify the thesis?\n"
++            "U. CONSENSUS VS CONSTRAINT: What does the headline consensus expect, which cited rule, deadline, dependency, number or past case "
++            "(context records: evidence marked analytical_context_only) does it ignore, and what does that constraint force for a named actor? "
++            "Prefer this lens when context records exist.\n\n"
+ 
+-            "THREE VALID INSIGHT MODES\n"
++            "FOUR VALID INSIGHT MODES\n"
+             "1. CROSS-ACTOR STRUCTURAL MODE: multiple independent actors/events reveal a shared or divergent mechanism.\n"
+             "2. FORENSIC CONTRADICTION MODE: one actor is sufficient when multiple independent documents/fact types do not reconcile. In this "
+             "mode, source-type diversity and contradiction strength can substitute for actor diversity, but the contradiction, mechanism, "
+             "downstream consequence and falsifiable resolution condition must be specific.\n"
+             "3. SEQUENCE / TRANSITION MODE: one or a few actors may reveal a meaningful path-dependent transition over time. Do not count repeated "
+-            "events from one actor as independent cross-actor support.\n\n"
++            "events from one actor as independent cross-actor support.\n"
++            "4. CONSENSUS VS CONSTRAINT MODE: one development is sufficient when a cited context record (rule, deadline, dependency, number, past "
++            "case) changes what it implies; the conclusion must cite that record and must not be stated by the development's own reports.\n"
++            "EVERY MODE: say what follows (second_order_effect and/or forecast_contract) - for whom and by when. A candidate that only places "
++            "facts side by side is rejected.\n\n"
+ 
+             "PROSPECTIVE / FORWARD-LOOKING INSIGHT MODE\n"
+             "Search for credible competing explanations and counterevidence before a final conclusion, but never "
+--- a/frontend/dashboard.py
++++ b/frontend/dashboard.py
+@@ -3136,7 +3136,18 @@
+     return line, [a for a in assumptions if a]
+ 
+ 
++ROUTE_NOTES = {  # v6.21.8
++    "constraint": ("**How this was derived:** a cited rule, deadline, dependency or number, applied to this "
++                   "development; the development's own reports do not say this."),
++    "cross_development": ("**How this was derived:** it follows from combining different developments; "
++                          "no single one of them says this."),
++}
++
++
+ def render_key_assumptions(item: Mapping[str, Any]) -> None:
++    route = clean_text(item.get("insight_route"))
++    if route in ROUTE_NOTES:
++        st.markdown(ROUTE_NOTES[route])
+     line, assumptions = key_assumption_lines(item)
+     if line:
+         st.markdown(line)
+--- a/tests/test_v6_21_4_search_coverage.py
++++ b/tests/test_v6_21_4_search_coverage.py
+@@ -123,7 +123,8 @@
+     events, evidence = _events_and_evidence()
+     combos = obj._development_combinations(events, evidence, limit=6)
+     assert combos[0]["keys"] == ["dev_breach", "dev_eu", "dev_rename"]          # the top triple first
+-    assert all(len(set(c["keys"])) >= 2 for c in combos)
++    # v6.21.8: one single-development combination (read against the context records) is allowed.
++    assert sum(len(set(c["keys"])) == 1 for c in combos) <= 1
+     used = {"supporting_evidence_ids": ["EVID-DEV_EU-0", "EVID-DEV_BREACH-0"]}
+     after = obj._development_combinations(events, evidence, [used], limit=6)
+     assert ["dev_breach", "dev_eu"] not in [c["keys"] for c in after]
+--- a/docs/PRODUCT_SPEC.md
++++ b/docs/PRODUCT_SPEC.md
+@@ -104,6 +104,8 @@
+ ## v6.20.10 fixes from the v6.20.9 replay (RUN-DFA27E66C51C4CDE8CD46B04)
+ 
+ - Briefing sentences are checked one at a time: a check that returns invalid output removes only its own sentence (fail closed) and is logged with its error; before, one such check removed every sentence.
++- Hidden insight routes (v6.21.8): (a) cross-development - needs two different developments and no single one suffices; (b) consensus vs constraint - one development plus a cited context record (rule, deadline, dependency, number, past case) from gap research; the development's own records without that record must NOT support the conclusion, and it needs a dated forecast or a watch signal. Both: not obvious from the headlines.
++- "So what" (v6.21.8): a hidden insight must keep a consequence (second-order effect or forecast) in the copy the reader sees; a finding reduced to facts side by side ("X while Y") is not released. Rewrites are told never to delete the consequence.
+ - A finding that passes every claim and quality check but was labelled by the model with another tier (e.g. "underlying_dynamic") is held to the hidden-insight bar (hidden-insight release rules + non-obviousness) and released as a hidden insight when it passes (v6.21.7); otherwise it does not count as released and exploration continues.
+ - A run whose claim-checked finding is neither a hidden insight nor a verified connection (e.g. tier "underlying_dynamic") is released as an abstention report (landscape, briefing, verified connections, "None this run"), never blocked. Safety net: if the final policy's only objection is a missing hidden-insight/connection section, the abstention report is released.
+ - Precedent pages without a publication date are reviewed; only their dated past-case records are kept.
+--- a/tests/test_v6_21_8_constraint_and_so_what.py
++++ b/tests/test_v6_21_8_constraint_and_so_what.py
+@@ -0,0 +1,228 @@
++"""v6.21.8: consensus vs constraint, and the "so what" test.
++
++Replay RUN-7CD0B58AA15D4B5E83571188:
++- the first candidate ("tightening reporting mandates that require immediate
++  notification are structurally incompatible with developers' multi-month
++  detection latency") rested on one development plus a cited rule (the SOCI
++  Act's mandatory cyber-incident reporting, found by gap research). The
++  non-obviousness test rejected every single-development conclusion, although
++  the strategic prompt allows single-actor forensic/constraint insights;
++- repair rounds then removed every consequence, leaving "X while Y" - two
++  facts side by side, which the user rightly called an opinion, not an insight.
++
++Standards applied (research notes in README):
++- constraints over preferences (Papic, Geopolitical Alpha): the value is the
++  gap between the consensus expectation and what a binding constraint forces;
++- the intelligence "so what" / BLUF standard: a fact without what it changes,
++  for whom, is noise;
++- checkable forecasts (Halawi et al. 2024): a dated question or watch signal.
++"""
++
++from __future__ import annotations
++
++import inspect
++
++import pytest
++
++import services.research_orchestrator_service as ros
++from services import claim_support_gate as gate
++from services import non_obviousness as nob
++from tests.test_claim_support_gate import DEEP_PROFILE, PASSING, candidate, claim, grounding as make_grounding, \
++    make_orchestrator
++from tests.test_v6_21_4_search_coverage import _events_and_evidence
++
++
++@pytest.fixture(autouse=True)
++def _private_ledgers(tmp_path, monkeypatch):
++    monkeypatch.setenv("EVENT_INTELLIGENCE_WATCH_ITEMS", str(tmp_path / "watch_items.sqlite3"))
++    monkeypatch.setenv("EVENT_INTELLIGENCE_EVENT_MEMORY", str(tmp_path / "event_memory.sqlite3"))
++
++
++# The run's own records (texts verbatim from RUN-7CD0B58AA15D4B5E83571188).
++EVENTS = [{"event_id": "EVENT-B373", "underlying_event_id": "U-BREACH",
++           "title": "OpenAI agent accessed Australian government systems"},
++          {"event_id": "EVENT-0420", "underlying_event_id": "U-BREACH",
++           "title": "Albanese says OpenAI took months to report breach"}]
++NEWS_1 = {"evidence_id": "EVID-B168", "event_id": "EVENT-B373", "source_id": "S1",
++          "text": "The breach took place back in June, was discovered by OpenAI in August, and Australia was "
++                  "informed about it only on September 10 - about three months after the fact."}
++NEWS_2 = {"evidence_id": "EVID-4AE2", "event_id": "EVENT-0420", "source_id": "S2",
++          "text": "Despite the breach happening in June, Albanese said the tech giant only notified the government "
++                  "about the incident earlier this month."}
++SOCI = {"evidence_id": "EVID-CA90", "source_id": "S3", "analytical_context_only": True, "gap_type": "policy",
++        "text": "The agency prescribed that cybersecurity incidents, including those involving AI, must be reported "
++                "to the Department of Home Affairs under the SOCI Act (Mandatory Cyber Incident Reporting)."}
++EVIDENCE = [NEWS_1, NEWS_2, SOCI]
++CONCLUSION = ("Australia's mandatory cyber-incident reporting obligation cannot be met by an AI developer whose "
++              "own detection of agent actions lags by two months, so operators that use such agents carry the "
++              "reporting liability.")
++
++
++def grounding(support):
++    return {"claims": [{"claim_id": "C-1", "claim_text": CONCLUSION, "epistemic_type": "hidden_insight",
++                        "grounding_status": "inference_supported", "supporting_evidence_ids": support,
++                        "evidence_ids": support}]}
++
++
++def checker(alone_status):
++    """Obvious-summary check: not stated. Single-development check: alone_status, recorded with its records."""
++    calls = []
++
++    def ground(claims, records):
++        ids = sorted(r["evidence_id"] for r in records)
++        calls.append((claims[0]["claim_id"], ids))
++        status = "unsupported" if claims[0]["claim_id"].startswith("OBV") else alone_status
++        return {"claims": [{"claim_id": c["claim_id"], "grounding_status": status} for c in claims]}
++    return ground, calls
++
++
++def ask(prompt):
++    return '{"takeaways": ["OpenAI agents breached Australian systems.", "Australia is unhappy with the delay."]}'
++
++
++# 1 constraint route -----------------------------------------------------
++
++def test_one_development_plus_a_cited_rule_passes_and_the_rule_is_ablated():
++    ground, calls = checker("unsupported")
++    out = nob.check(grounding=grounding(["EVID-B168", "EVID-4AE2", "EVID-CA90"]), evidence=EVIDENCE,
++                    events=EVENTS, ground=ground, ask=ask)
++    assert out["passed"] and out["route"] == "constraint"
++    assert out["claims"][0]["constraint_evidence_ids"] == ["EVID-CA90"]
++    alone = [ids for cid, ids in calls if cid == "ALONE-1"]
++    assert alone == [["EVID-4AE2", "EVID-B168"]]          # the rule was removed for the ablation
++
++
++def test_constraint_that_adds_nothing_fails():
++    ground, _ = checker("inference_supported")              # the news alone already says it
++    out = nob.check(grounding=grounding(["EVID-B168", "EVID-CA90"]), evidence=EVIDENCE, events=EVENTS,
++                    ground=ground, ask=ask)
++    assert not out["passed"] and out["reasons"] == ["conclusion_does_not_need_the_constraint"]
++    assert nob.brief(out["reasons"])
++
++
++def test_one_development_without_a_constraint_still_fails():
++    ground, _ = checker("unsupported")
++    out = nob.check(grounding=grounding(["EVID-B168", "EVID-4AE2"]), evidence=EVIDENCE, events=EVENTS,
++                    ground=ground, ask=ask)
++    assert out["reasons"] == ["conclusion_single_development"]
++
++
++def test_news_records_are_never_constraints():
++    assert nob.is_constraint(SOCI) and not nob.is_constraint(NEWS_1)
++    assert not nob.is_constraint({"evidence_id": "X", "event_id": "E", "analytical_context_only": True})
++
++
++def test_single_development_reasons_cover_the_constraint_failure():
++    assert "conclusion_does_not_need_the_constraint" in ros.ResearchOrchestratorService.SINGLE_DEVELOPMENT_REASONS
++
++
++# 2 the "so what" test ---------------------------------------------------
++
++def test_juxtaposition_without_consequence_fails():
++    item = {"insight": "AI developers push military agents while they cannot contain commercial agents.",
++            "second_order_effect": "", "metadata": {}}
++    assert gate.so_what_reasons(item) == ["no_consequence_so_what"]
++    assert "X while Y" in gate.so_what_brief(["no_consequence_so_what"])[0]
++
++
++def test_constraint_route_needs_a_checkable_signal():
++    item = {"second_order_effect": "Operators carry the liability.", "metadata": {}}
++    assert gate.so_what_reasons(item, "constraint") == ["constraint_insight_needs_checkable_signal"]
++    item["metadata"] = {"insight_derivation": {"watch_signals": ["Home Affairs guidance on AI-agent incidents"]}}
++    assert gate.so_what_reasons(item, "constraint") == []
++    dated = {"forecast_contract": {"question": "Will Home Affairs issue guidance?", "deadline": "2027-03-31T00:00:00+00:00"}}
++    assert gate.so_what_reasons(dated, "constraint") == []
++    assert gate.so_what_reasons({"forecast_contract": {"question": "q"}}, "constraint") == [
++        "constraint_insight_needs_checkable_signal"]
++
++
++NO_CONSEQUENCE = lambda: make_grounding(  # noqa: E731 - every second-order sentence unsupported
++    claim("P1", "fact", "supported"),
++    claim("M1", "mechanism", "inference_supported"),
++    claim("S1", "second_order_effect", "unsupported", "Invented consequence."),
++    claim("I1", "hidden_insight", "inference_supported"),
++)
++
++
++def _release(obj, item, monkeypatch, verdict=PASSING):
++    monkeypatch.setattr(ros, "DEEP_CLAIM_GATE_EXTRA_SYNTHESES", 0)
++    monkeypatch.setattr(ros, "INSIGHT_EXPLORATION_COMBINATIONS", 0)
++    events, evidence = _events_and_evidence()
++    state = {"warnings": [], "run_id": "RUN-SOWHAT"}
++    released, _, _ = obj._claim_supported_release(
++        topic="ai", candidates=[item], grounded={item["insight_revision_id"]: verdict()}, events=events,
++        evidence=evidence, graph_context={}, constraints={}, blueprint={}, profile=DEEP_PROFILE, state=state)
++    return released, state["claim_support_gate"]["attempts"][0]
++
++
++def test_finding_whose_consequence_was_pruned_is_not_released(monkeypatch):
++    item = candidate("JUX")
++    item["second_order_effect"] = "Invented consequence."      # the checker marks it unsupported -> pruned
++    obj = make_orchestrator(verdicts={"INSIGHTREV-JUX": NO_CONSEQUENCE})
++    released, attempt = _release(obj, item, monkeypatch, NO_CONSEQUENCE)
++    assert released == []
++    assert attempt["so_what"]["reasons"] == ["no_consequence_so_what"]
++    assert any("no_consequence_so_what" in r for r in attempt["reasons"])
++
++
++def test_finding_with_a_consequence_is_released(monkeypatch):
++    obj = make_orchestrator(verdicts={"INSIGHTREV-OK": PASSING})
++    released, attempt = _release(obj, candidate("OK"), monkeypatch)
++    assert len(released) == 1 and attempt["so_what"]["reasons"] == []
++    assert released[0]["second_order_effect"] == "Supported consequence."
++
++
++def test_constraint_route_release_needs_a_watch_signal(monkeypatch):
++    obj = make_orchestrator(verdicts={"INSIGHTREV-C": PASSING}, nonobvious={"passed": True, "route": "constraint"})
++    released, attempt = _release(obj, candidate("C"), monkeypatch)
++    assert released == [] and attempt["so_what"]["reasons"] == ["constraint_insight_needs_checkable_signal"]
++
++    item = candidate("C2")
++    item["metadata"]["insight_derivation"] = {"watch_signals": ["Home Affairs issues AI-agent incident guidance"]}
++    obj = make_orchestrator(verdicts={"INSIGHTREV-C2": PASSING}, nonobvious={"passed": True, "route": "constraint"})
++    released, _ = _release(obj, item, monkeypatch)
++    assert len(released) == 1 and released[0]["metadata"]["insight_route"] == "constraint"
++
++
++# 3 search and instructions ---------------------------------------------
++
++def test_exploration_tries_the_top_development_against_the_context_records():
++    obj = make_orchestrator(verdicts={})
++    events, evidence = _events_and_evidence()               # includes one context record (EVID-RULE)
++    combos = obj._development_combinations(events, evidence, limit=6)
++    assert len(combos[0]["keys"]) == 3 and len(combos[1]["keys"]) == 1
++    without_context = [r for r in evidence if not r.get("analytical_context_only")]
++    assert all(len(c["keys"]) > 1 for c in obj._development_combinations(events, without_context, limit=6))
++
++
++def test_single_development_exploration_uses_the_constraint_instruction(monkeypatch):
++    monkeypatch.setattr(ros, "DEEP_CLAIM_GATE_EXTRA_SYNTHESES", 0)
++    events, evidence = _events_and_evidence()
++    obj = make_orchestrator(verdicts={"INSIGHTREV-ONE": lambda: {"claims": []}}, new_candidates=[[], [], []])
++    obj._claim_supported_release(
++        topic="ai", candidates=[candidate("ONE")], grounded={"INSIGHTREV-ONE": {"claims": []}}, events=events,
++        evidence=evidence, graph_context={}, constraints={}, blueprint={}, profile=DEEP_PROFILE,
++        state={"warnings": [], "run_id": "RUN-CI"})
++    instructions = [c["refinement_context"]["instruction"] for c in obj.analyze_calls]
++    assert any(i.startswith("CONSENSUS VS CONSTRAINT") for i in instructions)
++
++
++def test_rewrite_instructions_keep_the_consequence():
++    assert "NEVER delete the consequence" in ros.CLAIM_REPAIR_INSTRUCTION
++    assert "CONSENSUS VS CONSTRAINT" in ros.CLAIM_ALTERNATIVE_INSTRUCTION
++    assert "only places facts side by side" in ros.INSIGHT_EXPLORATION_INSTRUCTION
++
++
++def test_strategic_prompt_has_the_constraint_mode_and_exemplar():
++    import agents.strategic_inference_agent as agent
++    source = inspect.getsource(agent)
++    assert "FOUR VALID INSIGHT MODES" in source and "4. CONSENSUS VS CONSTRAINT MODE" in source
++    assert "EXEMPLAR 4" in source and "U. CONSENSUS VS CONSTRAINT" in source
++
++
++def test_report_and_dashboard_say_how_the_insight_was_derived():
++    import pathlib
++    source = inspect.getsource(ros.ResearchOrchestratorService)
++    assert '"insight_route": _clean(insight_metadata.get("insight_route"))' in source
++    dash = (pathlib.Path(__file__).resolve().parents[1] / "frontend" / "dashboard.py").read_text(encoding="utf-8")
++    assert "ROUTE_NOTES" in dash and 'item.get("insight_route")' in dash

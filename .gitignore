@@ -1,2 +1,33 @@
 
 .env
+
+# Local secrets
+.env
+.env.*
+!.env.example
+
+# Python environment / caches
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Runtime state
+data/checkpoints/
+.event_intelligence_state/
+*.log
+
+# Local patch/install artifacts
+.patch_backups/
+v6_backups/
+_v6_31_1/
+event_intelligence_v*.zip
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

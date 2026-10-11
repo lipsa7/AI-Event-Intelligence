@@ -1,0 +1,591 @@
+JinkoSolar Announces Second Quarter 2026 Financial Results
+News provided by
+JinkoSolar Holding Co., Ltd.
+Aug 26, 2026, 06:50 ET
+SHANGRAO, China , Aug. 26, 2026 /PRNewswire/ -- JinkoSolar Holding Co., Ltd. ("JinkoSolar" or the "Company") (NYSE: JKS ), a global leader in clean energy technology, today announced its unaudited financial results for the second quarter ended June 30, 2026.
+Second Quarter 2026 Business Highlights
+Core Solar and Energy Storage Business Highlights
+Total module shipments for the first half of 2026 were 29.6 GW, with approximately 70% shipped to overseas markets.
+By the end of the second quarter, we became the first module manufacturer in the world to have delivered a total of over 420 GW of solar modules, with total shipments of the Tiger Neo series surpassing 250 GW, making it the best-selling module series in our history.
+In June 2026, we set new performance benchmarks for our TOPCon modules with the launch of the next-generation Tiger Neo 5.0 module, featuring power output of over 700 W and module efficiency of up to 25.91%.
+Shipments of energy storage system for the first half of 2026 increased significantly year-over-year, accompanied by an expansion in gross margin.
+Strategic Investment Highlights
+During the second quarter, the Company, together with investment funds in which it participates, completed strategic investments across 13 projects in renewable energy, advanced materials, AI, and other frontier technologies.
+During the first half of 2026, the Company disposed of a substantial portion of its equity interest in LAPLACE Renewable Energy Technology Co., Ltd., generating over RMB300 million in cash proceeds. Since our initial investment, the cumulative realized gain on this disposal (net of cost and transaction fees) exceeded RMB250 million. This gain was recognized over multiple periods through fair value adjustments following its IPO in late 2024, with over RMB100 million recorded in change in fair value of long-term investment upon settlement in the first half of 2026.
+Additionally, our portfolio company, Hangzhou Gold Electronic Equipment Co., Ltd., successfully completed its public listing during the second quarter, marking an important milestone in the development of our strategic investment portfolio.
+Second Quarter 2026 Operational and Financial Highlights
+Quarterly shipments of solar modules were 15,961 MW, up 16.7% sequentially and down 34.4% year-over-year.
+Total revenues were RMB12.36 billion (US$1.82 billion), up 0.9% sequentially and down 31.3% year-over-year.
+Gross profit was RMB 513.1 million (US$75.6 million), down 49.6% sequentially and 2.5% year-over-year.
+Gross profit margin was 4.2%, compared with gross profit margin of 8.3% in Q1 2026 and gross profit margin of 2.9% in Q2 2025.
+Net loss attributable to JinkoSolar Holding Co., Ltd.'s ordinary shareholders was RMB697.3 million (US$102.8 million), compared with net loss attributable to JinkoSolar Holding Co., Ltd.'s ordinary shareholders of RMB463.5 million in Q1 2026 and net loss attributable to JinkoSolar Holding Co., Ltd.'s ordinary shareholders of RMB876.4 million in Q2 2025.
+Adjusted net loss attributable to JinkoSolar Holding Co., Ltd.'s ordinary shareholders was RMB910.8 million (US$134.2 million), which excludes the impact of (i) the change in fair value of long-term investment, (ii) gain from disposal of a subsidiary, and (iii) share-based compensation expenses, compared with adjusted net loss attributable to JinkoSolar Holding Co., Ltd.'s ordinary shareholders of RMB549.3 million in Q1 2026 and adjusted net loss attributable to JinkoSolar Holding Co., Ltd.'s ordinary shareholders of RMB856.4 million in Q2 2025.
+Basic and diluted losses per ordinary share were RMB3.30 (US$0.49) and RMB3.30 (US$0.49), respectively. This translates into basic and diluted losses per ADS of RMB13.19 (US$1.94) and RMB13.19 (US$1.94), respectively.
+Mr. Dimi Du, JinkoSolar's Chief Executive Officer, commented, "Module shipments increased sequentially to approximately 16 GW during the quarter, bringing first half module shipments to approximately 29.6 GW, once again at the forefront of industry. By the end of the second quarter, cumulative shipments of our high-efficiency N-type Tiger Neo series surpassed 250 GW, making it the best-selling module series in our history. Leveraging a sales network covering nearly 200 countries and regions and 35 service centers globally, shipments to overseas markets accounted for around 70% of the first half total. Supply and demand across the PV industry remain dynamic and with policy shifts in both domestic and overseas markets, prices along the supply chain and industry profitability continued to be under pressure. The cost of ramping up production of our high-efficiency products remained elevated during the quarter and impacted our gross margin and bottom line when combined with the delivery of certain low-value orders. In response, we optimized our order book and geographic mix, managed utilization rates, and continued to increase the proportion of high-efficiency products within our total shipments while introducing technologies that lower costs.
+The PV industry is gradually shifting its focus from production capacity and shipment scale toward effective supply, product value, and earnings quality. The mandatory national energy efficiency standard for modules and inverters, released in July 2026, will take effect in January 2027 and sets minimum energy efficiency thresholds for market access. We are already seeing this shift in customer behavior, with the share of tenders for high-efficiency modules increasing significantly which also command a premium. The distributed PV market is likewise transitioning from scale-driven growth toward scenario-based and operational value. We believe these changes will benefit industry leaders such as ourselves, allowing us to capitalize on our advanced manufacturing capacity, technological expertise, established brands and global delivery capabilities.
+We expect to have more than 40 GW of TOPCon 3.0 production capacity by the end of 2026. Based on the current standard requirements, the relevant products are expected to meet the Level 1 energy-efficiency requirements. In June, we unveiled our next-generation Tiger Neo 5.0 modules, which, through the optimization of multiple core technologies, achieved mass-produced efficiency of 25.91% and power output of over 700 W, once again setting a new benchmark for TOPCon product performance. We are also extending our technology into scenario-based applications, most recently through Sunny 365, a suite of integrated solar-plus-storage solutions designed for retail, AIDC and manufacturing scenarios.
+Our energy storage systems (ESS) business maintained its momentum, with shipments in the first half of the year increasing significantly year-over-year and gross margin improving year-over-year. Given uncertainties in the timing of project delivery and other factors, recognized revenue remains in the ramp-up stage. As project deliveries increase, alongside the ongoing enhancement of our proprietary PCS, EMS and other capabilities, we expect to improve the recognition contribution and profit realization and to drive higher-quality growth in this business.
+Alongside our core businesses, we are building an investment platform as a complementary driver of long-term value creation.
+Over the past several years, we have made selective investments in more than 40 projects through direct investments and investment funds in which we participate, initially focusing on the solar and energy storage value chains and more recently extending into AI and other frontier technologies. During the first half of 2026, we divested a substantial portion of our equity interest in LAPLACE Renewable Energy Technology Co., Ltd., generating cash proceeds of over RMB300 million, while Hangzhou Gold Electronic Equipment Co., Ltd., one of our portfolio companies, successfully completed its listing on the ChiNext Market of the Shenzhen Stock Exchange. These milestones demonstrate the progress we are making in realizing value from our investment portfolio. We will continue to allocate capital prudently, with the long-term development of our core solar and energy storage businesses remaining our top priority, while selectively pursuing strategic investments that can support sustainable long-term value creation.
+Looking ahead, we expect our annual integrated production capacity to reach approximately 100 GW by year-end 2026, including approximately 14 GW from overseas facilities. Considering demand dynamics in certain markets, we will place greater emphasis on balancing shipment volume, profitability, cash flow and order quality, and are adjusting our full year 2026 module shipment guidance to between 60 GW and 70 GW, with high-efficiency products accounting for over 60% of the total shipments. For the third quarter of 2026, we expect module shipments to be between 15 GW and 17 GW."
+Second Quarter 2026 Financial Results
+Total Revenues
+Total revenues in the second quarter of 2026 were RMB12.36 billion (US$1.82 billion), representing an increase of 0.9% from RMB12.25 billion in the first quarter of 2026 and a decrease of 31.3% from RMB17.99 billion in the second quarter of 2025. The sequential and year-over-year changes were mainly due to the fluctuations in the shipment volume of solar modules.
+Gross Profit and Gross Margin
+Gross profit in the second quarter of 2026 was RMB513.1 million (US$75.6 million), compared with gross profit of RMB1.02 billion in the first quarter of 2026 and gross profit of RMB526.5 million in the second quarter of 2025.
+Gross profit margin was 4.2% in the second quarter of 2026, compared with gross profit margin of 8.3% in the first quarter of 2026 and gross profit margin of 2.9% in the second quarter of 2025. The sequential decrease was mainly due to a lower average selling price of solar modules, while the year-over-year increase was primarily due to the higher average selling price of solar modules, partially offset by a higher unit cost of products sold.
+Loss from Operations and Operating Margin
+Loss from operations in the second quarter of 2026 was RMB1.44 billion (US$211.7 million), compared with loss from operations of RMB588.2 million in the first quarter of 2026 and loss from operations of RMB1.38 billion in the second quarter of 2025. The sequential increase was primarily attributable to the decrease in our gross margin in the second quarter of 2026, while the year-over-year increase was primarily due to the increase in our operating expenses in the second quarter of 2026.
+Operating loss margin was 11.6% in the second quarter of 2026, compared with operating loss margin of 4.8% in the first quarter of 2026 and operating loss margin of 7.7% in the second quarter of 2025.
+Total operating expenses in the second quarter of 2026 were RMB1.95 billion (US$287.3 million), representing an increase of 21.3% from RMB1.61 billion in the first quarter of 2026 and an increase of 2.3% from RMB1.91 billion in the second quarter of 2025. The sequential and year-over-year increases were primarily due to higher expected credit losses in the second quarter of 2026.
+Total operating expenses accounted for 15.8% of total revenues in the second quarter of 2026, compared to 13.1% in the first quarter of 2026 and 10.6% in the second quarter of 2025.
+Interest Expenses and Interest Income
+Interest expenses were RMB386.9 million (US$57.0 million), and interest income was RMB113.6 million (US$16.7 million) in the second quarter of 2026.
+Net interest expenses in the second quarter of 2026 were RMB273.3 million (US$40.3 million), representing an increase of 0.9% from RMB270.7 million in the first quarter of 2026 and an increase of 45.9% from RMB187.3 million in the second quarter of 2025. The year-over-year increase was primarily attributable to new lease liabilities recognized in connection with lease contracts executed in late 2025.
+Subsidy Income
+Subsidy income in the second quarter of 2026 was RMB201.8 million (US$29.7 million), compared with RMB331.9 million in the first quarter of 2026 and RMB12.0 million in the second quarter of 2025. The sequential and year-over-year changes were primarily attributable to the changes in government grants related to income.
+Exchange Loss/Gain
+The Company recorded a net exchange loss of RMB325.4 million (US$48.0 million) in the second quarter of 2026, compared to a net exchange loss of RMB482.8 million in the first quarter of 2026 and a net exchange gain of RMB276.7 million in the second quarter of 2025. The sequential and year-over-year changes were mainly attributable to fluctuations in the exchange rates of the US dollar and euro against RMB in the second quarter of 2026.
+Change in Fair Value of Forward Contracts and Commodity Futures
+The Company recorded a net loss from change in fair value of forward contracts and commodity futures of RMB48.4 million (US$7.1 million) in the second quarter of 2026, compared to a net loss of RMB354.7 million in the first quarter of 2026 and a net loss of RMB178.8 million in the second quarter of 2025. The sequential improvement was mainly due to the decrease of loss from change in fair value of commodity futures in the second quarter of 2026, while the year-over-year improvement was primarily due to the decrease of loss from change in fair value of forward contracts in the second quarter of 2026.
+Change in Fair Value of Long-term Investment
+The Company holds certain equity interests in several companies operating across the photovoltaic, energy storage, and artificial intelligence sectors, which are recorded as long-term investment and available-for-sale securities and reported at fair value with changes in fair value recognized as gains or losses. As of June 30, 2026, the Company had RMB1.99 billion (US$294.0 million) in long-term investment (excluding the investments accounted for under the equity method and held-to-maturity debt securities) and available-for-sale securities, compared with RMB1.10 billion as of March 31, 2026.
+The Company recognized a gain from change in fair value of long-term investment of RMB 370.3 million (US$54.6 million) in the second quarter of 2026, compared with a gain of RMB124.4 million in the first quarter of 2026 and a gain of RMB42.3 million in the second quarter of 2025. The sequential and year-over-year improvements were primarily due to fair value gains from a previously invested company that went public in the second quarter of 2026, reflecting both post-IPO share price appreciation on the original investment and the incremental fair value from additional investments made during the second quarter of 2026.
+Other Loss/Income, Net
+Net other loss in the second quarter of 2026 was RMB23.9 million (US$3.5million), compared with net other income of RMB34.9 million in the first quarter of 2026 and net other loss of RMB204.7 million in the second quarter of 2025. The sequential and year-over-year changes were mainly due to the changes in the fair value of financial instruments in the second quarter of 2026.
+Gain from disposal of a subsidiary
+On May 31, 2026, we completed the transfer of 75.1% equity interest in Jinko Solar (U.S.) Industries Inc. to FH JKV Holdings Limited for total cash consideration of RMB1.31 billion (US$191.5 million). The transaction resulted in a pre-tax disposal gain of approximately RMB236.6 million (US$34.9 million). Effective upon closing, the subsidiary's financial results are no longer consolidated in our financial statements, and our retained 24.9% equity interest is subsequently measured and recognized using the equity method.
+Equity in Loss of Affiliated Companies
+The Company indirectly holds equity interests in several affiliated companies engaged in solar business, which are accounted for using the equity method. The Company recorded equity in loss of affiliated companies of RMB78.6 million (US$11.6 million) in the second quarter of 2026, compared with equity in loss of affiliated companies of RMB54.5 million in the first quarter of 2026 and equity in loss of affiliated companies of RMB70.9 million in the second quarter of 2025. The fluctuations in equity in loss of affiliated companies primarily arose from the changes in net losses incurred by the affiliated companies.
+Income Tax Benefit
+The Company recorded an income tax benefit of RMB163.7 million (US$24.1 million) in the second quarter of 2026, compared with income tax benefit of RMB379.3 million in the first quarter of 2026 and income tax benefit of RMB288.8 million in the second quarter of 2025.
+Net Loss Attributable to Non-Controlling Interests
+Net loss attributable to non-controlling interests amounted to RMB569.9 million (US$84.0million) in the second quarter of 2026, compared with net loss attributable to non-controlling interests of RMB449.4 million in the first quarter of 2026 and net loss attributable to non-controlling interests of RMB546.6 million in the second quarter of 2025. The sequential and year-over-year changes were mainly attributable to the fluctuations in net loss of Jiangxi Jinko, the Company's majority-owned principal operating subsidiary.
+Net Loss and Losses per Share
+Net loss attributable to JinkoSolar Holding Co., Ltd.'s ordinary shareholders was RMB697.3 million (US$102.8 million) in the second quarter of 2026, compared with net loss attributable to JinkoSolar Holding Co., Ltd.'s ordinary shareholders of RMB463.5 million in the first quarter of 2026 and net loss attributable to JinkoSolar Holding Co., Ltd.'s ordinary shareholders of RMB876.4 million in the second quarter of 2025.
+Excluding the impact of (i) the change in fair value of the long-term investment, (ii) gain from disposal of a subsidiary, and (iii) share-based compensation expenses, adjusted net loss attributable to JinkoSolar Holding Co., Ltd.'s ordinary shareholders was RMB910.8 million (US$134.2 million) in the second quarter of 2026, compared with adjusted net loss attributable to JinkoSolar Holding Co., Ltd.'s ordinary shareholders of RMB549.3 million in the first quarter of 2026 and adjusted net loss attributable to JinkoSolar Holding Co., Ltd.'s ordinary shareholders of RMB856.4 million in the second quarter of 2025.
+Basic and diluted losses per ordinary share were RMB3.30 (US$0.49) and RMB3.30 (US$0.49), respectively, in the second quarter of 2026, compared to basic and diluted losses per ordinary share of RMB2.21 and RMB2.21, respectively, in the first quarter of 2026, and basic and diluted losses per ordinary share of RMB4.20 and RMB4.20, respectively, in the second quarter of 2025. As each ADS represents four ordinary shares, this translates into basic and diluted losses per ADS of RMB13.19 (US$1.94) and RMB13.19 (US$1.94), respectively, in the second quarter of 2026; basic and diluted losses per ADS of RMB8.85 and RMB8.85, respectively, in the first quarter of 2026; and basic and diluted losses per ADS of RMB16.82 and RMB16.82, respectively, in the second quarter of 2025.
+Financial Position
+As of June 30, 2026, the Company had RMB16.94 billion (US$2.50 billion) in cash, cash equivalents, and restricted cash, compared with RMB22.81 billion as of March 31, 2026.
+As of June 30, 2026, the Company's net accounts receivable was RMB12.61 billion (US$1.86 billion), compared with RMB13.77 billion as of March 31, 2026.
+As of June 30, 2026, the Company's inventories were RMB16.47 billion (US$2.43 billion), compared with RMB17.71 billion as of March 31, 2026.
+As of June 30, 2026, the Company's total interest-bearing debts were RMB44.90 billion (US$ 6.62 billion), compared with RMB47.27 billion as of March 31, 2026.
+Operations and Business Outlook Highlights
+Third Quarter and Full Year 2026 Guidance
+The Company's business outlook is based on management's current views and estimates with respect to market conditions, production capacity, the Company's order book and the global economic environment. This outlook is subject to uncertainty on final customer demand and sale schedules. Management's views and estimates are subject to change without notice.
+For the third quarter of 2026, the Company expects its module shipments to be in the range of 15.0 GW to 17.0 GW.
+Taking into account changes in demand in certain markets, as well as the Company's increased focus on balancing shipment volume with profitability, cash flow and order quality, the Company now expects its full-year 2026 module shipments to be in the range of 60.0 GW to 70.0 GW.
+For full year 2026, the Company expects its ESS shipments to be more than doubled year-over-year.
+Solar Products Production Capacity
+The Company expects its annual integrated production capacity to reach approximately 100 GW, including approximately 14 GW from overseas facilities, by the end of 2026.
+Recent Business Developments
+In June 2026, JinkoSolar's board of directors declared a cash dividend of US$0.375 per ordinary share of US$0.00002 each of the Company, or US$1.50 per ADS.
+In June 2026, JinkoSolar was recognized as an Overall Highest Achiever in the 2026 PV Module Index (PVMI) Report, published by RETC, part of the VDE Group .
+In June 2026, JinkoSolar's Tiger Neo 3.0 modules achieved TÜV Rheinland's "A+ Shading Score" under the PfG 2926/05.25 test methodology, while also successfully completing advanced hail resistance verification according to VKF standards.
+Conference Call Information
+JinkoSolar's management will host an earnings conference call on Wednesday, August 26, 2026 at 8:30 a.m. U.S. Eastern Time (8:30 p.m. Beijing / Hong Kong the same day).
+Please register in advance of the conference using the link provided below. Upon registering, you will be provided with participant dial-in numbers, passcode and unique access PIN by a calendar invite.
+Participant Online Registration: https://s1.c-conf.com/diamondpass/10056808-i852sd.html
+It will automatically direct you to the registration page of "JinkoSolar Second Quarter 2026 Earnings Conference Call", where you may fill in your details for RSVP.
+In the 10 minutes prior to the call start time, you may use the conference access information (including dial-in number(s), passcode and unique access PIN) provided in the calendar invite that you have received following your pre-registration.
+A telephone replay of the call will be available 2 hours after the conclusion of the conference call through 23:59 U.S. Eastern Time, September 2, 2026. The dial-in details for the replay are as follows:
+International:
++61 7 3107 6325
+U.S.:
++1 855 883 1031
+Passcode:
+10056808
+Additionally, a live and archived webcast of the conference call will be available on the Investor Relations section of JinkoSolar's website at http://www.jinkosolar.com .
+About JinkoSolar Holding Co., Ltd.
+JinkoSolar (NYSE: JKS ) is a global leader in clean energy technology. JinkoSolar distributes its solar products and sells its solutions and services to a diversified international utility, commercial and residential customer base in China, the United States, Japan, Germany, the United Kingdom, Chile, South Africa, India, Mexico, Brazil, the United Arab Emirates, Italy, Spain, France, Belgium, Netherlands, Poland, Austria, Switzerland, Greece and other countries and regions.
+JinkoSolar had over 10 production facilities globally, over 20 overseas subsidiaries in Japan, South Korea, Vietnam, India, Turkey, Germany, Italy, Switzerland, the United States, Mexico, and other countries, and a global sales network with sales teams in China, the United States, Canada, Brazil, Chile, Mexico, Italy, Germany, Turkey, Spain, Japan, the United Arab Emirates, Netherlands, Vietnam and India, as of June 30, 2026.
+To find out more, please see: www.jinkosolar.com
+Currency Convenience Translation
+The conversion of Renminbi into U.S. dollars in this release, made solely for the convenience of the readers, is based on the noon buying rates in the city of New York for cable transfers of Renminbi as certified for customs purposes by the Federal Reserve Bank of New York as of June 30, 2026, which was RMB6.7851 to US$1.00. No representation is intended to imply that the Renminbi amounts could have been, or could be, converted, realized, or settled into U.S. dollars at that rate or any other rate. The percentages stated in this press release are calculated based on Renminbi.
+Safe Harbor Statement
+This press release contains forward-looking statements. These statements constitute "forward-looking" statements within the meaning of Section 27A of the Securities Act of 1933, as amended, and Section 21E of the Securities Exchange Act of 1934, as amended, and as defined in the U.S. Private Securities Litigation Reform Act of 1995. These forward-looking statements can be identified by terminology such as "will," "expects," "anticipates," "future," "intends," "plans," "believes," "estimates" and similar statements. Among other things, the quotations from management in this press release and the Company's operations and business outlook, contain forward-looking statements. Such statements involve certain risks and uncertainties that could cause actual results to differ materially from those in the forward-looking statements. Further information regarding these and other risks is included in JinkoSolar's filings with the U.S. Securities and Exchange Commission, including its annual report on Form 20-F. Except as required by law, the Company does not undertake any obligation to update any forward-looking statements, whether as a result of new information, future events or otherwise.
+For investor and media inquiries, please contact:
+In China:
+Ms. Stella Wang
+JinkoSolar Holding Co., Ltd.
+Tel: +86 21-5180-8777 ext.7806
+Email: [email protected]
+Mr. Christian Arnell
+Christensen
+Tel: +852 2117 0861
+Email: [email protected]
+In the U.S.:
+Email: [email protected]
+JINKOSOLAR HOLDING CO., LTD.
+UNAUDITED CONDENSED CONSOLIDATED STATEMENTS OF OPERATIONS
+(in thousands, except ADS and Share data)
+For the quarter ended
+For the six months ended
+Jun 30, 2025
+Mar 31, 2026
+Jun 30, 2026
+Jun 30, 2025
+Jun 30, 2026
+RMB'000
+USD'000
+RMB'000
+USD'000
+Revenues
+17,988,725
+12,249,048
+12,356,951
+1,821,189
+31,832,365
+24,605,999
+3,626,476
+Cost of revenues
+(17,462,264)
+(11,230,471)
+(11,843,858)
+(1,745,569)
+(31,658,778)
+(23,074,329)
+(3,400,735)
+Gross profit
+526,461
+1,018,577
+513,093
+75,620
+173,587
+1,531,670
+225,741
+Operating expenses:
+Selling and marketing
+(1,227,267)
+(901,688)
+(939,426)
+(138,454)
+(2,372,678)
+(1,841,114)
+(271,347)
+General and administrative
+(401,761)
+(476,564)
+(767,565)
+(113,125)
+(1,616,826)
+(1,244,129)
+(183,362)
+Research and development
+(251,598)
+(228,483)
+(231,363)
+(34,099)
+(403,400)
+(459,846)
+(67,773)
+Impairment of long-lived assets
+(24,536)
+(11,145)
+(1,643)
+(24,536)
+(11,145)
+(1,643)
+Total operating expenses
+(1,905,162)
+(1,606,735)
+(1,949,499)
+(287,321)
+(4,417,440)
+(3,556,234)
+(524,125)
+Loss from operations
+(1,378,701)
+(588,158)
+(1,436,406)
+(211,701)
+(4,243,853)
+(2,024,564)
+(298,384)
+Interest expenses
+(332,800)
+(380,636)
+(386,897)
+(57,022)
+(674,403)
+(767,533)
+(113,120)
+Interest income
+145,540
+109,887
+113,621
+16,746
+249,869
+223,508
+32,941
+Subsidy income
+12,033
+331,911
+201,820
+29,745
+547,990
+533,731
+78,662
+Exchange gain/(loss),net
+276,686
+(482,808)
+(325,367)
+(47,953)
+412,371
+(808,175)
+(119,110)
+Change in fair value of forward
+contracts and commodity futures
+(178,816)
+(354,718)
+(48,414)
+(7,136)
+(232,779)
+(403,132)
+(59,414)
+Change in fair value of Long-term
+Investment
+42,301
+124,426
+370,308
+54,577
+(3,855)
+494,734
+72,915
+Other (loss)/income, net
+(204,748)
+34,862
+(23,880)
+(3,519)
+(384,110)
+10,982
+1,619
+Gain from disposal of a subsidiary
+236,585
+34,868
+236,585
+34,868
+Loss before income taxes
+(1,618,505)
+(1,205,234)
+(1,298,630)
+(191,395)
+(4,328,770)
+(2,503,864)
+(369,023)
+Income tax benefits
+288,768
+379,259
+163,675
+24,123
+988,247
+542,935
+80,019
+Equity in loss of affiliated companies
+(70,873)
+(54,470)
+(78,621)
+(11,587)
+(116,946)
+(133,090)
+(19,615)
+Net loss
+(1,400,610)
+(880,445)
+(1,213,576)
+(178,859)
+(3,457,469)
+(2,094,019)
+(308,619)
+Less: Net loss attributable to non-
+controlling interests
+546,626
+449,376
+569,946
+84,000
+1,302,680
+1,019,322
+150,229
+Less: Accretion to redemption value
+of redeemable non-controlling
+interests
+(22,438)
+(32,445)
+(53,623)
+(7,903)
+(40,512)
+(86,068)
+(12,685)
+Net loss attributable to JinkoSolar
+Holding Co., Ltd.'s ordinary
+shareholders
+(876,422)
+(463,514)
+(697,253)
+(102,762)
+(2,195,301)
+(1,160,765)
+(171,075)
+Net (loss)/income attributable to
+JinkoSolar Holding Co., Ltd.'s
+ordinary shareholders per share:
+Basic
+(4.20)
+(2.21)
+(3.30)
+(0.49)
+(10.59)
+(5.52)
+(0.81)
+Diluted
+(4.20)
+(2.21)
+(3.30)
+(0.49)
+(10.59)
+(5.52)
+(0.81)
+Net (loss)/income attributable to
+JinkoSolar Holding Co., Ltd.'s
+ordinary shareholders per ADS:
+Basic
+(16.82)
+(8.85)
+(13.19)
+(1.94)
+(42.34)
+(22.06)
+(3.25)
+Diluted
+(16.82)
+(8.85)
+(13.19)
+(1.94)
+(42.34)
+(22.06)
+(3.25)
+Weighted average ordinary shares
+outstanding:
+Basic
+208,496,117
+209,480,753
+211,435,343
+207,378,908
+210,463,447
+Diluted
+208,496,117
+209,480,753
+211,435,343
+207,378,908
+210,463,447
+Weighted average ADS outstanding:
+Basic
+52,124,029
+52,370,188
+52,858,836
+51,844,727
+52,615,862
+Diluted
+52,124,029
+52,370,188
+52,858,836
+51,844,727
+52,615,862
+JINKOSOLAR HOLDING CO., LTD.
+UNAUDITED CONDENSED CONSOLIDATED BALANCE SHEETS
+(in thousands)
+Dec 31, 2025
+Jun 30, 2026
+RMB'000
+USD'000
+ASSETS
+Current assets:
+Cash,cash equivalents, and restricted cash
+22,938,381
+16,941,252
+2,496,831
+Restricted short-term investments and short-term investments
+7,487,415
+8,766,415
+1,292,009
+Accounts receivable, net
+13,587,215
+12,606,756
+1,858,006
+Notes receivable, net
+3,677,372
+1,778,508
+262,120
+Advances to suppliers, net
+1,325,633
+1,322,526
+194,916
+Inventories, net
+14,484,828
+16,473,187
+2,427,847
+Forward contract and commodity future receivables
+58,923
+103,535
+15,259
+Prepayments and other current assets, net
+4,909,826
+5,609,364
+826,718
+Held-for-sale assets
+344,553
+128,848
+18,990
+Total current assets
+68,814,146
+63,730,391
+9,392,696
+Non-current assets:
+Restricted long-term investments
+471,573
+1,026,402
+151,273
+Long-term investments
+1,441,683
+3,934,684
+579,900
+Property, plant and equipment, net
+36,644,813
+35,764,854
+5,271,087
+Land use rights, net
+2,140,953
+2,014,358
+296,880
+Intangible assets, net
+445,866
+397,248
+58,547
+Right-of-use assets, net
+3,617,900
+3,612,536
+532,422
+Deferred tax assets
+4,576,302
+4,418,390
+651,190
+Advances to suppliers to be utilised beyond one year
+605,525
+717,178
+105,699
+Other assets, net
+2,026,752
+2,210,857
+325,840
+Available-for-sale securities-non-current
+238,464
+690,911
+101,828
+Total non-current assets
+52,209,831
+54,787,418
+8,074,666
+Total assets
+121,023,977
+118,517,809
+17,467,362
+LIABILITIES
+Current liabilities:
+Accounts payable
+13,707,552
+13,354,154
+1,968,159
+Notes payable
+9,996,577
+8,250,801
+1,216,017
+Accrued payroll and welfare expenses
+2,645,041
+1,924,052
+283,570
+Advances from customers
+5,316,889
+6,337,166
+933,983
+Income tax payables
+177,580
+262,355
+38,666
+Other payables and accruals
+12,370,639
+12,439,840
+1,833,403
+Forward contract and commodity future payables
+56,129
+72,487
+10,683
+Lease liabilities - current
+118,363
+38,659
+5,698
+Short-term borrowings, including current portion of long-term
+borrowings, and failed sale-leaseback financing
+10,655,366
+13,624,605
+2,008,018
+Total current liabilities
+55,044,136
+56,304,119
+8,298,197
+Non-current liabilities:
+Long-term borrowings
+18,206,905
+15,135,046
+2,230,630
+Convertible notes
+10,594,637
+8,876,294
+1,308,204
+Accrued warranty costs - non current
+1,655,630
+1,554,913
+229,166
+Lease liabilities-noncurrent
+3,550,598
+3,781,246
+557,287
+Deferred tax liability
+29,974
+114,072
+16,812
+Long-term Payables
+4,371,333
+3,921,737
+577,993
+Total non-current liabilities
+38,409,077
+33,383,308
+4,920,092
+Total liabilities
+93,453,213
+89,687,427
+13,218,289
+MEZZANINE EQUITY
+Redeemable non-controlling interests
+1,545,058
+3,539,877
+521,713
+SHAREHOLDERS' EQUITY
+Total JinkoSolar Holding Co., Ltd. shareholders' equity
+15,726,132
+14,604,359
+2,152,417
+Non-controlling interests
+10,299,574
+10,686,146
+1,574,943
+Total shareholders' equity
+26,025,706
+25,290,505
+3,727,360
+Total liabilities, non-controlling interest and shareholders' equity
+121,023,977
+118,517,809
+17,467,362
+SOURCE JinkoSolar Holding Co., Ltd.
+JinkoSolar Announces Second Quarter 2026 Financial Results

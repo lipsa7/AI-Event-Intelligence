@@ -1,0 +1,14 @@
+Blind event: B012
+Source: S002
+
+--- Evidence 1 ---
+type: source_excerpt
+In January, Insilico Medicine entered into an oncology drug discovery collaboration with Servier valued at up to US$888.0 million, with upfront payment and near-term milestone payments of US$32 million, further validating the application value of the Pharma.AI platform.
+
+--- Evidence 2 ---
+type: quantitative_claim
+stated_quantity $32 million
+
+--- Evidence 3 ---
+type: quantitative_claim
+stated_quantity $888.0 million

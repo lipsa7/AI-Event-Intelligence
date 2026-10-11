@@ -90,7 +90,7 @@ from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Seque
 
 
 SERVICE_VERSION = "grounding-service-v1.2-insight-aggregate-contract"
-GROUNDING_PROMPT_VERSION = "grounding-v1"
+GROUNDING_PROMPT_VERSION = "grounding-v1.2-company-claims"
 
 ALLOWED_GROUNDING_STATUSES = {
     "supported",
@@ -1694,7 +1694,21 @@ Validation rules:
    the inferential step must be reasonable from those premises.
 9. If the evidence contains a material conflict, use contradicted where that
    conflict defeats the claim; otherwise identify it in unsupported_parts.
-10. Do not add commentary outside the JSON object.
+10. Chronology: if the claim says or implies that one development caused,
+   enabled, drove or explains another, compare their dates in the evidence.
+   A development that the evidence dates AFTER the one it supposedly caused
+   cannot be its cause: set temporal_valid=false and use unsupported (or
+   contradicted when the dates are explicit), and name the impossible order
+   in unsupported_parts. If the dates needed to check the order are missing,
+   say so in unsupported_parts.
+11. Company claims: when the only support for a statement that a need,
+   demand, problem or market exists is a company describing its own product,
+   funding or market (or a report of that announcement), the evidence
+   supports only that the company says so. If the claim states it as fact,
+   use partially_supported and name it in unsupported_parts as the company's
+   own claim. If the claim attributes it ("Ascerta says ..."), it can be
+   supported.
+12. Do not add commentary outside the JSON object.
 """.strip()
 
     def _validate_classifier_output(

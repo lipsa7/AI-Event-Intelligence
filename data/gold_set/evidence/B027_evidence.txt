@@ -1,0 +1,10 @@
+Blind event: B027
+Source: S002
+
+--- Evidence 1 ---
+type: quantitative_claim
+stated_quantity $94.75 million
+
+--- Evidence 2 ---
+type: source_excerpt
+In March, the Company announced that it further expanded its drug discovery collaboration with Tenacia Biotechnology, entering into a CNS drug R&D collaboration with a total deal value of US$94.75 million. In the Asia-Pacific region, where generative AI drug discovery innovations continue to bring changes, the commercial footprint continues to expand, presenting new scenarios for pioneering AI application.
