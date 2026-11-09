@@ -56,7 +56,8 @@ def test_implication_fact_is_checked_against_every_quoted_fact():
         {"basis": "incentive", "text": "Read-only agent access appears strategically attractive for Equals Money.",
          "fact_ids": ["F2"], "actor": "Equals Money", "policy_or_regulation": "Okta-style kill switches exist",
          "company_relevance": "it runs an MCP server", "economic_or_strategic_effect": "lower payment risk",
-         "attractive_move": "read-only access", "conditions": "regulators allow agent payments"}]}, facts, [])
+         "attractive_move": "read-only access", "conditions": "regulators allow agent payments",
+         "counterparty": "the FCA", "counterparty_consequence": "sees fewer agent-initiated payment incidents"}]}, facts, [])
     claims = brief.grounding_claims(draft, facts, [])
     rule = next(c for c in claims if c["claim_text"].startswith(brief.POLICY_EXISTS_PREFIX))
     every = {f["evidence_id"] for f in facts}

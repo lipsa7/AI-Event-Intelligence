@@ -26,8 +26,8 @@ v6 changes the unit of extraction from the sentence to the event:
    controlled. An invalid frame is rejected and marks the source incomplete,
    so a partial extraction cannot overwrite previously stored events.
    Cross-sentence actor attribution is independently checked in context.
-4. Optional NER alignment: when an entity tagger is available, the actor must
-   overlap an organization / person / government / group span.
+4. Actor typing is owned by NER, never the generative model. Required NER failing
+   to load stops extraction before paid calls. A typed span must cover the complete mention.
 5. EVENT-* identity = source content fingerprint + taxonomy + actor +
    action-sentence offsets. Adding or removing supporting citations (AI
    link, time, quantities) does not change an event's ID.
@@ -55,6 +55,7 @@ from __future__ import annotations
 import hashlib
 import importlib
 import inspect
+import importlib.util
 import json
 import os
 import re
@@ -71,7 +72,7 @@ from utils.logger import get_logger
 logger = get_logger(__name__)
 
 
-AGENT_VERSION = "extraction-agent-v6.10.1-context-integrity"
+AGENT_VERSION = "extraction-agent-v6.11-ner-authority"
 
 # Gemini model names the strategic stage tries, the one that worked first.
 # Where the strategic stage's Gemini client lives. Override with
@@ -338,9 +339,17 @@ def default_entity_tagger() -> EntityTagger | None:
     """spaCy NER if installed; None otherwise.
 
     EXTRACTION_V6_NER_MODEL selects the spaCy model (default
-    en_core_web_sm); set it to "off" to disable NER alignment.
+    en_core_web_sm, or the already installed en_core_web_trf when no model is explicitly selected).
+    Setting it to "off" leaves NER unavailable; strict extraction then stops. Explicitly opting out
+    with require_ner_actor=False permits unverified types only, never model-supplied actor types.
     """
-    model_name = str(os.getenv("EXTRACTION_V6_NER_MODEL", "en_core_web_sm")).strip()
+    configured = os.getenv("EXTRACTION_V6_NER_MODEL")
+    model_name = str(configured if configured is not None else "en_core_web_sm").strip()
+    # Prefer the usual lightweight model; use an already installed transformer model if it is absent.
+    # An explicit user selection is never silently changed, and no download is performed.
+    if configured is None and importlib.util.find_spec("en_core_web_sm") is None:
+        if importlib.util.find_spec("en_core_web_trf") is not None:
+            model_name = "en_core_web_trf"
     if not model_name or model_name.casefold() in {"0", "off", "none", "false"}:
         return None
     try:
@@ -349,7 +358,7 @@ def default_entity_tagger() -> EntityTagger | None:
         nlp = spacy.load(model_name)
     except Exception as error:  # spaCy or model not installed
         logger.info(
-            "ExtractionAgentV6 NER unavailable (%s); actor types fall back to model output.",
+            "ExtractionAgentV6 NER unavailable (%s); model actor types are never trusted. Required NER blocks extraction.",
             type(error).__name__,
         )
         return None
@@ -392,7 +401,7 @@ class ExtractionAgentV6:
     NER_ACTOR_LABELS = {
         "ORG": "organization",
         "PERSON": "person",
-        "GPE": "government",
+        "GPE": "country",  # A geographic entity alone does not establish a government institution.
         "NORP": "group",
     }
 
@@ -472,8 +481,7 @@ class ExtractionAgentV6:
         if require_ner_actor is None:
             flag = str(os.getenv("EXTRACTION_V6_REQUIRE_NER_ACTOR", "1")).strip().casefold()
             require_ner_actor = flag not in {"0", "false", "off", "no"}
-        # Only enforceable when a tagger exists.
-        self.require_ner_actor = bool(require_ner_actor) and self.entity_tagger is not None
+        self.require_ner_actor = bool(require_ner_actor)
 
         self.max_window_characters = max(2_000, int(max_window_characters))
         self.overlap_paragraphs = max(0, int(overlap_paragraphs))
@@ -595,6 +603,12 @@ class ExtractionAgentV6:
         diagnostics[f"research_depth_{depth}"] += 1
 
         source_id = self._require_source_id(article)
+        if self.require_ner_actor and not callable(self.entity_tagger):
+            self.last_run_metadata = {"agent_version": AGENT_VERSION, "source_id": source_id,
+                "complete": False, "run_status": "failed", "incomplete_reasons": ["required_ner_unavailable"],
+                "ner_alignment": "required_unavailable"}
+            raise RuntimeError("Required actor NER is unavailable. Configure EXTRACTION_V6_NER_MODEL to an installed "
+                               "spaCy NER model; no extraction calls were made and model actor types were not used.")
         self._window_errors = []
         self._verification_errors = []
         if not self._llm_chain:
@@ -709,6 +723,8 @@ class ExtractionAgentV6:
         unanswered_verifications = self._verify_ai_links(events, sentences, diagnostics)
 
         incomplete_reasons: list[str] = []
+        if any(e.get("roles", {}).get("actor", {}).get("type_source") == "unverified" for e in events):
+            incomplete_reasons.append("actor_type_unverified")
         if failed_windows:
             incomplete_reasons.append("failed_windows")
         if invalid_frame_count:
@@ -907,24 +923,23 @@ class ExtractionAgentV6:
         sentence_text: str,
         model_type: Any,
     ) -> tuple[str, str]:
-        """Return (entity_type, type_source); type_source '' means NER rejected it."""
-        if self.entity_tagger is not None:
-            position = sentence_text.casefold().find(mention.casefold())
-            if position >= 0:
-                end = position + len(mention)
-                try:
-                    spans = list(self.entity_tagger(sentence_text) or [])
-                except Exception:
-                    spans = []
-                for span_start, span_end, label in spans:
-                    if span_start < end and span_end > position and label in self.NER_ACTOR_LABELS:
+        """NER owns actor typing; model_type is retained for API compatibility but is never trusted."""
+        matches = list(re.finditer(r"(?<!\w)" + re.escape(mention) + r"(?!\w)", sentence_text, flags=re.I)) if mention else []
+        if callable(self.entity_tagger) and matches:
+            try:
+                spans = self.entity_tagger(sentence_text) or []
+                for span in spans:
+                    if not isinstance(span, (list, tuple)) or len(span) != 3:
+                        continue
+                    start, end, label = span
+                    if not isinstance(start, int) or not isinstance(end, int) or not 0 <= start < end <= len(sentence_text):
+                        continue
+                    # Mere overlap is unsafe: an ORG within a longer, invented actor must not type it.
+                    if label in self.NER_ACTOR_LABELS and any(start <= m.start() and end >= m.end() for m in matches):
                         return self.NER_ACTOR_LABELS[label], "ner"
-                if self.require_ner_actor:
-                    return "", ""
-        model_key = str(model_type or "").strip().casefold()
-        if model_key in self.ACTOR_TYPES:
-            return model_key, "model"
-        return "unverified", "none"
+            except Exception:
+                logger.warning("Actor NER failed; model actor type ignored.")
+        return ("", "") if self.require_ner_actor else ("unverified", "unverified")
 
     def _validate_frame(
         self,

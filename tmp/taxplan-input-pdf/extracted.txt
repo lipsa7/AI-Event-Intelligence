@@ -1,0 +1,2581 @@
+=== PAGE 1 ===
+Leads Page: Insights & Global Feature
+Benchmark
+Oct 27, 2026 · ​@L
+Summary
+Only 82 of 5,701 leads (1.4%) have paid, while 817 abandoned carts worth ₹47.3 lakh sit
+unworked. The page shows who the leads are, but not how fast they were contacted, by
+whom (AI or human), or what happened next. Data covers 17 May to 27 Oct 2026 (export
+of 27 Oct).
+Top findings:
+The revenue card under-reports. "Paid revenue ₹48,494" counts only the 21 payments
+made through WhatsApp checkout or an agent-sent link. 61 more leads in this same
+WhatsApp admin paid on the website (about ₹81,400), so revenue from these leads is
+about ₹1.30 lakh. If the card is meant to be WhatsApp-only, it should say so and show
+website payments beside it.
+The bot loses most leads in its first two questions. 35% of leads stop at language
+selection and 32% at service selection.
+Meta ads bring 78% of leads but convert at 0.4%. Direct traffic converts at 2.4% and
+the website widget at 5.5%.
+Rider ads route riders to the wrong product. The system files 77% of leads from the
+Swiggy/Zomato/Zepto TDS-refund ads under the business "TDS" category, and more of
+them then picked "TDS Monthly Payment" (126) than the ₹599 rider ITR filing (99).
+Follow-up is close to absent. 57% of leads were never touched after entry, only 1 lead
+has a next follow-up date, and 206 leads have waited in human handoff for a median of
+91 days.
+AI calling has just started and is not visible. Only 5 leads carry a voice_agent source,
+and the export has no call log, so the assignment questions (AI vs human call, time to
+first AI call) cannot yet be answered.
+Top 5 actions:
+1. Fix the KPI cards and export (one definition of Won and Revenue, column shift, rating
+format).
+Leads Page: Insights & Global Feature Benchmark
+Page 1 of 50
+
+
+=== PAGE 2 ===
+2. Add a speed-to-lead timer and auto-trigger an AI call within 5 minutes, with every call
+logged as AI or human.
+3. Add a cart-recovery queue: AI call + WhatsApp for carts under ₹10,000, a human for
+the 125 carts above it (₹26.9 lakh).
+4. Add a handoff queue with an SLA, so bot-to-human leads cannot sit for months.
+5. Deep-link each ad to its service and skip the language question, then measure cost per
+paid lead through GA4 and Meta.
+Added since the first draft (details in the later sections):
+Google Analytics: staff and test traffic is mixed into the numbers; GA records only 73
+website leads and no qualified, converted or paid ones, because those events aren't
+sent; Google Search ads brought 39 of the 73 and Performance Max almost none; about
+700 Meta visitors tagged "paid" leave in 3–4 seconds; organic search visitors stay about
+5 minutes and a third return.
+Competitors: Taxplan's ₹999 ITR is at or below ClearTax, TaxBuddy, Tax2win and
+Quicko; the gap is named CAs, deadline offers, annual plans and real reviews.
+Website: the footer WhatsApp link appears to be missing the 91 country code, and the
+homepage claims a self-declared 4.8/5 rating.
+Measurement: one reference code carried from ad click to Razorpay payment lets paid
+orders be reported back to GA4, Google Ads and Meta.
+Every issue, benchmark, country detail and feature, in full: ​All findings (detail)
+Data quality and KPI cards
+Three KPI cards disagree with the export, and the export itself is broken in ways that will
+mislead anyone who analyses it.
+Card or field
+Shown
+What the export says
+Fix
+Paid revenue
+₹48,494
+₹48,494.50 = 17 Cart & Assign
++ 4 WhatsApp checkout
+payments only. Adding 61
+website payments gives
+₹1,29,916
+Count all payment origins, or
+relabel the card
+Leads Page: Insights & Global Feature Benchmark
+Page 2 of 50
+
+
+=== PAGE 3 ===
+The website-payment gap matters most: 61 of the 82 paid leads (74%) paid on the website
+(52 of them with an amount recorded), and they carry the weakest attribution.
+How the column shift was confirmed. In the raw file, "Created" is empty on all 5,701 rows
+while "Next follow-up" is filled on all 5,701; "Ad headline" holds only payment statuses
+(not_started, cancelled, paid, pending); "Paid at" holds Website / Cart & Assign /
+WhatsApp Checkout; "Payment" holds timestamps. The page itself confirms it: for
+Dharmaram Seervi the screenshot shows Source "Direct" and Ad headline "Save Up to
+50% on GST…", which sit in the CSV under "Payment origin detail" and "Ad Set". The page
+reads the data correctly; only the export headers are one place off.
+Display problems on the leads page itself. The revenue card is cut off ("₹48,494.") and
+the WhatsApp card label is truncated ("PAID VIA WHATS…"); stages show internal names
+("Category" for category_selection); and 33 of 926 leads marked "Direct" carry an ad
+headline (for example Direct + "Save Up to 50% on GST Filing"), so some ad leads are
+Card or field
+Shown
+What the export says
+Fix
+Won
+93
+82 leads have payment status
+"paid"; 79 sit in stage paid or
+closed; no combination of
+fields in the export gives 93
+One definition of Won, used
+by card and filter
+Paid via
+WhatsApp
+21
+17 of the 21 were paid through
+an admin-sent link (Cart &
+Assign), only 4 by WhatsApp
+self-checkout
+Split into self-serve vs agent-
+assisted
+Export
+columns
+22
+headers
+Rows carry 21 values: "Paid
+amount" is missing, so every
+column after Value is shifted
+one place left
+Fix the CSV writer; add a
+lead ID and created date
+Quality
+1–5
+Ratings export as dates ("04-
+May" = 4/5)
+Export as a number
+Campaign /
+Ad set
+—
+Campaign filled for 39 leads,
+ad set for 0
+Capture UTM campaign, ad
+set and ad ID on every lead
+Website
+payers
+—
+26 paid leads have source
+"unknown" and 19 have
+category "unknown"
+Match website payments to
+the originating lead by phone
+Leads Page: Insights & Global Feature Benchmark
+Page 3 of 50
+
+
+=== PAGE 4 ===
+credited to Direct. Fix: compact values with full figures on hover, plain stage names with
+step numbers, and a source rule of ad referral or UTM first, website widget second, Direct
+last.
+Funnel: where the bot loses leads
+The bot's own questions cause the two biggest losses: 40% of leads quit at the language
+question, and 73% of those who pick a service never reach a price.
+Language step. 2,013 leads stop here. Most Meta ads are in English and the headline
+already names the service, so asking language first adds a step before any value is
+shown. Auto-detect language from the first message, or ask it later.
+Service step. 1,804 leads stop at the service list (27 services in 6 categories). Ads
+should deep-link straight to their service, so a rider from a TDS ad lands on rider ITR,
+not a menu.
+Checkout. Of 299 leads sent a checkout link, 211 have payment status "cancelled".
+These are the proven-intent audience the assignment's cart-recovery stats point to.
+leads-2026-10-27.csv · 5,495 leads by furthest bot stage
+Leads Page: Insights & Global Feature Benchmark
+Page 4 of 50
+
+
+=== PAGE 5 ===
+Timing. 36% of leads (2,026) arrive between 9 pm and 9 am, when no human is calling.
+That is the strongest case for an instant AI call.
+Sources, ads and services
+Meta ads fill the pipeline but rarely pay: 4,426 leads gave 18 payments, against 15
+payments from just 274 widget leads.
+Ads. Of 34 ad headlines, only 5 produced any payment. "Your Swiggy TDS Can Come
+Back" brought 1,147 leads and 326 carts but 4 payments. "ITR Filing for Freelancers" (355
+leads) and "50% Off Business ITR Filing" (338) produced none. Without ad spend in the
+data, cost per paid lead cannot be computed yet; that is the first thing GA4 and Meta
+conversion sync should fix.
+The rider mismatch. Of 1,187 leads from the three rider TDS-refund ads, 912 (77%) were
+put in the "TDS" category. The system sets this from the ad, not the lead: 335 rider-ad
+leads already carry "TDS" while still at the language question. 126 then picked "TDS
+Monthly Payment", a business compliance product with a median cart of ₹2,355. Only 99
+found "ITR Filing for Delivery & Ride Partners" (₹599), the product the ad actually sells. Of
+the 336 rider-ad leads who picked a service, more chose the business product than the
+rider product, and the three ads produced 4 payments from 1,187 leads. One thing to
+confirm with the team: if "TDS Monthly Payment" is meant for riders, the problem is its
+name, not the routing. Korea's Samjjeomsam, a tax-refund app for gig workers, solves the
+same problem by showing the refund amount first and the fee second.
+Services. ITR Salary Filing is the workhorse: 321 leads, 306 carts, 28 payments. TDS (1,167
+leads, 188 carts, median cart ₹2,355 to ₹14,155) has 0 payments, and GSTR has 2 payments
+from 372 leads. The higher-value services need a human or a consultation path, not self-
+checkout.
+Source
+Leads
+Paid
+Paid rate
+Carts built
+Carts cancelled
+Meta Ad
+4,426
+18
+0.4%
+723
+195
+Direct
+926
+22
+2.4%
+99
+14
+Website widget
+274
+15
+5.5%
+52
+2
+Unknown (mostly website payers)
+54
+26
+48%
+22
+0
+Google Ads, voice agent, other
+21
+1
+5%
+6
+0
+Leads Page: Insights & Global Feature Benchmark
+Page 5 of 50
+
+
+=== PAGE 6 ===
+Season. 79% of leads and 92% of payments came in July and August (ITR deadlines).
+October has 246 leads and 0 payments, so the off-season is the time to fix the funnel
+before the next peak.
+Speed to lead, AI calls, follow-ups and carts
+The assignment asks which calls are AI and which are human, and how soon leads get an
+AI call; the current page and export cannot answer either.
+What can be measured today.
+Calls. The export has no call log, no call type (AI or human), no first-contact time and
+no outcome. Only 5 leads (all since 15 Oct) carry source "voice_agent", and all are still
+at new_contact. The "My Calls" tab exists, but nothing about calls reaches the lead row
+or the export.
+Touch. For 57% of leads (3,227), "last contacted" is within 5 minutes of creation: the
+bot's opening message was the only contact. For 27%, the last contact came more than
+a day later.
+Follow-ups. Only 1 of 5,701 leads has a next follow-up date (set for 27 Oct, 5:38 pm). In
+the raw file the column headed "Next follow-up" looks full, but every value is in the past
+and equals the lead's creation time; because of the shift, the real follow-up field is the
+one headed "Last contacted", and it holds that single date.
+Handoffs. 206 leads sit in human_handoff (111) or handoff_pending (95). The median
+wait since last contact is 91 days and none were closed. The assignment's warm-
+handoff benchmark is a transfer that completes with context; here most handoffs
+never complete.
+Why it matters. Per the assignment's sources, a lead is 21x more likely to qualify when
+contacted at 5 minutes than at 30 (MIT/InsideSales), and AI call plus WhatsApp converts
+2.5x better than one channel (GoKwik). With 36% of leads arriving at night and 57% never
+touched again, an instant AI call is the cheapest lift available.
+Carts: ₹47.3 lakh left on the table. 817 leads built a cart and did not pay, against ₹1.30 lakh
+collected. Applying the assignment's rule (a ₹25 AI call is barely worth it on a ₹400 cart; a
+₹25,000 cart should not be left to automation):
+Cart value
+Abandoned carts
+Value
+Suggested treatment
+Under ₹1,000
+165
+₹0.97 lakh
+WhatsApp reminder only
+Leads Page: Insights & Global Feature Benchmark
+Page 6 of 50
+
+
+=== PAGE 7 ===
+At the vendor-claimed 10–18% AI recovery rate, the middle three bands alone (628 carts,
+₹35.9 lakh) would be worth roughly ₹3.6–6.5 lakh, about 3–5x what has been collected so
+far. Treat that as an upper bound: it is a vendor claim and many of these carts are months
+old.
+Team load and lead tagging
+Two people hold 77% of all leads, and manual tags cover too few leads to steer anyone's
+day.
+Read the paid rates with care: they mostly reflect when and what each person received,
+not skill. Janvi's queue is the post-peak Meta wave (1,992 of her leads are Meta, 1,731
+arrived in August), and website payers are credited to whoever owned the lead. Still, a
+queue of 2,400 leads per person is more than any human can call, which is the job an AI
+first call should take on.
+Tags. Temperature is set on 9% of leads, Interested on 19%, Quality on 4%. Where set,
+they barely predict payment: 1 of 35 hot leads and 0 of 60 warm leads paid. Quality 5/5
+leads paid 16 of 30 times, but those ratings look like they were added after payment. Of
+the 1,063 leads given an Interested tag, 93% are "Not interested". Tags should come from
+behaviour (stage reached, cart value, call outcome) and be scored automatically.
+Cart value
+Abandoned carts
+Value
+Suggested treatment
+₹1,000–3,000
+309
+₹6.20 lakh
+WhatsApp + one AI call
+₹3,000–10,000
+218
+₹13.23 lakh
+AI call first, human if no pay in 24 h
+₹10,000–25,000
+101
+₹16.52 lakh
+Human call, AI for reminders
+Over ₹25,000
+24
+₹10.42 lakh
+Senior consultant, same day
+Owner
+Leads
+Active period
+Paid
+Paid rate
+Leads tagged hot/warm/cold
+Janvi
+2,409
+22 Jul – 26 Oct
+9
+0.4%
+41
+Roshni Sharma
+1,999
+17 May – 16 Sep
+39
+2.0%
+91
+KC
+628
+3 Jun – 11 Aug
+19
+3.0%
+204
+niraj sharma
+273
+18 May – 20 Aug
+14
+5.1%
+158
+Joyce
+219
+29 Jul – 4 Sep
+0
+0%
+0
+6 others + unassigned
+173
+—
+1
+0.6%
+29
+Leads Page: Insights & Global Feature Benchmark
+Page 7 of 50
+
+
+=== PAGE 8 ===
+Assignment. Every lead created after 26 Oct, 2:15 pm (5 leads) has no owner, plus one on
+24 Oct, while older leads at the same bot stages all have one. Auto-assignment most likely
+stopped on the afternoon of 26 Oct.
+Benchmark: how it was built
+300 distinct firms were benchmarked, 15 in each of 20 countries, against 15 capabilities a
+leads page can offer. The full firm-by-feature matrix is in the companion spreadsheet
+(Lead_Page_Benchmark_300_firms.xlsx).
+Countries (20): India, USA, Canada, UK, Germany, France, Spain, Brazil, Mexico,
+Indonesia, Vietnam, UAE, Saudi Arabia, Singapore, Australia, Japan, South Korea, China,
+Turkey, South Africa. They cover the biggest CRM markets, the WhatsApp-first
+markets (India, Brazil, Mexico, Indonesia), and the markets where chat runs on LINE,
+Kakao, Zalo or WeChat.
+Firms (15 per country): local leaders first, then firms that are major in that market. Five
+kinds of firm are mixed on purpose, because the page does five jobs: CRM and sales
+tools (72), WhatsApp and chat platforms (63), voice AI and contact centres (55), tax,
+accounting and compliance apps that sell services like this business (52), and
+payments, marketing-data and vertical lead platforms (58).
+Scoring: each firm is marked 1 or 0 per capability, based on what its public product
+material advertises as of late 2026. Each firm starts from its segment's typical feature
+set and is then adjusted for firm-specific features known from its product pages.
+Confidence: 59 firms are rated High (widely documented products); 241 are Medium.
+Treat the matrix as a desk-research map of the market, and spot-check any single cell
+before quoting it externally.
+Benchmark: what the market offers
+Across 300 firms, the leads page lacks or only partly has 14 of the 15 capabilities (consent
+is not visible either way), including the four that 95–100% of lead-management tools treat
+as standard.
+Leads Page: Insights & Global Feature Benchmark
+Page 8 of 50
+
+
+=== PAGE 9 ===
+Table stakes (fix first). Routing rules, automated follow-up cadences and a single timeline
+of WhatsApp, call and email activity are near-universal in CRMs and WhatsApp tools,
+from LeadSquared and Kylas in India to Kommo in Mexico and Qontak in Indonesia. Funnel
+analytics follows at 71%.
+Differentiators (where this page can lead). Instant AI calling, AI-vs-human call logs,
+speed-to-lead timers and best-time-to-call analytics are rare in lead tools (8–27%). They
+are common only in voice-AI and contact-centre products, so few CRMs combine them.
+That gap is the opening: a leads page that shows, per lead, "AI called in 2 min, no answer;
+human called at 11:10, cart sent".
+Country patterns.
+Lead_Page_Benchmark_300_firms.xlsx · 300 firms, 20 countries; page status from screenshot and export
+Leads Page: Insights & Global Feature Benchmark
+Page 9 of 50
+
+
+=== PAGE 10 ===
+India and the USA lead on AI calling (40% and 33% of firms benchmarked offer instant
+AI calls), driven by SquadStack, Exotel, Ozonetel, 11x, Bland AI and Salesforce
+Agentforce.
+Mexico and Indonesia lead on cart recovery and handoff (73% offer cart recovery,
+67–80% bot-to-human handoff). In these WhatsApp-first markets, the chat thread is
+the lead record, as in Kommo, Leadsales and Qontak.
+Korea shows the closest analog to the rider funnel. Samjjeomsam and Toss lead with
+the refund amount a gig worker can claim, then charge a fee.
+Japan, Korea, Vietnam and China run the same pattern on LINE, Kakao, Zalo and
+WeCom instead of WhatsApp, which confirms the chat-first design but shows no
+market has solved AI-call visibility on the lead row.
+Germany, the UK and Turkey stand out on consent: GDPR or IYS consent is recorded
+on the lead itself. India's DPDP Act and TRAI DND rules make the same thing relevant
+here.
+Checked on vendor pages (research pass, 27 Oct): LeadSquared offers a built-in voice
+bot (Invorto); Respond.io offers AI voice agents and records the Meta ad click ID
+(ctwa_clid) automatically; Qontak shows SLA countdowns on chats; Interakt, Gallabox
+and Kommo send conversions back to Meta. No platform found combines a speed-to-lead
+timer, an AI-vs-human call log and a value-tiered cart queue on one leads page, so building
+those together would be a genuine differentiator. Cells in the spreadsheet not checked on
+vendor pages remain desk-research estimates.
+Features to add, in order
+Build in three waves: make the numbers true, then make every lead get a fast first touch,
+then optimise spend and staff.
+Priority
+Feature
+What it adds to the
+page
+Evidence from
+this data
+Benchmark
+examples
+P0
+Correct KPI
+cards + clean
+export
+Revenue across all
+payment origins;
+one Won definition;
+lead ID, created
+date, phone in
+export
+Card shows
+₹48,494 vs ₹1.30
+lakh collected;
+CSV columns
+shifted
+Every CRM
+benchmarked
+Leads Page: Insights & Global Feature Benchmark
+Page 10 of 50
+
+
+=== PAGE 11 ===
+Priority
+Feature
+What it adds to the
+page
+Evidence from
+this data
+Benchmark
+examples
+P0
+Speed-to-lead
+timer
+"Time to first
+touch" column and
+a red badge after 5
+min; median by
+source and owner
+on a KPI card
+57% of leads
+never touched
+after entry
+noCRM.io, Kylas,
+Property Finder,
+Chili Piper
+P0
+Instant AI call +
+AI/human call
+log
+AI calls every new
+lead within 5 min
+(also 9 pm–9 am);
+each call row
+tagged AI or Human
+with outcome,
+recording,
+transcript; a "Calls"
+column on the lead
+row
+2,026 night-time
+leads; only 5
+voice_agent
+leads; no call data
+in export
+SquadStack,
+Exotel, 11x,
+Salesforce
+Agentforce,
+Novocall
+P0
+Handoff queue
+with SLA
+Tab of leads waiting
+for a human, oldest
+first, with the
+bot/AI summary so
+the customer does
+not repeat
+themselves; track
+planned vs forced
+escalations
+206 leads waiting
+a median 91 days
+Kommo, Qontak,
+PolyAI, Ada
+P1
+Cart-recovery
+queue by value
+band
+Carts not paid in 1 h,
+split by band;
+WhatsApp + AI for
+small carts, human
+for over ₹10,000
+817 carts, ₹47.3
+lakh
+Interakt, Gupshup,
+Shopify, Salla,
+Channel Talk
+P1
+Automated
+follow-up
+cadences
+Day 0/1/3/7
+sequence mixing
+WhatsApp, AI call
+and human call;
+next step shown on
+each row
+1 lead of 5,701 has
+a follow-up date
+Meetime,
+Outreach, Close,
+LeadSquared
+Leads Page: Insights & Global Feature Benchmark
+Page 11 of 50
+
+
+=== PAGE 12 ===
+Outside the page but tied to it: deep-link each ad to its service (fixes the rider mismatch),
+and move the language question after the service is shown.
+Priority
+Feature
+What it adds to the
+page
+Evidence from
+this data
+Benchmark
+examples
+P1
+Funnel view
+Bot-stage funnel
+with drop-off %,
+filterable by ad and
+service
+40% lost at
+language, 73% at
+service list
+RD Station,
+HubSpot,
+Leadsales
+P1
+AI summary +
+auto-scoring
+One-line summary
+and a score from
+stage, cart value,
+service and call
+outcome, replacing
+manual
+hot/warm/cold
+Tags on 9% of
+leads; 1 of 35 hot
+leads paid
+Zoho Zia, HubSpot,
+Odoo, Dynamics
+365
+P2
+Ad ROI with
+spend
+Cost per lead and
+cost per paid lead
+per ad, using
+Meta/Google spend
+and conversion
+sync
+Meta: 4,426
+leads, 18 paid;
+spend unknown
+Gallabox, Wati,
+Respond.io, Liny
+P2
+Best-time-to-
+call heatmap
+Connect rate by
+hour and weekday,
+per AI and human
+No call data yet;
+leads peak 10–11
+am and 10 pm
+MiiTel, Five9,
+Diabolocom, Zoho
+P2
+Rep
+leaderboard +
+load balancing
+Leads, touches,
+response time and
+revenue per owner;
+cap queue size,
+overflow to AI
+One owner holds
+2,409 leads
+Freshsales,
+Maximizer,
+Agendor
+P2
+Consent and
+DND flags
+WhatsApp opt-in,
+DND status and
+DPDP consent on
+each lead before
+any AI call
+Not visible today
+Really Simple
+Systems, Exotel,
+Netgsm
+Leads Page: Insights & Global Feature Benchmark
+Page 12 of 50
+
+
+=== PAGE 13 ===
+Every problem and its fix
+Each problem found above has a fix; three of them sit outside the leads page (in the bot or
+the ads).
+Problem
+Evidence
+Fix
+Where
+Revenue card shows only
+WhatsApp/agent-link
+payments
+₹48,494 shown; 61
+website payments
+(₹81,400) by the same
+leads not counted
+Show WhatsApp-paid
+and website-paid side
+by side, with a total
+Page, P0
+"Won 93" cannot be traced
+No field combination in
+the export gives 93
+Get the query from the
+developer; define Won
+= payment status
+"paid"
+Page, P0
+Export headers off by one;
+ratings as dates
+"Created" empty on
+every row; "04-May" =
+4/5
+Fix the CSV writer; add
+a check that "Created"
+is never empty
+Export,
+P0
+Website payers have no
+source
+26 paid leads with
+source "unknown"
+Match website
+payments to the lead
+by phone; GA4
+purchase event
+Page +
+GA4
+40% quit at the language
+question
+2,013 leads stop there
+Detect language from
+the first message; ask it
+after the service is
+shown
+Bot
+73% never get from
+service list to price
+1,804 stop at 27
+services
+Deep-link each ad to its
+service; show 3
+services, not 27
+Bot + ads
+Rider ads filed under
+business TDS
+912 of 1,187 put in TDS;
+126 picked TDS
+Monthly Payment
+Map rider ads to the
+rider ITR service; show
+the refund estimate
+first
+Bot + ads
+Leads Page: Insights & Global Feature Benchmark
+Page 13 of 50
+
+
+=== PAGE 14 ===
+Answers to the open questions
+Should carts over ₹10,000 go to a human, or only over ₹25,000? Keep ₹10,000. That
+band is just 125 carts in 5 months (about 5 a week), yet worth ₹26.9 lakh, 57% of all
+unpaid cart value. Raising the line to ₹25,000 saves about 4 human calls a week and
+hands ₹16.5 lakh of carts to automation.
+Problem
+Evidence
+Fix
+Where
+Meta leads rarely pay
+4,426 leads, 18 paid
+Send paid events to
+Meta so it optimises for
+payers; review zero-pay
+ads once spend is
+known
+GA4 +
+Meta, P2
+No first touch for most
+leads
+57% last contacted at
+creation; 36% arrive at
+night
+Speed-to-lead timer +
+AI call within 5 min
+Page, P0
+No follow-up dates
+1 of 5,701
+Cadence creates the
+next step automatically
+Page, P1
+Handoffs never completed
+206 waiting, median 91
+days
+Handoff queue with
+SLA; clear the backlog
+this week
+Page, P0
+Unpaid carts
+817 carts, ₹47.3 lakh
+Recovery queue by
+value band
+Page, P1
+No call data
+No call fields in export
+Call log tagged
+AI/human with
+outcome
+Page, P0
+Manual tags unused
+Temperature on 9% of
+leads
+Automatic score and AI
+summary
+Page, P1
+One owner holds 2,409
+leads
+Owner table
+Queue caps, overflow
+to AI, leaderboard
+Page, P2
+Auto-assignment stopped
+All 5 leads after 26 Oct
+2:15 pm unowned
+Check the rule today;
+alert when a lead has
+no owner after 10 min
+Quick fix
+Leads Page: Insights & Global Feature Benchmark
+Page 14 of 50
+
+
+=== PAGE 15 ===
+Why does the Won card say 93? It cannot be answered from the export: paid status
+gives 82 and paid/closed stages give 79. The developer needs to share the card's query;
+the likely cause is a different filter or leads missing from the export.
+Which calls are AI and which human, and how soon do leads get an AI call? Not
+measurable today. The call log needs, per call: lead ID, AI or human, start time, duration,
+outcome, recording link. Time to first AI call is then the first AI call's start time minus
+the lead's creation time.
+Is auto-assignment broken? Very likely. Every lead after 26 Oct, 2:15 pm is unowned,
+while older leads at the same stages all have owners.
+Is the 57% "never touched" figure solid? It rests on the "last contacted" field. If later
+bot messages do not update that field, the true figure is lower. Opening 5 such leads in
+the page will settle it.
+Is "TDS Monthly Payment" a rider product? Its name says business. Needs a one-line
+confirmation from the team; if it is for riders, rename it.
+What does a paid lead cost? Unknown until ad spend is linked; GA4 steps 2–4 below
+give it.
+Research benchmarks behind each fix
+Outside evidence supports every fix above, but most lift figures are vendor claims; the
+independent anchors are Baymard, HBR and Meta's own platform rules. Vendor figures
+should be tested with a holdout group before they are used as forecasts.
+Problem
+Benchmark (source, type)
+Proven fix
+What it means here
+Slow first
+touch
+21x qualify odds at 5 vs 30
+min (MIT/InsideSales
+2007, vendor-funded, US
+B2B). Average first
+response 42 h across 2,241
+firms; within 1 h ≈ 7x
+likelier to qualify (HBR
+2011, independent). +391%
+conversion when called
+within 1 min (Velocify,
+~3.5M leads, vendor)
+Two timers: bot reply
+and human first touch.
+5-min SLA, escalate at
+10 min
+The bot already
+replies instantly; the
+decay hits handoffs
+and carts waiting for
+a human
+Leads Page: Insights & Global Feature Benchmark
+Page 15 of 50
+
+
+=== PAGE 16 ===
+Problem
+Benchmark (source, type)
+Proven fix
+What it means here
+AI call cost
+and use
+₹4–10/min on India
+platforms; Bolna ₹5.52/min
++ telephony; ₹8–25 per
+outcome (vendor price
+lists, 2026)
+AI for three jobs:
+instant callback, cart
+call, document
+reminder. Warm
+transfer on payment
+intent
+A 2-min call costs
+about ₹10–20
+against an average
+unpaid cart of
+₹5,790
+AI call +
+WhatsApp
+GoKwik, 30 brands: 2x
+recoveries, 2.5x purchase
+likelihood, 60–65% call
+answer rate, calls only 10
+am–9 pm (vendor,
+unaudited; the 2.5x has
+selection bias)
+Sequence WhatsApp
+→ AI call → human;
+keep a 10–20%
+WhatsApp-only
+holdout
+A reason to test, not
+a forecast: tax filing
+needs documents
+and trust, unlike
+D2C carts
+Carts unpaid
+Global abandonment
+70.22% (Baymard, 50
+studies, independent). Top
+fixable reason: extra costs
+shown late. WhatsApp
+recovery 15–40% vs email
+3–11% (AiSensy, eGrow
+case studies, vendor)
+Show the GST-
+inclusive price at price
+summary; trust
+signals beside the pay
+link; value-tiered
+queue
+91% of carts unpaid
+vs a 70% norm
+points to friction at
+the checkout-link
+step
+Bot drop-off
+WhatsApp list messages
+hold max 10 rows; reply
+buttons max 3 (Meta
+platform limits). Learnwise
+(India): 4x qualified leads
+at 31% lower cost with
+WhatsApp Flows (Meta
+case study)
+Take language from
+the ad or first
+message; 3-button
+intent split → ≤10-row
+list or a Flow; ad
+referral skips category
+A 27-service menu
+cannot render as
+one native list, which
+helps explain the
+73% drop
+Meta leads
+rarely pay
+Purchase-optimised click-
+to-WhatsApp ads: 21–79%
+lower cost per purchase in
+Meta case studies (Confer
+On 79%). Purchase goal
+unlocks only after 10
+purchase events in 7 days
+(Interakt guide)
+Store ctwa_clid; send
+QualifiedLead and
+Purchase through
+Meta's Conversions
+API; optimise for
+QualifiedLead until
+volume allows
+82 purchases in 5
+months ≈ 4 a week,
+below the threshold
+today
+Leads Page: Insights & Global Feature Benchmark
+Page 16 of 50
+
+
+=== PAGE 17 ===
+Problem
+Benchmark (source, type)
+Proven fix
+What it means here
+Rider funnel
+Zomato/Blinkit helped 2.10
+lakh partners file FY25-26
+returns: ₹33.6 crore
+refunds, ~₹1,600 average,
+75% first-time filers
+(press, Sep 2026).
+EasyReturn sells rider ITR
+at ₹199 + GST.
+Samjjeomsam charges
+~10% of the refund and
+shows the refund first
+"Check your refund
+free" → PAN + consent
+→ refund estimate in ₹
+→ fee → pay
+Free platform filing
+sets a low price
+anchor, so ₹599
+must be shown
+against the refund
+Handoffs
+stuck
+No credible public
+benchmark found; the
+Famulor/ConnexCS
+figures in the assignment
+could not be verified
+Pass language,
+service, price, cart link
+and last 5 messages;
+≤5-min SLA; tag
+planned vs forced;
+track transfer
+completion rate
+Set own targets and
+measure from day
+one
+No follow-up
+"80% of sales need 5+
+follow-ups" traces to a
+1942 survey of under 40
+people (debunked). 93%
+of converted leads were
+reached within 6 attempts
+(Velocify, vendor)
+Within the 24-h
+window (first 1,000
+replies a month free,
+then ₹0.115 each):
+T+0, +15 min, +3 h, +20
+h. Then utility
+template day 2,
+marketing day 4, final
+day 7, stop
+Utility templates
+cost ~₹0.12 vs
+marketing ~₹0.86
+per message (India
+rates since July
+2025, BSP-reported)
+Manual tags
+No independent evidence
+for scoring lift in SMB B2C
+funnels
+Rules-based score
+first (price viewed,
+cart value, source,
+handoff asked); check
+the top decile
+converts ≥3x the
+bottom
+Replaces tags used
+on 9% of leads
+Leads Page: Insights & Global Feature Benchmark
+Page 17 of 50
+
+
+=== PAGE 18 ===
+WhatsApp message rules to plan around. A lead arriving from a click-to-WhatsApp ad
+opens a free messaging window (72 hours under Meta's long-standing rule; some 2026
+BSP guides say longer). Since 1 October 2026, service messages (free-form replies inside
+the 24-hour window) are no longer all free: the first 1,000 per number per month are free
+and every reply after that costs the utility rate (₹0.115 plus 18% GST, before BSP markup).
+Marketing templates rose from ₹0.7846 to ₹0.8631 on 1 January 2026. Confirm both on
+Meta's rate card before building cadences around them.
+Compliance before scaling AI calls
+AI calls to people who never asked for a call are the riskiest part of the new voice
+programme.
+TRAI (Feb 2025 TCCCPR amendment): ordinary 10-digit numbers can no longer be
+used for telemarketing. Promotional calls go on the 140 series and transactional calls on
+1600; first violations carry a ₹2 lakh penalty. A July 2026 clarification reportedly limits
+1600 to regulated financial entities and government, which would put this business's
+sales calls on DLT-registered 140 numbers. Confirm with the telecom provider.
+DPDP Rules 2025: notified 13 Nov 2025; full notice and consent duties apply from 13
+May 2027. Consent notices must be standalone and name the specific purpose.
+Problem
+Benchmark (source, type)
+Proven fix
+What it means here
+Rep overload
+No public India
+benchmark
+~35 leads a day; only
+10–20% need a
+human; cap 20–30
+active conversations
+per rep; route by
+language and service
+4–7 human leads a
+day is manageable
+once AI takes first
+touch
+KPI
+mismatch
+Platform best practice, no
+benchmark
+Won = payment
+captured with a
+gateway ID; one order
+ID across all three
+payment routes; lead
+ID in payment-link
+notes
+Fixes the revenue
+card and website-
+payer attribution
+Leads Page: Insights & Global Feature Benchmark
+Page 18 of 50
+
+
+=== PAGE 19 ===
+AI disclosure: no Indian law requiring it was found. Disclose anyway ("I'm an AI
+assistant from …") and capture a logged "Call me" tap in the WhatsApp flow, so every
+AI call is a requested callback.
+Season calendar and off-season plan
+Peak demand now runs to 31 August, and October to March needs recurring products.
+2026 deadlines: ITR-1/2 on 31 Jul 2026; ITR-3/4 (non-audit) on 31 Aug 2026, which the
+Finance Act 2026 made permanent and which matches the "ITR-3/4 Deadline: 31st
+August" ad in the data; audit cases extended to 21 Nov 2026 (CBDT, reported).
+Off-season products: GST monthly/quarterly and TDS quarterly retainers; advance-
+tax reminders (15 Sep, 15 Dec, 15 Mar); belated and updated returns; business
+registrations.
+Pre-season (Apr–Jun): run a free "check your refund" capture for riders and salaried
+filers, so July leads arrive already qualified.
+The market leader shows the same seasonality: Ahrefs-derived estimates put ClearTax's
+organic traffic at about 9.6 million visits in July 2026 and 4.5 million in August, more than
+halving once the main deadline passed (third-party estimate).
+What Google Analytics shows (Jan–Oct 2026)
+The website is not where leads come from: GA4 counts 8.8K new users, but its lead
+reports read 0 qualified and 0 converted leads, and web traffic peaked in June while CRM
+leads peaked in August.
+Leads Page: Insights & Global Feature Benchmark
+Page 19 of 50
+
+
+=== PAGE 20 ===
+Qualified and converted lead reports are empty. GA4's "Generate leads" report
+counts only the recommended events generate_lead , qualify_lead and
+close_convert_lead . generate_lead is firing (73 website leads since June, see the
+lead acquisition report below), but qualify_lead and close_convert_lead are not, so
+Qualified and Converted leads show 0 despite 82 paid leads in the CRM.
+Tracking started in early April, not January (the line is flat until April). The biggest
+week was about 2,500 new users in late June, against 490 CRM leads that month.
+August brought 2,842 CRM leads but only a few hundred web users a week. Meta's
+click-to-WhatsApp ads send people straight into WhatsApp, so they never reach the
+site.
+Direct is 45% of new users (4,000). That sits at the top of the normal range: a 2026
+study of sites using cookieless analytics put the median at 29% and the middle half at
+16–46%, and above 50% usually means a tracking fault. The likely causes here are links
+opened from WhatsApp (no referrer) and untagged checkout links: the 61 website
+payers probably arrived from WhatsApp checkout links and were recorded as Direct.
+Google paid traffic does not show up as CRM leads. Paid Search and Cross-network
+(Performance Max) brought about 2,600 new users, yet only 7 CRM leads carry the
+source "Google Ads" and none paid. Either the source is lost when visitors move from
+site to WhatsApp, or the spend is not working; Google Ads cost is needed to tell which.
+GA4 screenshots, 27 Oct 2026 · new and returning users by first-user channel, 1 Jan – 27 Oct 2026
+Leads Page: Insights & Global Feature Benchmark
+Page 20 of 50
+
+
+=== PAGE 21 ===
+Organic search is the best-quality traffic. 225 returning users per 677 new (33%),
+against 4–6% for paid channels. Organic clicks, though, are almost all brand searches
+("tax plan advisors", "taxplanadvisor" and variants: about 1,500 clicks across the top 7
+queries).
+Calculators and blogs earn impressions, not clicks. /calculators/partnership has 22K
+impressions, the tax-audit due-date blog 11K and /calculators/capital-gains 7.3K, yet
+the partnership calculator earned only 466 clicks (about 2% CTR) and the capital-gains
+calculator 86. For reference, the #1 organic result averages 27.6% CTR
+(Backlinko/Semrush, 4M results, updated 2025).
+Few visitors come back. Week-1 return is 5.8%, week-4 0.8%. That is normal for a one-
+off purchase, and it means follow-up has to happen on WhatsApp and through ad
+remarketing, not by waiting for repeat visits. No audiences are built yet (only "All
+Users").
+The audience is spread across cities. The top 7 cities (Hyderabad 624, Bengaluru 610,
+Mumbai 565, Ahmedabad 537, Pune 526, Delhi 501, Indore 380) hold 42% of users. That
+spread is a reason to test regional-language ads, each preset to its language, instead of
+asking every lead.
+Fixes from the GA data
+Problem
+Fix
+Effort
+Qualified and converted
+leads read 0
+Send generate_lead (already firing: 73 leads;
+check it triggers on a confirmed submit),
+qualify_lead (price summary reached) and
+close_convert_lead (paid, with value) from the
+CRM through Measurement Protocol, tied to the
+visitor's client ID
+Medium
+45% Direct
+Add UTMs to every link the bot sends (checkout,
+payment, blog) and to bio and organic-social links,
+e.g.
+utm_source=whatsapp&utm_medium=bot&utm_camp
+aign=checkout
+Low
+Google spend unclear
+Link Google Ads to GA4; import paid outcomes as
+offline conversions; compare cost per paid lead
+with Meta
+Low–
+Medium
+Leads Page: Insights & Global Feature Benchmark
+Page 21 of 50
+
+
+=== PAGE 22 ===
+Features this adds to the leads page
+Google Analytics, second look (28 Oct)
+The GA4 numbers include staff and developer traffic, and the reports that would show
+revenue and lead quality are empty, so no channel's return can be judged yet.
+Problem
+Fix
+Effort
+Calculators get
+impressions, not leads
+Improve titles and meta descriptions on the
+calculator pages; add a "Get this filed by a CA"
+WhatsApp button on each result, with a ref code
+Low
+No remarketing
+Build audiences: calculator users, /consultation and
+/contact visitors, began checkout but not paid;
+share them with Google Ads
+Low
+June peak unexplained
+Check what drove the late-June spike (a campaign,
+a blog, a deadline story) and whether it produced
+any leads
+Low
+Feature
+What it shows on the lead
+Benchmark examples
+Web journey on the
+lead
+Landing page, calculator used,
+pages viewed and first source,
+matched by a ref code in the
+WhatsApp message
+HubSpot (page views on the
+contact timeline), LeadSquared
+web activity, Zoho SalesIQ
+Auto-captured UTM
+and click ID
+Source, medium, campaign, gclid
+or ctwa_clid on every lead, so
+nothing lands as "unknown"
+Respond.io (ctwa_clid), Kommo,
+Gallabox
+Outcome sync to
+GA4 and ads
+Qualified and paid events sent
+automatically when the stage
+changes
+Interakt, Gallabox, HubSpot
+Audience sync
+One click to push unpaid carts
+or calculator users to Google
+and Meta audiences
+HubSpot ads audiences, Insider,
+Brevo
+Leads Page: Insights & Global Feature Benchmark
+Page 22 of 50
+
+
+=== PAGE 23 ===
+Staff and test traffic is counted as customers. Admin pages appear among top
+landing pages: /dashboard (557 engaged sessions), /whatsapp-admin (277) and /login
+(207). Two session sources are developer machines: localhost:8080 (121 sessions) and
+localhost:3000 (111). The top cities for returning users are Virar (115) and Vasai-Virar
+(106), ahead of Mumbai (105); both are suburbs near the Borivali office, so these are
+most likely staff. Returning-user, engagement and city figures are inflated until this is
+filtered.
+Revenue reports are blank. Total revenue by source, medium and campaign reads "No
+data available", and so does "Users by disqualified lead reason". The purchase and
+lead-status events are not being sent.
+High-intent local searches are out of reach. Average positions by query: "itr filing near
+me" 130, "fy 2026-27 new regime" 110, "financial planners in…" 102. Page 1 means
+positions 1–10, so these searches never see the site. A Google Business Profile does
+exist (376 interactions since April, mostly direction requests), but with only 48 website
+clicks and 12 calls it is not winning "near me" searches; see the batch 10 section below.
+(Corrected: an earlier draft said there was no profile.)
+Many pages rank too low to be found. Average positions: SIP calculator 80, SWP
+calculator 66, CGST forms page 66, CAGR calculator 47. Mobile ranks better (9.8) than
+desktop (18) or tablet (16). Impressions also come from Slovenia, Montenegro, Liberia
+and other countries at positions 50–100, which is noise.
+The homepage is the only strong click page. Homepage CTR is 12.7% (brand
+searches); /calculators/tds gets 10.0%, the GSTR-3B reconciliation page 5.7%. The top
+non-brand impression query is "audit last date 2026" (11K), then "partner
+remuneration…" and "tax advisor" (1.5K each).
+Paid traffic labels are inconsistent. Mediums are split across "cpc", "paid",
+"paid_social" and "social". Sessions tagged "paid" have 25% engaged sessions (191 of
+760), against 67–76% for organic, cpc, referral and paid_social. Several campaigns
+appear only as numbers (23881032605, 23948155089, 6977406146903), so nobody can
+tell which ad they were. By campaign, engaged share of sessions: 23881032605 68%
+(517 of 760), 23948155089 76% (415 of 544), 1000OFF_ITR 71% (266 of 377), ITR_Filing
+78% (177 of 226), but 6977406146903 only 26% (84 of 323). That last one is the weak
+campaign to pause or rework.
+Broken and fragmented pages. /404 receives traffic, so some ads or links point to
+dead URLs. Meta ad visits land on the homepage with long ?fbclid= strings, each
+counted as a separate landing page, which splits the homepage's numbers.
+Leads Page: Insights & Global Feature Benchmark
+Page 23 of 50
+
+
+=== PAGE 24 ===
+Campaign names that do work: "1000OFF_ITR" (266 engaged sessions) and
+"ITR_Filing" (177). These match the CRM's "Free ITR Filing – Code FREE1000" ad, so this
+naming is the model to copy.
+Service pages do get engaged visits: /services/returns/itr-filing (529 engaged
+sessions, plus 173 on a second ITR URL) and /services/returns/gstr (409). Other non-
+brand searches that bring impressions: "fy 2025-26 invoice…" 1.3K, "capital gain
+calculator" 890, "capital gains tax calculator" 880, "tax audit report last date" 832.
+Engagement rates of 100% shown for single queries and fbclid landing pages come
+from tiny samples and can be ignored.
+Fixes from the second look
+Problem
+Fix
+Effort
+Staff and dev traffic in GA4
+Define internal traffic by office IP and filter
+it; exclude /dashboard, /login and
+/whatsapp-admin; use a separate GA
+property (or none) for localhost
+Low
+Revenue and disqualification
+reports empty
+Send purchase (with value) and
+close_unconvert_lead with a reason
+(price, not reachable, wrong service) from
+the CRM
+Medium
+"near me" invisibility
+Complete the existing Google Business
+Profile for the Borivali office (UTM-tagged
+website link, WhatsApp and booking links,
+services with prices, weekly posts); collect
+reviews on WhatsApp after each filing
+Low
+Mixed mediums, numeric
+campaign names
+One naming sheet: medium = cpc /
+paid_social / whatsapp / email; campaign =
+service_offer_month, e.g. itr_1000off_jul26
+Low
+Ads landing on 404
+Find the referring links in GA4 and fix or
+redirect them
+Low
+Homepage split by fbclid
+Report on "landing page" without query
+string; send Meta ads to service pages, not
+the homepage
+Low
+Leads Page: Insights & Global Feature Benchmark
+Page 24 of 50
+
+
+=== PAGE 25 ===
+Acquisition report, exact figures (28 Oct)
+Paid visitors barely look at the site: Paid Social users spend 23 seconds on average and
+Cross-network 57 seconds, against 4m 55s for organic search. The channel chart above
+now uses these exact figures.
+Totals: 8,916 users (8,859 new, 924 returning), 16,136 sessions, 4.46 pages per session,
+4m 01s average session duration. Engagement time, a stricter measure that only counts
+time with the page in focus, is 1m 21s per session.
+Engaged sessions per user: Organic Search 2.01, Direct 1.57, Organic Social 1.17, Paid
+Search 0.73, Cross-network 0.73, Paid Social 0.46. Below 1 means most paid visitors
+leave without a single engaged session.
+Direct is inflated by staff. It holds 45% of users but about 62% of all events (123,246 of
+roughly 197,100), with 3m 32s average engagement. Staff working in /dashboard and
+/whatsapp-admin all day fit that pattern.
+One day in late June brought about 2,200 users, against a normal 50–350 a day. That
+month Direct jumped to about 2,800 users and Cross-network to about 1,100. A one-
+day spike with no clear source is typical of a WhatsApp broadcast with an untagged
+link, a bot burst or a short Performance Max push. Check the date against campaign
+and broadcast logs; if it was bots, exclude it.
+Channel mix shifted after June. Cross-network fell from about 1,100 users in June to
+almost none from August; Paid Search rose to about 500 a month in July–August; Paid
+Social peaked in May and July. Monthly users: about 700 in April, 1,700 May, 4,400 June,
+1,400 July, 800 August, 400 September, 700 October.
+AI assistants are a small but highly engaged source. 28 users came from AI assistants
+(ChatGPT and similar), spending 14m 49s each, and 7 returned. The CRM also has 2
+leads from chatgpt.com. Clear prices, FAQs and named experts on service pages help
+AI assistants recommend the firm.
+Smaller channels: Paid Other 51 users (33s, none returned), Referral 36 (4m 02s),
+Unassigned 20 (traffic GA could not classify, another sign of tagging gaps).
+What to do about it
+Problem
+Fix
+Effort
+Pages ranking 47–130
+Merge or noindex thin investment
+calculators; focus effort on the tax pages
+that already rank (TDS, partnership, GSTR-
+3B)
+Medium
+Leads Page: Insights & Global Feature Benchmark
+Page 25 of 50
+
+
+=== PAGE 26 ===
+Feature this adds to the leads page: a channel-quality view per source (engagement time
+from GA4 next to leads, carts and paid orders from the CRM), so spend can move to
+channels that produce paying clients rather than visits. HubSpot's attribution reports and
+LeadSquared's marketing analytics offer versions of this.
+Paid traffic by source, campaign and ad group (28 Oct)
+Meta traffic is tagged two ways, and one of them sends visitors who leave within 3–4
+seconds: 699 users tagged "paid" from Instagram and Facebook, against about 50 seconds
+for the same platforms tagged "paid_social".
+Problem
+Fix
+Effort
+Paid Social visitors leave in 23 s
+Send Meta traffic straight into
+WhatsApp (click-to-WhatsApp), or to a
+service-specific landing page with the
+price and a WhatsApp button above the
+fold, never the homepage
+Low
+Cross-network and Paid Search
+under a minute
+Match each ad group to its own service
+page; add negatives; judge on paid
+orders once conversions are imported
+Medium
+Late-June spike unexplained
+Look up the exact date; if bots, add a
+filter; if a broadcast, tag future
+broadcast links
+Low
+AI assistant traffic
+Publish a clear price list, FAQs and
+named CA profiles on service pages;
+check how ChatGPT and Gemini
+describe Taxplan
+Low
+Source / medium
+Users
+Time engaged per user
+Engaged sessions per user
+google / cpc
+2,556
+59 s
+0.73
+google / organic
+654
+4m 49s
+1.97
+ig / paid
+376
+3 s
+0.24
+fb / paid
+323
+4 s
+0.27
+ig / paid_social
+228
+58 s
+0.86
+Leads Page: Insights & Global Feature Benchmark
+Page 26 of 50
+
+
+=== PAGE 27 ===
+The "paid" Meta traffic is close to worthless as website visits. 737 users in total with 5
+seconds of engagement and 11 returning. Campaign 6977406146903 (312 users, 0
+seconds, 0.27 engaged sessions per user) is the likely source. This pattern usually
+means Audience Network placements, accidental taps, or a website destination set on
+an ad meant for WhatsApp.
+Engagement overall is healthy; paid social is the outlier. 65.8% of sessions are
+engaged (10,612 of 16,136). Orbit Media's average across 65 sites is 55%, and Siege
+Media measured 61.6% for organic search and 67.8% for cross-network across 304
+sites (2024–25). Taxplan's Paid Social channel sits at 42.8%; Cross-network (66.6%)
+and Paid Search (66.9%) are normal. "Unassigned" has 206 sessions at 2.4% engaged,
+which looks like bots or, given its 2m 19s average engagement, events reaching GA4
+without a proper session start (see the GPT-review points).
+AI assistant visitors match the benchmark. Their engagement rate is 62.5%, close to
+Siege Media's 63.4% for ChatGPT referrals.
+"Manual" traffic looks internal. The "Manual" source platform has 2,259 users
+producing 109,813 events (56% of all events, about 49 per user) at 4m 52s. It peaked in
+April–May and stopped by July, which fits testing or staff using tagged links rather
+than customers.
+Google Ads switched strategy mid-season. Performance Max (Cross-network: 1,527
+users, 57 s) peaked at about 1,000 users in June and then stopped; Google Search (885
+users, 1m 01s) ran in July–August. Search partners brought 48 users, Display 11.
+Largest campaigns: "BR- Instant Form - Lead Gen Campaign" 732 users (1m 02s,
+peaked June); "BR | India | Search | ITR Filing | Leads" 518 (1m 10s); 1000OFF_ITR 343 (50
+s, July); "India's Tax Experts" 277 (20 s); TPA_ITR Filing 202 (1m 12s);
+ITR_Business_Search 151 (1m 14s).
+Ad group names hide what was sold. The biggest Google ad group is the default "Ad
+group 1" (529 users). Others carry typos ("ITR_50% OFF_Bussiness_Search", 141 users)
+or month suffixes. ITR_F&O_Search brought 90 users at 50 s.
+Source / medium
+Users
+Time engaged per user
+Engaged sessions per user
+fb / paid_social
+219
+50 s
+0.69
+m.facebook.com / referral
+104
+9 s
+0.88
+facebook.com / referral
+67
+3 s
+0.94
+Leads Page: Insights & Global Feature Benchmark
+Page 27 of 50
+
+
+=== PAGE 28 ===
+The 15 October spike was staff testing or an untagged WhatsApp broadcast. GA
+flagged Direct sessions jumping to 307 against an expected 10, with Chrome sessions
+rising from 16 to 281. The CRM logged 17 leads that day, including the first 2 from the
+voice agent. The late-June spike of about 2,200 users brought no jump in CRM leads
+(5–17 a day that week).
+Session-level check (28 Oct)
+Counted by session instead of by user, the same picture holds, and two more data-quality
+problems appear.
+Meta "paid" sessions: ig / paid 394 sessions, 22.3% engaged, 2 s each; fb / paid 330,
+25.8%, 3 s. The same platforms tagged paid_social: ig 260 sessions at 75.0% engaged
+(50 s), fb 255 at 58.4% (43 s).
+"Manual" traffic behaves unlike customers. 6,043 sessions from 2,259 users, about 18
+events per session against 8–10 for Unlabeled and Google Ads. It peaked at about 2,800
+sessions in May and ended in July. This strengthens the case that it is internal testing;
+filter it before judging any channel.
+Problem
+Fix
+Effort
+Meta "paid" visits last 3–4 s
+Exclude Audience Network unless the CRM
+check (issue 103) finds paying leads from it;
+check the destination on ads tagged "paid";
+move that budget to click-to-WhatsApp;
+pause campaign 6977406146903
+Low
+"Manual" platform with ~49 events
+per user
+Find the tagged links behind it; if internal,
+add them to the internal-traffic filter
+Low
+Default and misspelt ad group
+names
+Rename to service_offer_month
+(itr_business_50off_aug26) and map each to
+a CRM service
+Low
+206 unassigned sessions at 2%
+engagement
+Check event order and session association
+first (issue 107); then turn on known-bot
+exclusion and review the hostnames and
+referrers
+Low
+Staff testing (15 Oct) counted as
+traffic
+Test the voice agent and admin pages from a
+filtered IP or GA debug mode
+Low
+Leads Page: Insights & Global Feature Benchmark
+Page 28 of 50
+
+
+=== PAGE 29 ===
+About 250 sessions record no engagement at all. "(not set)" source: 201 sessions at
+0% engaged; a blank source platform: 49 sessions at 0% engaged with 24 events each.
+That is typical of bots or of events sent without a session start (positive time with zero
+engagement points to the latter); check event order and session association before
+excluding anything.
+Bing is a small, decent channel. bing / organic: 145 sessions, 65.5% engaged, 2m 04s.
+Submitting the sitemap to Bing Webmaster Tools costs nothing and also feeds AI
+assistants that draw on Bing.
+Google paid and organic sessions are both healthy: google / organic 2,969 sessions at
+67.6% engaged; google / cpc 2,815 at 66.5% (55 s). The Google problem is attribution to
+paid orders, not visit quality.
+Monthly sessions (read from the chart, approximate): about 1,900 in April, 3,400 May,
+6,000 June, 2,100 July, 1,500 August, 1,000 September and 1,500 October. Direct already
+had about 1,300 sessions in April, before most ads ran, which again points to internal
+use.
+By first-user medium, referral brought 289 users (2m 40s) and 69 users have "(data not
+available)", another small tagging gap.
+Lead acquisition report (28 Oct)
+GA4 does record website leads: generate_lead fired 73 times since June, and Google
+Search ads produce most of them, while Performance Max produced almost none.
+GA4 lead acquisition and user acquisition screenshots, 28 Oct 2026 · new leads and first-time users by channel
+Leads Page: Insights & Global Feature Benchmark
+Page 29 of 50
+
+
+=== PAGE 30 ===
+GA sees about 1% of all leads. 73 GA leads against 5,701 CRM leads, because most
+leads start in WhatsApp from Meta ads and never touch the site. Lead reports must
+come from the CRM; GA only covers the website part.
+By channel: Paid Search 39 (53%), Paid Social 17 (23%), Direct 11, Organic Search 4,
+Cross-network 1, Referral 1. By platform: Google Ads 39, Meta Ads 17, Unlabeled 14,
+Manual 3.
+Google leads come from Search, not Performance Max. By network type, Google
+search gave 39 leads from 885 users; cross-network (Performance Max) brought 1,527
+users and 0 leads (one lead is attributed to the ad group named "BR | ITR Filing | Search
+| Leads | India | Performance Max"). Keep Performance Max off until Paid conversions
+are imported.
+The CRM under-counts Google. GA counts 39 Google Search leads; the CRM tags only
+7 leads as Google Ads, so the source is lost between the website and WhatsApp.
+Meta "paid" traffic produced 1 lead from about 700 users (fb / paid key event rate
+0.31%), while the same platforms tagged paid_social produced 16 (fb 9, ig 7). This
+settles the earlier point: the "paid" setup is the problem.
+Monthly leads: about 6 in June, 30 in July, 27 in August, 14 in September, 1 in October.
+Paid Search peaked in August (about 20), Paid Social in July (about 14).
+Campaigns with leads: 1000OFF_ITR (about 9 in July), ITR_Business_Search (about 8
+in August), ITR_Freelancer_Search (about 7 in August), NRI_Leads (about 5 in July),
+TPA_Salary_ITR_Search_Aug 5 (30% key event rate), TPA_ITR Filing 3,
+TPA_Sale_On_Property_Search_Aug 2, TPA_ITR Filing 31st July 2,
+TPA_TAX_Search_Aug 1, TPA_NRI 1, TPA_GST_Return_Filing 1.
+Ad groups with leads: "Ad group 1" 19 (26%), ITR_50% OFF_Bussiness_Search 7,
+TPA_Salary_ITR_Search_Aug 5, ITR_F&O_Search 4,
+TPA_Sale_On_Property_Search_Aug1 2, TPA_TAX_Search_Aug 1, the Performance Max-
+named ad group 1; 34 leads (47%) have no ad group (non-Google traffic).
+Qualified and converted leads are 0 for every channel, so GA cannot yet say which
+channel brings paying clients.
+Naming and referral noise: a campaign named "Webstie_GS" (typo, 0 leads); a new
+campaign TPA_GST_Filing_Leads_26_10_2026 (started 26 Oct, 0 leads so far); referrals
+from adwords.corp.google.com (Google Ads preview, internal) and l.wl.co (WhatsApp's
+link wrapper, i.e. links shared in WhatsApp).
+Landing pages and key events (28 Oct)
+Leads Page: Insights & Global Feature Benchmark
+Page 30 of 50
+
+
+=== PAGE 31 ===
+GA reports 4,156 "key events" against 73 leads, so its key-event setting counts actions
+that are not leads, including staff work in the admin pages.
+Staff produce about 10% of key events. /whatsapp-admin, /dashboard and /login
+together account for 417 key events; 21 users on /whatsapp-admin alone produced 228.
+Mark only real lead and purchase events as key events, and filter staff out.
+The homepage carries 71% of key events (2,940). These are probably WhatsApp-
+button or similar clicks marked as key events, which is why key events dwarf leads.
+Decide which events count before judging any channel by "key event rate".
+The GST page converts better than the ITR page. /services/returns/gstr: 301 key
+events from 628 users; /services/returns/itr-filing-online: 144 from 1,350 users, with
+less than a minute per session.
+Weak pages: /signup 260 sessions at 25 seconds with 3 key events;
+/services/registrations 146 sessions at 19 seconds with 5.
+"(not set)" landing page: 938 sessions from 339 users but only 3 new users, i.e.
+sessions with no page view, typical of server-side or test events.
+Landing page
+Sessions
+Users
+Time per
+session
+Key
+events
+/ (homepage)
+8,477
+5,805
+1m 17s
+2,940
+/services/returns/itr-filing-
+online
+1,552
+1,350
+59 s
+144
+(not set)
+938
+339 (3
+new)
+45 s
+26
+/dashboard
+868
+141
+1m 01s
+91
+/login
+706
+298
+1m 25s
+98
+/services/returns/gstr
+683
+628
+1m 04s
+301
+/whatsapp-admin
+328
+21
+7m 12s
+228
+/signup
+260
+246
+25 s
+3
+/profile
+154
+48
+1m 36s
+5
+/services/registrations
+146
+130
+19 s
+5
+Leads Page: Insights & Global Feature Benchmark
+Page 31 of 50
+
+
+=== PAGE 32 ===
+No revenue anywhere: total revenue, transactions and 120-day value are ₹0 and 0 for
+every channel, confirming the purchase event has never been sent.
+The 15 October spike went to the homepage from India via Direct (sessions 21 → 272;
+Direct 6 → 216; Chrome 16 → 281). That pattern also fits a WhatsApp broadcast with an
+untagged homepage link opened in Chrome, so check the broadcast log for that day as
+well as staff testing.
+Monthly by page: the homepage peaked at about 4,000 sessions in June; the ITR filing
+page peaked at about 1,000 in July; /dashboard ran at about 300–400 sessions a month
+from April to June.
+Monetisation, purchase and checkout reports (28 Oct)
+Every GA4 money report is empty: no service views, carts, checkouts or purchases have
+ever been recorded, so the 61 website payments (about ₹81,400) are invisible to GA and
+to Google Ads.
+Drive sales overview: total revenue ₹0, ecommerce revenue ₹0, purchasers 0, first-
+time purchasers 0, average purchase revenue per user ₹0.
+Item, coupon, item-list and promotion reports: "No data available" in every one. GA
+cannot show which service sells, whether TAXPLAN10 or FREE1000 codes work, or
+which offers drive sales.
+Purchase journey: 8,697 users started a session; view product 0, add to cart 0, begin
+checkout 0, purchase 0. Checkout journey: all steps 0. Transactions: none.
+Three in four visitors are on mobile. Session starts: mobile 6,623 (76.2%), desktop
+2,065 (23.7%), tablet 27, smart TV 9. Pages, the WhatsApp button and the Razorpay
+checkout should be designed and tested for phones first.
+User-acquisition cohorts show ₹0 revenue, 0 transactions and ₹0 120-day value for
+every source, medium and campaign, so lifetime value by channel cannot be judged
+yet.
+Fix: implement GA4 ecommerce with each service as an item (item_name such as "ITR
+Salary Filing", item_category ITR / GST / TDS / Registration, price including GST), firing
+view_item on service pages, add_to_cart or begin_checkout when the price summary
+or checkout link is opened, and purchase with the Razorpay payment ID, value, currency
+INR and coupon from the confirmed payment. Send view_promotion and
+select_promotion for deadline offers. WhatsApp and agent-link payments are sent
+server-side through Measurement Protocol with the stored client ID.
+Traffic overview, events and pages (28 Oct)
+Leads Page: Insights & Global Feature Benchmark
+Page 32 of 50
+
+
+=== PAGE 33 ===
+About 29% of all page views are portal and admin pages, and two of the seven most
+frequent events are tag-manager noise, so the site's own customer behaviour is smaller
+than the totals suggest.
+Countries: India 8.1K active users, United States 556 (about 6%), China 43, UAE 40,
+Ireland 28, Sweden 21, Brazil 18. The US share is high for an India-only service: it is either
+bots and crawlers or NRI interest (Taxplan sells NRI ITR). Check US sessions'
+engagement and landing pages before deciding.
+Browser language: English about 7,700 users, Hindi about 850, then Gujarati, Chinese,
+Marathi, Bengali and Kannada in small numbers; returning users are almost all English.
+With roughly 9 in 10 visitors on English-language browsers, website visitors are mostly
+English-speaking. But WhatsApp ad leads (riders especially) never reach the site, so
+this does not show the bot's audience reads English. Set the language from the ad or
+the lead's first message, and fall back to English with a one-tap Hindi switch.
+Events: page_view 72K, scroll 20K, gtm.dom 20K, user_engagement 18K, session_start
+16K, a custom event called "analytics" 12K, web_vitals 9.7K. "gtm.dom" is an internal
+Google Tag Manager trigger that should never be sent to GA4, and "analytics" says
+nothing about what happened; both inflate event counts and may be among the 4,156
+key events.
+Portal and admin pages share the marketing site's data. By page path: / 15,418 views;
+/dashboard 7,894 (290 users, 27 views each, 4m 46s); /login 5,605; /profile 3,601 (215
+users, 17 views each); /services/returns/itr-filing-online 3,473 (1,755 users, 37 s);
+/services/returns 2,292; /vault 2,052 (144 users, 14 views each); /services 2,018; /my-
+earnings 1,622 (165 users, 10 views each); /services/returns/gstr 1,519 (907 users, 54 s).
+Dashboard, login, profile, vault and my-earnings total about 20,800 of 71,971 views
+(29%): clients, consultants and staff using the portal.
+Page titles are duplicated and the brand is spelled three ways. "TaxPlan Advisor |
+India's Tax Marketplace | TaxPlanAdvisor" has 21,367 views from only 799 users (27
+views each, 5m 40s), so app screens reuse the homepage title. "India's Personalised
+Tax Ecosystem | Strategic Tax & Compliance Expert" has 7,681 views from 183 users (42
+views each, 20m 34s), again app use. The brand appears as "TaxPlan Advisor",
+"TaxPlanAdvisor" and "Taxplan Advisors".
+Customer-facing pages are short visits. "File ITR, GST & TDS Online with Experts":
+6,222 views, 3,176 users, 28 s. "File ITR Online with Tax Experts": 2,647 views, 1,663
+users, 31 s. The sign-in page: 2,162 views, 512 users.
+Leads Page: Insights & Global Feature Benchmark
+Page 33 of 50
+
+
+=== PAGE 34 ===
+Engagement time and stickiness: average engagement 2m 27s per user and 1m 21s per
+session; engaged sessions 1.2 per user. Engagement per user jumped to about 7
+minutes in early–mid October, the same window as the 15 October spike. DAU/MAU
+0.5%, DAU/WAU 2.2%, WAU/MAU 22.7%: normal for a one-off service, so retention
+should be judged in the CRM (repeat filings), not in GA.
+The 15 October homepage spike looks partly automated. Homepage views rose to 812
+against an expected 31; Chrome weekly views 38 → 744; views from "Google" devices
+27 → 591. A sudden jump on Google-branded devices points to testing tools, Google's
+own checks or a single source rather than ordinary visitors; check the day's sessions
+by device model and IP before treating them as customers.
+Fixes: remove gtm.dom and rename "analytics" to a specific event (or stop sending it); put
+the portal (/dashboard, /login, /profile, /vault, /my-earnings) in its own GA4 data stream or
+content group and exclude it from marketing reports; give every page a unique title and
+use one brand spelling ("Taxplan Advisors"); set the bot's language from the ad or first
+message, falling back to English with a Hindi switch; review US traffic for bots or NRI
+demand.
+Users over time, events by month, pages and Business Profile (28 Oct, batch 10)
+The biggest finding in this batch: the website was busiest in May–June, but leads and
+payments peaked in July–August. GA4 is therefore blind to most of the season's leads,
+which went straight from Meta ads into WhatsApp without a website visit.
+Month
+GA4 events (approx.,
+from chart)
+GA4 page views
+(approx.)
+CRM
+leads
+CRM
+payments
+Apr
+~27K
+~14K
+–
+–
+May
+~62K
+~23K
+114
+1
+Jun
+~77K
+~21K
+490
+4
+Jul
+~13K
+~5K
+1,658
+55
+Aug
+~9K
+~3.5K
+2,842
+20
+Sep
+~6K
+~2.5K
+351
+2
+Oct (to
+27th)
+~12K
+~4.5K
+246
+0
+Leads Page: Insights & Global Feature Benchmark
+Page 34 of 50
+
+
+=== PAGE 35 ===
+Website use fell after June, just as leads rose. Weekly active users start in mid-April,
+reach about 1K in late May and peak at about 2.6K in the week of 22 June, then drop to
+100–500 a week from July. In the CRM, 4,500 of 5,701 leads (79%) and 75 of 82
+payments arrived in July–August. GA4 sees none of the WhatsApp funnel unless the
+CRM sends it. Check also that the GA4 tag was not dropped from some templates in
+July (GTM version history, Tag Assistant).
+Portal use drove the early months. By month, /dashboard peaked at about 4K views in
+May and /profile in April–May, while the homepage peaked at about 6K in June and the
+ITR filing page only grew from June. April–May "traffic" is largely consultants, clients
+and staff in the portal.
+gtm.dom mostly stopped after June. It peaked at about 13K in May and is near zero
+from July, so it may already have been fixed. Confirm in GTM, and filter the earlier
+months out of event reports.
+Form events are not leads. form_start 7,056 (1,313 users) and form_submit 6,688 from
+just 508 users (13 each), against 73 generate_lead. GA4's automatic form tracking fires
+on any form, including login and portal forms. On average a user triggers 22 events;
+every event shows ₹0 revenue.
+Key events sit on the homepage and login page. The homepage carries 2,070 key
+events and /login 917, together about 72% of the 4,156 key events. Logging in is being
+counted as a key event. (The earlier homepage figure of 2,940 comes from the landing-
+page report, which credits all of a session's key events to the page the session started
+on; 2,070 counts where the events fired. Both point to the same problem.)
+The GSTR page converts far better than the ITR page. /services/returns/gstr: 907
+users, 273 key events (about 30 per 100 users), 54 s. /services/returns/itr-filing-online:
+1,755 users, 98 key events (about 6 per 100 users), 37 s. Key events include noise, so
+treat this as directional, but the ITR page, which gets the most paid traffic, needs work
+first. The two pages serve different buyers (salaried filers vs GST-registered
+businesses), so test changes on the ITR page rather than copying the GST page
+wholesale.
+New users ≈ active users (8.9K each). About 924 returning users (10%) are a subset of
+the new ones. Over the last 42 days, engagement per user falls to zero after about day
+24. In October one cohort shows about 100% retention and about 2 h of engagement: a
+tiny cohort of staff or testers, not customers.
+18 October anomaly. page_view hit 187 against an expected 11. Homepage events rose 1
+→ 74 week on week, and GA4 calls /login a "new page launch" (+42 events). An
+expected value of 11 shows how low the October baseline is for this view; a login page
+Leads Page: Insights & Global Feature Benchmark
+Page 35 of 50
+
+
+=== PAGE 36 ===
+appearing as "new" points to a release that changed URLs or tracking. Annotate
+releases in GA4.
+Page titles split again. The overview lists "India's Personalised Tax Ecosystem…" twice
+(7.7K and 5.1K) and "TaxPlan Advisor | File ITR, GST & TDS…" twice (6.2K and 3K): the
+same titles recorded with different screen classes or endings, which splits reports.
+Platform: 100% web. No app data stream is linked; if a mobile app exists or is planned,
+it needs its own stream.
+A Google Business Profile exists, but customers barely use it to reach Taxplan. From
+mid-April to October it had 376 interactions: 316 direction requests (84%), 48 website
+clicks (13%), 12 calls (3%), and zero messages, bookings or menu views. For an online
+service, direction requests dominating means people find the profile as a local office
+("CA near me"), yet only 60 people called or clicked through. Profile actions peaked at
+about 33 in a week in late June, then ran at 10–25 a week. Benchmark: the average
+profile gets about 59 actions a month, split roughly 34% website clicks, 27% directions
+and 17% calls (BrightLocal 2026, via Searchlab). Taxplan's volume is about average (~58
+a month), but the mix is upside down: 84% directions, 13% website, 3% calls. Weekly
+posting is linked to about 28% more actions, and profiles with 50+ reviews are far more
+likely to reach the Local Pack.
+Fixes: send WhatsApp and CRM stages to GA4 with the Measurement Protocol (lead,
+qualified, paid with value) so the July–August funnel is visible; check the tag on every
+template; turn off automatic form tracking or keep only the lead forms (by form ID); make
+generate_lead, qualify_lead, close_convert_lead and purchase the only key events,
+removing login and homepage events; rebuild the ITR page first (price, named CA,
+guarantee and a WhatsApp button above the fold) and A/B test it against the GSTR page's
+layout; exclude internal traffic before reading cohorts; add GA4 annotations for releases.
+For the Business Profile: add UTM tags to its website link (utm_source=google,
+utm_medium=organic, utm_campaign=gbp) so its visits show in GA4; add a booking or
+appointment link and a wa.me/91… WhatsApp link (Google switched off Business Profile
+chat in July 2024, so WhatsApp is the replacement); list services with prices; post weekly;
+ask every paid client for a review; check the map pin, hours and category so direction
+requests lead to the right office.
+Campaign cost import and acquisition overview (28 Oct, batch 11)
+GA4 has no Meta cost data at all: the campaign data import check shows a coverage rate
+of 0 of 12 for Meta source/medium rows, with 0 clicks, 0 impressions and ₹0 cost. GA4 can
+count Meta visits but cannot say what they cost or which campaign pays back.
+Leads Page: Insights & Global Feature Benchmark
+Page 36 of 50
+
+
+=== PAGE 37 ===
+Meta traffic is split across 12 source/medium spellings: ig, fb, an, meta,
+m.facebook.com, facebook.com and instagram.com, each with "paid" or "paid_social".
+The paid_social rows hold 52 of the 73 key events. Among the "paid" rows, ig and fb
+produce only 3 key events from 4,758 events, which confirms the "paid" setup problem.
+Audience Network ("an") shows 18 key events from 379 events. That is a much higher
+rate than its engagement suggested. Key events are still polluted (issue 96), so check
+these 18 against CRM leads and payments before acting. If they are not real leads,
+exclude Audience Network as planned. If they are real and paying, keep a small capped
+test instead.
+Sessions by channel: Direct 7.5K, Organic Search 3.2K, Cross-network 1.8K, Paid Social
+1.3K, Paid Search 1.1K, Organic Social 525, Referral 448. New users by first channel:
+Direct 4K, Cross-network 1.6K, Paid Social 1.2K, Paid Search 1K, Organic Search 680,
+Organic Social 278, Paid Other 52.
+Google Ads campaigns by sessions: "BR- Instant Form - Lead Gen" 784, "BR | India |
+Search | ITR Filing" 559, "India's Tax Experts" 334, TPA_ITR Filing 222,
+ITR_Business_Search 162, TPA_1000Off 135, ITR_F&O_Search 97. The Instant Form
+campaign appears under the Google Ads campaign dimension, so it is most likely a
+Google Ads campaign with a lead form asset, not a Meta Instant Form as assumed
+Session source / medium
+Events
+Key events
+ig / paid
+2,490
+1
+fb / paid
+2,268
+2
+ig / paid_social
+1,700
+17
+fb / paid_social
+1,583
+27
+an / paid
+297
+17
+meta / paid_social
+177
+5
+an / paid_social
+82
+1
+m.facebook.com / paid_social
+47
+2
+facebook.com / paid_social
+14
+0
+instagram.com / paid_social
+13
+0
+Total, 12 rows
+8,688
+73
+Leads Page: Insights & Global Feature Benchmark
+Page 37 of 50
+
+
+=== PAGE 38 ===
+earlier. Its leads then sit in Google Ads and need Google's lead form webhook to reach
+the CRM. The same offer is also named twice: TPA_1000Off in Google Ads and
+1000OFF_ITR in UTM tags.
+Realtime: 4 active users in the last 30 minutes, all from India, on a weekday afternoon
+in October. That is the off-season baseline.
+Fixes: import Meta cost into GA4, using GA4's data import for ad cost (a connector where
+available, or a daily CSV keyed on utm_id + utm_source + utm_medium), so every Meta
+row gets clicks, cost and cost per lead. Use one Meta URL template: utm_source=
+{{site_source_name}} (gives fb, ig, an, msg), utm_medium=paid_social, utm_campaign=
+{{campaign.name}}, utm_id={{campaign.id}}, utm_content={{ad.name}}. Add a GA4
+custom channel rule mapping fb, ig, an, meta, facebook.com, m.facebook.com and
+instagram.com to one "Meta Ads" channel. Check the 18 Audience Network key events in
+the CRM. Confirm whether "BR- Instant Form" is a Google lead form campaign and, if so,
+connect its webhook to the CRM. Rename campaigns to one pattern (itr_1000off_jul26).
+How the Meta import works: GA4 Admin → Data import → Cost data → Meta; it is free,
+refreshes daily, backfills up to two years and shows clicks and cost in the "Non-Google
+cost" report, but only for sessions whose source and medium match its mapping, so fix
+the template first. Google keeps lead form leads for 60 days (CSV covers 30), so any June
+leads from the Instant Form campaign that were never synced are already lost; connect
+the webhook (or Zapier or the API) now and switch on per-lead email alerts. On Audience
+Network, Jon Loomer's tests found it takes most of the budget when ads optimise for link
+clicks or landing-page views and almost none when they optimise for a quality event, so
+keep it only on lead or purchase goals.
+Points added from the GPT review ("TaxPlan Advisor: performance and improvement
+report", 28 Oct)
+The GPT report covers the same screenshots. Most of its findings were already here; the
+points below were missing or sharpen ours. Each was checked before it went in.
+The partnership calculator may show out-of-date law (new, P0). The GPT review says
+the public calculator page states the old Section 40(b) partner-remuneration limits:
+first ₹3 lakh of book profit, with a ₹1.5 lakh floor. Finance (No. 2) Act 2024 raised these
+to the first ₹6 lakh and a ₹3 lakh floor (90% of book profit up to that band, whichever is
+higher; 60% on the rest unchanged), from FY 2024-25 / AY 2025-26. The law change is
+confirmed; the page text could not be opened from here, so a CA should check the
+page and its calculation now. It is the site's top non-brand search asset (22K
+impressions), and a wrong result undermines trust in a tax firm. Keep the old rule for
+earlier years: let the user pick the year, rather than overwriting the constants.
+Leads Page: Insights & Global Feature Benchmark
+Page 38 of 50
+
+
+=== PAGE 39 ===
+A test copy of the site may be public (new, P1, unverified). The GPT review found
+testing.taxplanadvisor.in (a consultation page) in public search results. It could not be
+confirmed here. If it is reachable, protect it with a login (robots.txt is not access
+control), add noindex, and check that it uses test data only.
+CRM page tiles: hot 35, warm 60, cold 428, unassigned 6, alongside Won 93 and 21 paid
+via WhatsApp. Six unassigned leads is small, but every new lead should get an owner
+and a next-action date automatically.
+Earlier 28-day snapshot (to 25 Oct): 581 active users, 532 new, 5m 23s average
+engagement, about 11K events. It covers a different period, so it cannot be compared
+with the year-to-date totals.
+"Unassigned" and "(not set)" may be broken tracking, not bots. 206 Unassigned
+sessions have only 2.4% engaged but 2m 19s average engagement; 201 "(not set)"-
+source sessions have 0% engaged but 2m 22s. Real time with no engagement flag
+usually means events arriving without a proper session_start or page_view (server-
+side or late-firing tags), and 938 sessions (5.8%) have no landing page at all. Check
+event order and session association before adding bot filters.
+Business Profile "calls" are taps on the call button, not answered calls, and directions
+are not office visits (Google's definitions). The profile screenshot's date range is
+cropped, so it should not be compared directly with the year-to-date GA4 figures.
+GA4's own row totals do not add up exactly. Channel rows sum to 8,934 users vs 8,916
+shown; session channels to 16,092 vs 16,136; session platforms to 16,109; device rows to
+8,724 vs 8,697; ig/paid shows 378 new users against 376 total and the "paid" medium 739
+against 737. These are normal GA4 rounding, overlap and processing effects, so
+compare exports rather than forcing totals to match.
+Use existing performance data first. The site already sends 9,742 web_vitals events.
+Check those values against Google's "good" thresholds (LCP ≤ 2.5 s, INP ≤ 200 ms, CLS
+≤ 0.1 at the 75th percentile) before adding another tool. If session replay is used (for
+example Microsoft Clarity), keep it to public marketing pages and mask inputs, never
+tax documents, payments or account pages.
+The site already has a consultation journey. Per the GPT review it offers topic
+selection, scheduling, expert choice, document upload, a written summary and a
+callback form. Measure and fix completion of that journey before building new intake
+features.
+Management view: three separate layers. (1) Acquisition: source, cost, qualified-lead
+cost. (2) Cases: accepted, qualified and paid leads from the same creation cohort. (3)
+Money: verified receipts less refunds, CAC (spend ÷ new paying customers), ROAS
+Leads Page: Insights & Global Feature Benchmark
+Page 39 of 50
+
+
+=== PAGE 40 ===
+and contribution after acquisition cost. A single blended "conversion rate" cannot
+cover all three. Show the date range, timezone, attribution model and staff/customer
+scope on every card.
+Qualified lead, defined: reachable contact + a service Taxplan offers + a buying
+timeline (this filing season). Require an owner, next-action date, timestamps (created,
+first contact, qualified, won) and a loss reason from a short fixed list.
+Lifecycle events and tests. Send Google's recommended events from the CRM:
+generate_lead (accepted enquiry), working_lead (first contact), qualify_lead,
+disqualify_lead (with reason), close_convert_lead and close_unconvert_lead, plus
+purchase only for verified payments (transaction_id, INR, value). Give each event a
+unique ID so retries never double-count. Check payloads with GA4's Measurement
+Protocol validation endpoint, because a 2xx response alone does not mean GA4
+accepted the event. Tests: one valid enquiry creates one lead and one event; a failed
+payment creates no purchase; a refund reconciles.
+Experiments once tracking is clean. (A) Partnership calculator result: a generic
+consultation link vs a "get this checked by a CA" action. (B) Paid social: a dedicated
+service page vs the current destination. (C) After a lead is accepted: a document
+checklist with a visible next step. Judge each on qualified leads and paid customers,
+not clicks; run through a full season, or treat small samples as directional.
+What to defer: a native app, a CRM migration, algorithmic lead scoring and AI tax
+advice. Configure the current CRM first if it can hold stable IDs, stage history,
+assignment and webhooks; buy or migrate only if it cannot. Keep a decision log for
+every trial (issue, evidence, option chosen, owner, cost cap, stop rule, review date).
+Google Analytics: what to set up now
+GA4 has only just started, so there is no history to analyse yet; the value now is in wiring it
+so the next ITR season can be measured from ad click to payment.
+1. Track the steps as events. website visit → click-to-WhatsApp or widget open
+( generate_lead ) → service viewed → checkout started ( begin_checkout ) → payment
+( purchase , with value in INR). Website payments are 74% of paid leads, so this closes
+the biggest attribution gap.
+2. Tag every ad link with UTMs, including campaign, ad set and ad ID. Today ad set is
+empty on every lead and campaign on all but 39.
+Leads Page: Insights & Global Feature Benchmark
+Page 40 of 50
+
+
+=== PAGE 41 ===
+3. Carry the IDs into the lead. Save the GA client ID, gclid/fbclid and UTMs on the lead
+when it is created (pass them through the WhatsApp pre-filled message or the
+widget), so the leads page can show the landing page and first source for each lead.
+4. Send outcomes back. Push stage changes (cart built, paid) to GA4 via Measurement
+Protocol, to Google Ads as offline conversions, and to Meta through the Conversions
+API. Meta can then optimise for paid leads rather than chat starts, which matters given
+0.4% paid rate on Meta.
+5. Turn on the free BigQuery export from day one so raw history builds up and joins
+cleanly with the leads export. Consent Mode v2 is required only for EEA/UK traffic; for
+Indian users, align consent capture with the DPDP notices instead.
+6. First report to build: cost per paid lead by ad and service, and website-vs-WhatsApp
+payment share by week.
+On the leads page this becomes a "Journey" strip per lead (ad → landing page →
+WhatsApp → AI call → cart → paid) and an ROI card per source.
+Competitors: price and funnel
+Price is not the problem: Taxplan's "from ₹999" ITR matches or beats the main online
+competitors. What they have and Taxplan lacks is verifiable trust, deadline-dated offers,
+and recurring plans.
+Service
+Taxplan
+Advisors
+ClearTax
+TaxBuddy
+Tax2win
+Quicko
+Vakilsearch
+IndiaFilings
+Salaried
+ITR
+(assisted)
+From
+₹999
+₹3,799 (struck
+from ₹7,598)
+₹999 + tax
+₹2,314 +
+tax
+₹999
+(partner
+page)
+—
+Premium
+₹12,899 +
+GST
+Business
+ITR
+Not
+shown
+₹2,999
+presumptive
+₹2,499 + tax
+₹4,128 +
+tax
+44ADA
+₹1,999
+In GST plan
+From ₹1,999
+Capital
+gains ITR
+Not
+shown
+₹5,999
+₹2,999 + tax
+₹6,351 +
+tax
+₹1,999
+—
+—
+F&O ITR
+Not
+shown
+In
+Premium/Elite
+₹4,499 + tax
+In
+capital
+gains
+plan
+₹2,999
+—
+—
+GST
+returns
+Listed
+—
+Listed
+—
+—
+12 months
+₹2,999 + tax
+From
+₹499/month
+Leads Page: Insights & Global Feature Benchmark
+Page 41 of 50
+
+
+=== PAGE 42 ===
+Competitor prices from their own pages, checked October 2026; some include GST and
+some show "+ tax", so re-check before using in ads.
+Prices re-checked on 28 Oct 2026 (before 18% GST unless noted). ClearTax: Basic
+₹2,499 (struck from ₹5,000), Premium ₹3,799, Luxe annual from ₹25,000. TaxBuddy:
+salary ₹999, capital gains ₹2,999, F&O/crypto/NRI ₹4,499, Premium ₹9,999; GST
+freelancer ₹9,000 a year. Tax2win: Standard ₹2,893 (₹2,314 with coupon), capital gains
+₹7,939, NRI ₹11,910. Quicko: salaried ₹2,499, investors ₹3,999, F&O/NRI ₹5,999.
+Vakilsearch: ITR ₹2,499 + tax; GST ₹999 (3-month trial), ₹2,999 or ₹4,999 a year.
+IndiaFilings: ITR-2 assisted ₹2,899, CA-assisted ₹12,899; GST ₹7,899 a year, GST + ITR
+₹19,899. CA-assisted salaried ITR clusters at ₹2,300–2,900 (TaxBuddy is the low outlier);
+annual GST for small filers at ₹7,900–12,000. Taxplan's ₹999 sits well below the cluster, so
+it should be sold as value with a named CA and guarantee, not read as a budget service.
+Taxplan's price edge is hidden. TaxBuddy's ₹999 becomes about ₹1,179 with GST. If
+Taxplan's ₹999 includes GST, label it "₹999, GST included".
+Competitors anchor with discounts. ClearTax shows a 50% strike-through, Tax2win a
+"WELCOME_OFFER" about 20% off, Vakilsearch 35–60% off. Taxplan's permanent 10%
+code (TAXPLAN10) is weak; a dated early-bird price ("before 15 July") works harder.
+Riders are a near-free segment. ClearTax files gig workers' returns on WhatsApp in 10
+languages; 49% of Zepto's delivery partners filed through ClearTax in 2025. A ₹599
+rider product must sell what free options lack (a human CA, refund follow-up, notice
+support) and be judged on cost per paid order.
+Service
+Taxplan
+Advisors
+ClearTax
+TaxBuddy
+Tax2win
+Quicko
+Vakilsearch
+IndiaFilings
+Rider ITR
+₹599
+Free via
+Zomato/Zepto
+tie-ups
+₹24 self-file
+(JioFinance)
+—
+—
+—
+—
+Trust and
+funnel
+feature
+ClearTax
+TaxBuddy
+Tax2win
+Vakilsearch
+IndiaFilings
+Taxplan
+Speed
+promise
+"24 hrs
+guaranteed";
+Elite 12 hrs
+—
+—
+GST
+registration in
+24–48 hrs
+—
+Not quantified
+Expert
+proof
+Named CAs;
+claims 10,000+
+CAs
+"CA-guided"
+eCA plans
+Dedicated
+expert
+Dedicated
+CA
+"Verified
+experts", none
+named
+Leads Page: Insights & Global Feature Benchmark
+Page 42 of 50
+
+
+=== PAGE 43 ===
+Taxplan's own website: quick fixes
+Four problems on the live site cost trust and tracking today.
+The WhatsApp link looks broken. The footer uses wa.me/7887891236 . WhatsApp
+requires the full international number: wa.me/917887891236 . Add a pre-filled message
+with the page name and a reference code, then test on Android and iOS.
+Self-declared review stars. The homepage markup claims "4.8/5 from 500 reviews"
+with no third-party source. Google does not show stars for reviews a business controls
+about itself. Replace it with a live Google Business Profile rating and named reviews.
+No named experts. Leaders show named CAs with ICAI membership numbers, returns
+filed and review counts. Taxplan shows incubation and DPIIT badges but no names.
+Brand name clash. "Tax plan advisors" also returns a US firm (taxplanadvisors.com)
+and a US product (TaxPlanIQ). Bid on the brand name and keep a Google Business
+Profile so brand searches land on Taxplan.
+Reviews matter more for high-priced services: an e-commerce study by Northwestern's
+Spiegel Research Center found five reviews raised purchase likelihood 270% over none,
+and 380% for higher-priced items. Ask for a Google review on WhatsApp right after the
+ITR acknowledgement is shared.
+Search in the AI Overviews era
+Google's AI summaries now answer informational tax queries on the results page, so due-
+date blogs will get fewer clicks whatever their titles say; calculators hold up better.
+Evidence. Seer Interactive (3,119 queries, June 2024–September 2025): organic CTR on
+queries with AI Overviews fell from 1.76% to 0.61%; Seer's April 2026 update found a
+partial recovery, from a 1.3% low in December 2025 to 2.4% in February 2026, and
+brands cited in AI Overviews got 35% more organic clicks. In India, Techmagnate found
+Trust and
+funnel
+feature
+ClearTax
+TaxBuddy
+Tax2win
+Vakilsearch
+IndiaFilings
+Taxplan
+After filing
+Live sessions
+Notice
+support
+included
+Notices,
+revised
+returns
+Money-back
+guarantee
+Notice reply
+₹2,899
+Refund badge;
+notices sold
+separately
+Savings
+proof
+"Avg. refund
+₹30,990"
+"Cut taxes
+up to 26%"
+—
+—
+—
+None shown
+Leads Page: Insights & Global Feature Benchmark
+Page 43 of 50
+
+
+=== PAGE 44 ===
+AI Overviews on finance queries rose from 6.9% to 29.1% between October 2024 and
+May 2025, and informational queries lost a third of their CTR against 9.5% for
+transactional ones.
+Where to invest. The partnership calculator (22K impressions) and capital-gains
+calculator (7.3K) are interactive tools an AI summary cannot replace. "Audit last date
+2026" (11K) is the type of query AI Overviews answer directly.
+Tactics.
+Put the year and status in due-date titles ("Tax Audit Due Date AY 2026-27: 21 Nov
+(extended)") and update them the day CBDT announces a change; show a "last
+updated" date and a two-line answer at the top.
+On calculator results, add one next step: "Get this filed by a CA – ₹X, GST included",
+with a WhatsApp button that carries the inputs and a reference code.
+Move the 13 investment calculators out of the main navigation so the site reads as a
+tax firm.
+Attribution: one reference ID from ad to payment
+One shared reference code, carried from the first click to the Razorpay payment, is what
+makes every channel's return measurable.
+Attribution flow · 4 steps, 1 trigger, 3 reporting destinations
+Leads Page: Insights & Global Feature Benchmark
+Page 44 of 50
+
+
+=== PAGE 45 ===
+Capture. When a visitor clicks the WhatsApp button or starts checkout, store the GA
+client ID, gclid/fbclid and UTMs against a short code ("Ref: TP-8F3K2") placed in the
+pre-filled WhatsApp message. Click-to-WhatsApp ads deliver ctwa_clid with the first
+message.
+Carry. Razorpay payment links accept a reference_id and up to 15 notes fields. Use
+the TP code as the reference ID and put the lead ID, click IDs and service code in the
+notes.
+Report back. On Razorpay's payment_link.paid webhook, send purchase to GA4
+(Measurement Protocol, which needs the stored client ID), "Paid" with value to Google
+Ads (enhanced conversions for leads) and Purchase to Meta (Conversions API with
+ctwa_clid). Wati and Gallabox send the Meta events without code.
+Google Ads and Performance Max
+Performance Max optimises for whatever counts as a conversion, so with only 7 CRM
+leads attributed to Google it cannot tell good leads from spam.
+1. Run Search first: exact and phrase match on "ITR filing CA", "GST return filing service"
+and the brand name.
+2. Import "Paid" (with value) for 2–4 weeks before restarting Performance Max.
+3. Add brand exclusions, negatives (free, government portal, login, job) and a past-client
+list as an audience signal.
+4. Use value rules so business, GST and TDS orders count more than salaried ITR.
+CPC estimates for Indian finance keywords range from ₹30 to ₹450 across agency blogs,
+with no tax-specific benchmark; compute cost per paid order once conversions are
+imported. Google cites one advertiser with 8% more conversions and 3% lower cost per
+lead after enhanced conversions for leads (Google material, vendor).
+Remarketing and audiences
+Meta cannot build an audience from WhatsApp chats directly, so CRM segments must be
+uploaded as customer lists.
+Meta. Upload weekly: unpaid carts ("your cart is saved" ads), language-question drop-
+offs, and paid clients (excluded from acquisition ads).
+Leads Page: Insights & Global Feature Benchmark
+Page 45 of 50
+
+
+=== PAGE 46 ===
+GA4 audiences to build: calculator users with no WhatsApp click (30 days); checkout
+visitors with no purchase (14 days); business-service page viewers; past buyers (540
+days) for renewals.
+Deadline timing. Raise frequency in the 10 days before 31 July, 31 August, the audit
+dates, 31 December (belated returns), GST dates (11th and 20th) and quarterly TDS;
+pause after each.
+Recurring revenue and retention
+Competitors sell compliance as prepaid plans; Taxplan sells one-off services.
+Benchmarks. Vakilsearch: GST registration ₹1,999 with 6 months of returns, 12 months
+of returns ₹2,999. IndiaFilings: GST + ITR combo from ₹9,999 a year; annual TDS plan
+₹15,899. ClearTax: year-round business plan ₹6,999 with 4 advance-tax payments.
+For Taxplan. Attach a prepaid annual return plan to every GST registration; follow every
+business ITR with an advance-tax reminder service (15 Sep, 15 Dec, 15 Mar); offer
+salaried clients "next year's filing at this year's price" at the moment of filing.
+Measure. No public renewal or cross-sell rates exist for Indian tax firms. Track repeat
+purchase within 12 months, GST plan renewal and ITR-to-GST cross-sell.
+After-payment features to add
+Indian WhatsApp CRMs are strong at capture and payment but weak at delivering the
+work; tax-practice tools are the reverse. Taxplan's CRM should bring the practice-tool
+features into WhatsApp.
+Feature
+What it does for Taxplan
+Who offers it
+Document checklist
+per service
+Form 16, AIS/26AS, broker P&L,
+GST sales register requested as a
+WhatsApp form, with a reminder
+every 48 h until complete
+TaxDome, Financial Cents,
+Zoho Practice, Karbon;
+WhatsApp forms in Interakt
+and Gallabox
+Filing-status stages
+Client sees Docs received →
+Computation shared → Approved
+→ Filed → ITR-V verified → Refund
+tracked
+TaxDome, Zoho Practice,
+Canopy
+Leads Page: Insights & Global Feature Benchmark
+Page 46 of 50
+
+
+=== PAGE 47 ===
+Published starting prices, for budgeting (vendor or third-party pages, 2026): Gallabox
+₹2,999 a month (₹2,399 billed annually); TeleCRM ₹799 per user a month; Kylas ₹12,999 a
+month for unlimited users plus ₹3,500 for WhatsApp; Zoho Practice Premium $149 a
+month; Financial Cents $19–49 per user a month; Canopy $74–109 per user a month;
+TaxDome about $700–1,100 per seat a year. Interakt and Wati prices conflict across
+sources (roughly ₹1,000–3,000 a month).
+Action plan: this week, 30 days, 90 days
+This week
+1. Fix the WhatsApp link to wa.me/917887891236 with a pre-filled message and
+reference code.
+2. Filter staff and localhost traffic out of GA4.
+3. Check the existing generate_lead trigger; add begin_checkout and purchase ; mark
+purchase as a key event.
+4. Put the TP reference code into the CRM lead and the Razorpay link; send purchase
+from the Razorpay webhook.
+5. Remove the self-declared review markup; show the existing Google Business Profile's
+rating on the site and link to it.
+Feature
+What it does for Taxplan
+Who offers it
+Consent and approval
+Computation approved by a
+WhatsApp button tap, time-
+stamped
+TaxDome, Financial Cents,
+Canopy (e-sign)
+Payment links with
+reconciliation
+Razorpay link tied to the lead and
+order ID; paid status updates the
+lead
+Interakt, Wati, Gallabox,
+TaxDome
+Review and referral
+request
+Sent automatically after the ITR
+acknowledgement
+Common in practice tools;
+Vakilsearch "refer a friend"
+Renewal reminders
+Tied to each service's next
+deadline
+Zoho Practice, Financial
+Cents
+AI document reading
+Pre-fills from Form 16/AIS
+ClearTax's AI filing shows it
+can be done; not verified for
+Indian CRMs
+Leads Page: Insights & Global Feature Benchmark
+Page 47 of 50
+
+
+=== PAGE 48 ===
+Next 30 days
+6. Import Paid into Google Ads and Meta; make Paid the bidding goal.
+7. Rebuild the partnership and capital-gains calculator results into a CA-filing offer with a
+WhatsApp button; refresh due-date titles; add a named-CA block.
+8. Build GA4 audiences; upload CRM segments to Meta weekly.
+9. Replace the 10% code with dated offers; label prices "GST included".
+10. Standardise UTM mediums and campaign names; fix links landing on /404; pause or
+rework campaign 6977406146903 (26% engaged).
+Next 90 days
+11. Launch annual GST, business compliance and "lock next year's ITR" plans.
+12. Add document checklists, status stages, consent capture, review requests and
+renewal reminders to the CRM.
+13. Reposition rider ads around human CA support; judge them on cost per paid order.
+14. Restart Performance Max only after 2–4 weeks of imported Paid conversions.
+Sources and caveats
+Data: leads-2026-10-27.csv (5,701 leads, 17 May – 27 Oct 2026), the leads page
+screenshot of 27 Oct, and Assignment1.docx. Columns after "Value" were re-aligned
+before analysis (see Data quality).
+Benchmark stats quoted from the assignment: MIT/InsideSales (21x at 5 min), GoKwik
+(2.5x with AI call + WhatsApp; 2x cart recovery), caller.digital and an Indian voice-AI
+vendor (10–18% recovery, vendor claims), ConnexCS and Famulor (handoff and
+escalation norms; the research pass could not verify these figures).
+Benchmark matrix: desk research from public product material; segment-typical
+features adjusted per firm. Spot-check before external use.
+Pages opened for 2026 feature checks: 11x: AI voice agents for speed to lead,
+Salesforce Ben: Agentforce SDR, eesel: HubSpot Breeze capabilities.
+Not available: ad spend, call records and GA4 history, so cost per lead, AI-vs-human
+call mix and time to first AI call could not be measured.
+Research sources (gathered by the deep-research pass, 27 Oct 2026):
+Baymard Institute: checkout usability and abandonment
+Social Samosa: GoKwik AI voice + WhatsApp cart recovery
+Leads Page: Insights & Global Feature Benchmark
+Page 48 of 50
+
+
+=== PAGE 49 ===
+Spur: click-to-WhatsApp ads benchmarks and Meta case studies
+Interakt: Conversions API setup
+Respond.io: send Conversions API event
+Wati: WhatsApp list message limits
+TRAI press release 11/2025 and PIB: TCCCPR amendment
+PIB: DPDP Rules notified
+Edesy: AI voice agent pricing India 2026
+EasyReturn: TDS refund for delivery riders
+ClearTax: ITR last dates
+LeadSquared: Invorto voice bot · Qontak pricing and SLA features · Gallabox CAPI ·
+Kommo CAPI
+Zendesk CX Trends 2020
+Google Analytics section (GA4 screenshots shared 27 Oct 2026, plus):
+Google: GA4 recommended events
+Loves Data: GA4 lead generation reports
+Clickport: why GA4 direct traffic is high
+Backlinko: Google organic CTR study
+GA values were read from screenshots; weekly figures taken from the line chart are
+approximate.
+Ahrefs-derived traffic estimate for cleartax.in · TaxDome pricing · Blueticks: WhatsApp
+pricing 2026
+Orbit Media: GA4 engagement rate guide (55% average, 65 sites)
+Search Engine Land: ChatGPT traffic rivals organic search engagement (Siege Media,
+304 sites)
+Competitor, SEO, attribution and retention sections (second research pass, 28 Oct 2026):
+Taxplan Advisors homepage
+ClearTax · Tax2win CA-assisted plans · Vakilsearch GST registration fees · IndiaFilings
+GST + ITR · IndiaFilings TDS filing
+Business Standard: JioFinance tax filing · ThePrint: ClearTax for Zomato partners
+Search Engine Land: AI Overviews cut organic and paid CTR (Seer Interactive) ·
+Techmagnate: AI Overview impact on CTR in India
+Leads Page: Insights & Global Feature Benchmark
+Page 49 of 50
+
+
+=== PAGE 50 ===
+Razorpay payment links API · Google Ads: upload offline conversions · Meta
+Conversions API parameters · Wati: CTWA conversions via CAPI · Gallabox pricing
+Google: Performance Max lead-quality best practices (PDF) · Meta engagement
+custom audiences
+TaxDome · Zoho Practice pricing · Financial Cents vs Canopy
+Dixa: online reviews and purchase likelihood (Spiegel Research Center)
+Leads Page: Insights & Global Feature Benchmark
+Page 50 of 50

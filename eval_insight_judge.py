@@ -29,6 +29,11 @@ def main() -> None:
                        response_format="json", metadata={"task": "insight_judge_eval"})
 
     gold = json.loads((Path(__file__).resolve().parent / "tests" / "data" / "insight_gold.json").read_text(encoding="utf-8"))
+    # v6.35: pairs from your dashboard ratings count as your verdicts too.
+    from services import insight_ratings
+    rated = insight_ratings.gold_pairs(insight_ratings.load())
+    known = {(p["a"], p["b"]) for p in gold.get("human_pairs") or []}
+    gold["human_pairs"] = list(gold.get("human_pairs") or []) + [p for p in rated if (p["a"], p["b"]) not in known]
     result = judge.agreement(gold, ask)
     for name, title in (("agreement_with_you", "AGREEMENT WITH YOUR VERDICTS (only pairs you decided)"),
                         ("reference_sanity", "REFERENCE SANITY CHECK (not your verdicts; never counted above)")):

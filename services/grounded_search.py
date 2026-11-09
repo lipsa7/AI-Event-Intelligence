@@ -152,6 +152,8 @@ class GeminiGroundedSearch:
             config = self.types.GenerateContentConfig(**config_kwargs)
             # Wall-clock bound as well, in case the transport ignores the
             # request timeout: the run never waits longer than `timeout`.
+            from services.gemini_llm_service import consume_call
+            consume_call()   # v6.36.2: grounded searches count toward an optional call ceiling too
             pool = concurrent.futures.ThreadPoolExecutor(max_workers=1)
             future = pool.submit(self.client.models.generate_content, model=self.model_name,
                                  contents=self._prompt(query, from_date, to_date), config=config)

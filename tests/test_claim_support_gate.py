@@ -783,7 +783,10 @@ class ReleaseFlowTests(unittest.TestCase):
                     sys.modules[name] = module
         # v6.17.1: four-section contract. Section 2 is visibly present even
         # when empty, and section 4 says "None this run".
-        self.assertEqual(calls[0], ("subheader", "Briefing"))
+        # 26 Oct 2026: the report now opens with its strongest inference; an empty report says so.
+        self.assertEqual(calls[0], ("subheader", "Main inference this run"))
+        self.assertIn(("warning", "This report contains no inference beyond the news itself."), calls)
+        self.assertIn(("subheader", "Briefing"), calls)
         self.assertIn(("subheader", "Hidden cross-actor insight"), calls)
         self.assertIn(("markdown", "**None this run.**"), calls)
 

@@ -29,7 +29,8 @@ DRAFT = {"headline": "", "paragraphs": [], "analogies": [], "implications": [
     {"basis": "incentive", "text": "Faster incident reporting appears strategically attractive for OpenAI.",
      "fact_ids": ["F1"], "actor": "OpenAI", "policy_or_regulation": "Article 55 requires incident reporting",
      "company_relevance": "it took three months to notify a government", "economic_or_strategic_effect": "fines",
-     "attractive_move": "report within days", "conditions": "the Commission does not enforce Article 55"}]}
+     "attractive_move": "report within days", "conditions": "the Commission does not enforce Article 55",
+     "counterparty": "the European Commission", "counterparty_consequence": "receives incident reports within days, not months"}]}
 
 
 def _run(backing_for_rule):

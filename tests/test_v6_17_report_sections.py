@@ -48,7 +48,9 @@ DRAFT = {
     ],
     "analogies": [
         {"case_id": "H1", "fact_ids": ["F2"], "comparison": "Payment limits for third-party apps",
-         "difference": "Agents act autonomously"},
+         "difference": "Agents act autonomously",
+         # v6.36.1: an analogy must say why it may mislead, or it is not shown
+         "why_it_may_mislead": "Caps on human-run apps may not bind autonomous agents"},
         {"case_id": "H9", "fact_ids": ["F1"], "comparison": "Invented case"},
     ],
 }
@@ -284,7 +286,9 @@ def test_analogy_with_invented_difference_is_removed():
     facts, cases = setup()
     draft = brief.parse_draft(dict(DRAFT, analogies=[
         {"case_id": "H1", "fact_ids": ["F2"], "comparison": "Payment limits for third-party apps",
-         "difference": "The historical case caused a recession."}]), facts, cases)
+         "difference": "The historical case caused a recession.",
+         "why_it_may_mislead": "Different regulator"}]), facts, cases)
+    assert draft["analogies"]   # v6.36.1: kept by the parser, so the difference check below is what removes it
     claims = brief.grounding_claims(draft, facts, cases)
     out = brief.sanitize(draft, claims, _statuses_failing(claims, brief.DIFFERENCE_PREFIX), facts, cases)
     assert out["analogies"] == []
@@ -337,7 +341,8 @@ PRECEDENT_DRAFT = {
          "fact_ids": ["F2"], "watch_for": "other fintechs announcing agent limits", "horizon": "12 months"},
         {"conditions": "enterprises keep deploying AI agents", "basis": "leverage", "text": "Identity vendors like Okta gain leverage over how enterprises deploy agents.",
          "fact_ids": ["F1"], "watch_for": "", "horizon": "", "holder": "Okta", "counterparty": "enterprises using AI agents",
-         "leverage_source": "a kill switch that stops an AI agent's access", "mechanism": "agents depend on Okta access"},
+         "leverage_source": "a kill switch that stops an AI agent's access", "mechanism": "agents depend on Okta access",
+         "counterparty_alternatives": "none named in the facts", "holder_dependence": "Okta needs them as customers, one of many"},
         {"conditions": "enterprises keep deploying AI agents", "basis": "precedent", "case_id": "H9", "text": "Invented precedent.", "fact_ids": ["F1"]},
         {"conditions": "enterprises keep deploying AI agents", "basis": "precedent", "case_id": "", "text": "Precedent with no case.", "fact_ids": ["F1"]},
     ],
@@ -477,7 +482,7 @@ def test_incentive_implication_is_a_checked_strategic_assessment():
          "strategically attractive for Equals Money.", "fact_ids": ["F2"], "actor": "Equals Money",
          "policy_or_regulation": "payments cannot be initiated by AI agents", "company_relevance": "it runs an MCP server",
          "economic_or_strategic_effect": "lower payment risk", "attractive_move": "read-only agent access",
-         "conditions": "regulators allow agent payments"}]}, facts, cases)
+         "conditions": "regulators allow agent payments", "counterparty": "the FCA", "counterparty_consequence": "sees fewer agent-initiated payment incidents"}]}, facts, cases)
     claims = brief.grounding_claims(draft, facts, cases)
     prefixes = [c["claim_text"] for c in claims]
     assert prefixes[0].startswith(brief.POLICY_EXISTS_PREFIX)

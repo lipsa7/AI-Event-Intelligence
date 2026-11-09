@@ -25,7 +25,7 @@ import re
 from datetime import datetime, timezone
 from typing import Any, Mapping, Sequence
 
-VERSION = "editorial-briefing-v1.12-credible-sources"
+VERSION = "editorial-briefing-v1.20-per-fact-corroboration"
 
 ANALYSIS_BAR = frozenset({"supported", "inference_supported"})
 FACT_BAR = frozenset({"supported"})
@@ -74,6 +74,32 @@ POLICY_EFFECT_PREFIX = "It follows from the cited facts that this rule or incent
 POLICY_CONDITION_PREFIX = "Given the cited facts, this condition could change the conclusion (analysis): "
 POLICY_FIELDS = ("actor", "policy_or_regulation", "company_relevance", "economic_or_strategic_effect",
                  "attractive_move")
+# v6.36.3 (GPT review of v6.36.2): a rule-based move needs a specific actor, a specific counterparty,
+# the mechanism (economic_or_strategic_effect) and the consequence for the counterparty. A loser is
+# required ONLY when the claim is competitive displacement: a move can benefit both parties (customer
+# trust, shared safeguards), and a mandatory loser would invite invented rivalry.
+POLICY_PARTY_FIELDS = ("counterparty", "counterparty_consequence", "competitive_displacement", "who_gains", "who_loses")
+DISPLACEMENT_WORDS = re.compile(
+    r"\b(?:at\s+the\s+expense\s+of|displac\w*|market\s+share|(?:win|wins|winning|take|takes|taking|steal\w*)\s+"
+    r"(?:\w+\s+)?(?:share|customers?|contracts?|business|clients?|deals?)\s+(?:from|away)|"
+    r"(?:lose|loses|losing)\s+(?:\w+\s+)?(?:share|customers?|contracts?|ground|business|clients?)|undercut\w*|"
+    r"outcompet\w*|crowd(?:s|ed|ing)?\s+out|lock(?:s|ed|ing)?\s+out|squeez\w*\s+out)", re.I)
+# v6.36.4 (resource-dependence theory, Pfeffer & Salancik): A has leverage over B only when B
+# needs what A controls, B has few alternatives, and B needs A more than A needs B. The last two
+# are stated per leverage implication and checked as reasoning steps (labelled if not backed).
+LEVERAGE_FIELDS = ("holder", "counterparty", "leverage_source", "mechanism", "counterparty_alternatives",
+                   "holder_dependence")
+ALTERNATIVES_PREFIX = ("It follows from the cited facts that these are {counterparty}'s realistic alternatives to "
+                       "{holder} for this (an inference): ")
+ASYMMETRY_PREFIX = ("It follows from the cited facts that {holder} depends on {counterparty} less than "
+                    "{counterparty} depends on {holder}; what {holder} needs from {counterparty} (an inference): ")
+# v6.36.5 (Halawi et al. 2024: the forecasting system that neared human crowds reasons from base
+# rates across similar past cases): a precedent implication says how many of the listed cases
+# with the same mechanism ended in the outcome it expects, instead of resting on one analogy.
+BASE_RATE_PREFIX = ("The cited past cases follow the same mechanism as this implication, and the outcome it expects "
+                    "followed in {with_outcome} of them ({ids}) (an inference): ")
+COUNTERPARTY_PREFIX = "It follows from the cited facts that this move has this consequence for {counterparty} (an inference): "
+POSITION_PREFIX = "It follows from the cited facts that {gains} gains position relative to {loses} through this move (an inference)."
 # A precedent raises a likelihood; it never proves repetition.
 CERTAINTY_WORDS = re.compile(r"\b(will|certainly|inevitably|guaranteed|must|definitely|bound to)\b", re.I)
 EARLIEST_CASE_YEAR = 1800
@@ -253,7 +279,8 @@ def select_cases(historical_records: Sequence[Mapping[str, Any]], limit: int = 6
     return cases
 
 
-def build_prompt(topic: str, facts: Sequence[Mapping[str, Any]], cases: Sequence[Mapping[str, Any]]) -> str:
+def build_prompt(topic: str, facts: Sequence[Mapping[str, Any]], cases: Sequence[Mapping[str, Any]],
+                 focus: str = "") -> str:
     lines = [
         "You are a senior analyst writing a short editorial intelligence briefing for a busy reader.",
         f"RESEARCH TOPIC: {_clean(topic)}",
@@ -272,6 +299,14 @@ def build_prompt(topic: str, facts: Sequence[Mapping[str, Any]], cases: Sequence
                          + (f" Outcome: {case['outcome']}" if case.get("outcome") else "")
                          + (f" [found for: {case['precedent_for']}]" if case.get("precedent_for") else "")
                          + f" Similar: {case['similarity']} Different: {case['difference']}")
+    if _clean(focus):
+        # v6.36 policy fit: in the 2026-10-11 runs the incentive implications named generic actors
+        # ("general-purpose AI model providers") and compliance steps ("submit ...") as the move.
+        lines += ["", f"ORGANISATION BEING ADVISED: {_clean(focus)}. At least one leverage or incentive implication "
+                  f"must name {_clean(focus)} as the actor or holder, where the facts allow. For a rule or incentive, "
+                  "complying with it is NOT an attractive_move: the move must act on a named counterparty (rival, "
+                  "customer group, supplier, partner or regulator) and say what changes for it and why the rule "
+                  "makes the move attractive now. Name a loser only if the move displaces a rival."]
     lines += [
         "",
         "Write:",
@@ -285,16 +320,32 @@ def build_prompt(topic: str, facts: Sequence[Mapping[str, Any]], cases: Sequence
         "Prefer, in this order: basis \"precedent\" - a listed historical case shows what followed a "
         "structurally comparable situation (not merely the same industry or deal type); say it raises the "
         "likelihood of a similar outcome for a named current actor or makes it worth watching, never that it "
-        "will happen; cite its case_id and the current fact ids; basis \"leverage\" - the current facts show "
+        "will happen; cite its case_id and the current fact ids; similar_case_ids (EVERY listed case whose "
+        "mechanism matches, including case_id) and outcome_case_ids (those of them in which the outcome this "
+        "implication expects actually followed), so the reader sees a base rate such as 2 of 3, not one anecdote; "
+        "state the likelihood consistently with that count, and remember the listed cases are a small sample found by "
+        "search, so never present the count as a measured probability; basis \"leverage\" - the current facts show "
         "that a named holder controls a resource, contract, access, rule or position that a named "
         "counterparty depends on; fill holder, counterparty, leverage_source (the controlled thing), "
-        "mechanism (how it gives leverage) and possible_consequence; basis \"incentive\" (policy or incentive fit) - a "
+        "mechanism (how it gives leverage), counterparty_alternatives (REQUIRED: the counterparty's realistic "
+        "substitutes for what the holder controls, as the facts show them; if the facts name none, write 'none named "
+        "in the facts' - never 'no alternative exists'), holder_dependence (REQUIRED: what the holder needs from the "
+        "counterparty in return, and why that is less than what the counterparty needs from the holder) and "
+        "possible_consequence. It is leverage ONLY if the counterparty needs the thing, has few alternatives, and "
+        "needs the holder more than the holder needs it; if the alternatives are easy or the dependence is mutual, "
+        "it is not leverage - use another basis or leave it out; basis \"incentive\" (policy or incentive fit) - a "
         "current regulation, subsidy, tax treatment, procurement rule, zoning change or incentive in the facts "
         "makes a strategic move unusually attractive for a named actor; fill actor, policy_or_regulation (what "
         "applies or changed), company_relevance (why it matters to this actor specifically), "
         "economic_or_strategic_effect (lower cost, more demand, a barrier removed, an alternative penalised), "
         "attractive_move (the action that becomes more attractive; say it 'appears strategically attractive', "
-        "not that the company should or will do it) and conditions (what could make this wrong); basis \"trend\" - only when none of these applies. Before writing each implication, weigh the "
+        "not that the company should or will do it), counterparty (REQUIRED: the specific other party the move "
+        "acts on or with - a named company, agency, regulator or a specific named group such as 'EU public-sector "
+        "buyers'; not 'customers', 'providers' or 'the public'), counterparty_consequence (REQUIRED: what changes "
+        "for that counterparty), competitive_displacement (true ONLY if the move takes share, customers or "
+        "contracts from a rival; a move can benefit both sides - more trust, shared safeguards - and then it is "
+        "false), who_loses (ONLY when competitive_displacement is true: the NAMED rival that loses; otherwise "
+        "leave it empty - never invent a rivalry) and conditions (what could make this wrong); basis \"trend\" - only when none of these applies. Before writing each implication, weigh the "
         "case for and against it (what in the facts argues the other way). Each says what would show it is "
         "happening (watch_for), over what horizon, and conditions (REQUIRED - an implication without it is "
         "discarded): the key assumption it depends on, i.e. what would make it wrong (a Key Assumptions Check), "
@@ -306,33 +357,100 @@ def build_prompt(topic: str, facts: Sequence[Mapping[str, Any]], cases: Sequence
         "combination of developments, including at least one simple basis \"trend\" implication (text, "
         "conditions, watch_for, horizon only). WHAT MAKES AN IMPLICATION WORTH SHOWING (each is tested): it is "
         "NOT what a reader of these headlines would already expect, and it has NOT already happened or been "
-        "reported; it names who specifically gains or loses (a named company, agency or group, not 'providers' "
+        "reported; it names who specifically gains or loses, or must respond (a named company, agency or group, not 'providers' "
         "or 'governments'); it is a second-order consequence (A forces B, which changes C for D), not 'more "
         "regulation' or 'more scrutiny'; it uses a number, date or threshold from the facts where one exists; "
         "and it rests on at least one context fact (a rule, a dependency, a number or a past case) where the "
         "facts include one. Implications that fail the first two tests are shown only as 'widely expected'.",
         f"4. analogies: up to {MAX_ANALOGIES}, ONLY from the historical cases listed above (empty list if none "
-        "fit). Each cites one case id and the current fact ids, and states the key difference.",
+        "fit). Each cites one case id and the current fact ids, states the consequential difference (one that "
+        "could change the outcome), and why_it_may_mislead: the strongest reason the past outcome may NOT "
+        "transfer here (an event that happened does not prove its mechanism transfers).",
         "",
         'Return one JSON object: {"headline": "", "paragraphs": [[{"text": "", "fact_ids": ["F1"]}]], '
-        '"implications": [{"basis": "precedent|leverage|incentive|trend", "case_id": "H1 or empty", "text": "", '
-        '"holder": "", "counterparty": "", "leverage_source": "", "mechanism": "", "possible_consequence": "", '
+        '"implications": [{"basis": "precedent|leverage|incentive|trend", "case_id": "H1 or empty", '
+        '"similar_case_ids": ["H1"], "outcome_case_ids": ["H1"], "text": "", '
+        '"holder": "", "counterparty": "", "leverage_source": "", "mechanism": "", "counterparty_alternatives": "", '
+        '"holder_dependence": "", "possible_consequence": "", '
         '"actor": "", "policy_or_regulation": "", "company_relevance": "", "economic_or_strategic_effect": "", '
-        '"attractive_move": "", "conditions": "", '
+        '"attractive_move": "", "counterparty": "", "counterparty_consequence": "", '
+        '"competitive_displacement": false, "who_loses": "", "conditions": "", '
         '"fact_ids": ["F1", "F2"], "watch_for": "", "horizon": ""}], '
-        '"analogies": [{"case_id": "H1", "fact_ids": ["F1"], "comparison": "", "difference": ""}]}',
+        '"analogies": [{"case_id": "H1", "fact_ids": ["F1"], "comparison": "", "difference": "", '
+        '"why_it_may_mislead": ""}]}',
     ]
     return "\n".join(lines)
 
 
 def topup_prompt(topic: str, facts: Sequence[Mapping[str, Any]], cases: Sequence[Mapping[str, Any]],
-                 existing: Sequence[str], count: int) -> str:
+                 existing: Sequence[str], count: int, focus: str = "", require_focus: bool = False) -> str:
     """v1.8.2: ask for the implications the first draft did not write."""
     written = "\n".join(f"- {t}" for t in existing if t) or "- none"
-    return (build_prompt(topic, facts, cases) + "\n\nTOP-UP REQUEST: the briefing is already written. It has only "
+    extra = (f"\nEach new implication must be basis \"leverage\" or \"incentive\" with {_clean(focus)} as the holder "
+             "or actor, if the facts allow it; if they do not, return an empty list rather than stretching them."
+             if require_focus and _clean(focus) else "")
+    return (build_prompt(topic, facts, cases, focus=focus) + extra + "\n\nTOP-UP REQUEST: the briefing is already written. It has only "
             f"these implications:\n{written}\nWrite {max(1, count)} MORE implications under the same rules, each on "
             "a development or combination of developments the existing ones do not cover, and different in "
             'substance from them. Return one JSON object: {"implications": [...]} in the same shape as above.')
+
+
+# v6.36.2 (GPT review): the compliance filter is a HEURISTIC backstop. The real requirement is
+# structural (v6.36.3: named counterparty + consequence; a named loser only for displacement claims).
+_COMPLIANCE_WORDS = re.compile(
+    r"\b(?:comply|complying|complies|compliance|compliant|adhere|adhering|adherence|submit(?:ting)?\s+\w*\s*"
+    r"(?:reports?|filings?|notifications?|disclosures?)|notify(?:ing)?\s+(?:the\s+)?(?:regulators?|authorit\w+|"
+    r"agenc\w+)|meet(?:ing)?\s+(?:the|its|their|all)\s+(?:requirements?|obligations?|deadlines?|duties))\b", re.I)
+
+
+def is_compliance_only(move: Any, *parties: Any) -> bool:
+    """Heuristic: the move is about complying and never names the party it acts on (counterparty or loser)."""
+    move = _clean(move)
+    if not move or not _COMPLIANCE_WORDS.search(move):
+        return False
+    return not any(_clean(p) and _clean(p).casefold() in move.casefold() for p in parties)
+
+
+def is_displacement(item: Mapping[str, Any]) -> bool:
+    """The claim is competitive displacement: declared by the model, or worded that way (heuristic)."""
+    declared = item.get("competitive_displacement")
+    if declared is True or _clean(declared).casefold() in {"true", "yes"}:
+        return True
+    return any(DISPLACEMENT_WORDS.search(_clean(item.get(k)))
+               for k in ("text", "attractive_move", "counterparty_consequence"))
+
+
+def names(text: Any, org: str) -> bool:
+    return bool(_clean(org)) and _clean(org).casefold() in _clean(text).casefold()
+
+
+def addresses(implications: Sequence[Mapping[str, Any]], org: str) -> bool | None:
+    """Does any leverage or rule-based implication name the organisation being advised?"""
+    if not _clean(org):
+        return None
+    return any((_clean(i.get("basis")) == "leverage" and names(i.get("holder"), org))
+               or (_clean(i.get("basis")) == "incentive" and (names(i.get("actor"), org) or names(i.get("who_gains"), org)))
+               for i in implications or [] if isinstance(i, Mapping))
+
+
+def enforce_policy_fit(draft: Mapping[str, Any], focus: str = "") -> tuple[dict[str, Any], dict[str, Any]]:
+    """Drop incentive implications whose move is compliance only; report whether any leverage or
+    incentive implication names the organisation being advised."""
+    kept, rejected = [], []
+    for item in draft.get("implications") or []:
+        if _clean(item.get("basis")) == "incentive" and is_compliance_only(item.get("attractive_move"),
+                                                                            item.get("counterparty"),
+                                                                            item.get("who_loses")):
+            rejected.append(_clean(item.get("attractive_move"))[:160])
+            continue
+        kept.append(item)
+    addressed = addresses(kept, focus)
+    return dict(draft, implications=kept), {"advised_organisation": _clean(focus),
+                                            "advised_organisation_addressed": addressed,
+                                            "compliance_moves_rejected": rejected,
+                                            "position_rejected": list(draft.get("position_rejected") or []),
+                                            "leverage_rejected": list(draft.get("leverage_rejected") or []),
+                                            "compliance_filter": "heuristic backstop; structure is required"}
 
 
 def parse_draft(raw: Any, facts: Sequence[Mapping[str, Any]], cases: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
@@ -358,6 +476,8 @@ def parse_draft(raw: Any, facts: Sequence[Mapping[str, Any]], cases: Sequence[Ma
         if sentences:
             paragraphs.append(sentences)
     implications = []
+    position_rejected: list[str] = []
+    leverage_rejected: list[str] = []
     for item in (data.get("implications") or [])[:MAX_IMPLICATIONS]:
         if not (isinstance(item, Mapping) and _clean(item.get("text")) and ids(item.get("fact_ids"))):
             continue
@@ -378,27 +498,64 @@ def parse_draft(raw: Any, facts: Sequence[Mapping[str, Any]], cases: Sequence[Ma
             # v1.6: every implication states its key assumption (what would make it wrong).
             "conditions": _clean(item.get("conditions")),
         }
+        if basis == "precedent":   # v6.36.5: base rate across the listed cases with the same mechanism
+            def case_list(values: Any) -> list[str]:
+                return list(dict.fromkeys(v for v in (_clean(x).upper() for x in (values or [])
+                                                      if isinstance(x, str)) if v in case_ids))
+            similar = case_list([case_id] + list(item.get("similar_case_ids") or []))
+            stated = "outcome_case_ids" in item
+            with_outcome = [c for c in case_list(item.get("outcome_case_ids")) if c in similar]
+            entry["base_rate"] = {"similar_case_ids": similar, "outcome_case_ids": with_outcome,
+                                  "stated": stated}
         if basis == "leverage":
-            fields = {key: _clean(item.get(key)) for key in
-                      ("holder", "counterparty", "leverage_source", "mechanism", "possible_consequence")}
+            fields = {key: _clean(item.get(key)) for key in LEVERAGE_FIELDS + ("possible_consequence",)}
             if not all(fields[key] for key in ("holder", "counterparty", "leverage_source", "mechanism")):
                 continue  # unstructured "X has leverage over the market" is not accepted
+            # v6.36.4: without the counterparty's alternatives and the holder's own dependence, the
+            # leverage test (dependence + few alternatives + asymmetry) cannot be checked.
+            if not (fields["counterparty_alternatives"] and fields["holder_dependence"]):
+                leverage_rejected.append(_clean(item.get("text"))[:160])
+                continue
             entry.update(fields)
         if basis == "incentive":
-            fields = {key: _clean(item.get(key)) for key in POLICY_FIELDS + ("conditions",)}
+            fields = {key: _clean(item.get(key)) for key in POLICY_FIELDS + ("conditions", "counterparty",
+                                                                             "counterparty_consequence", "who_loses")}
             if not all(fields[key] for key in POLICY_FIELDS):
                 continue  # "this is right for the company" without the reasoning chain is not accepted
+            # v6.36.3 (GPT review of v6.36.2): specific actor, specific counterparty, mechanism
+            # (economic_or_strategic_effect) and the consequence for the counterparty are required. A named
+            # loser is required only for a competitive-displacement claim.
+            from services.pattern_grid import is_named_party
+            actor, other = fields["actor"], fields["counterparty"]
+            displacement = is_displacement(dict(item, **fields))
+            gains = _clean(item.get("who_gains")) or actor
+            loses = fields["who_loses"]
+            ok = (is_named_party(actor) and is_named_party(other) and other.casefold() != actor.casefold()
+                  and fields["counterparty_consequence"])
+            if ok and displacement:
+                ok = is_named_party(loses) and loses.casefold() != gains.casefold()
+            if not ok:
+                position_rejected.append(_clean(item.get("text"))[:160])
+                continue
+            fields["competitive_displacement"] = displacement
+            fields["who_gains"] = gains if displacement else ""
+            if not displacement:
+                fields["who_loses"] = ""
             entry.update(fields)
         implications.append(entry)
     analogies = [
         {"case_id": _clean(item.get("case_id")).upper(), "fact_ids": ids(item.get("fact_ids")),
-         "comparison": _clean(item.get("comparison")), "difference": _clean(item.get("difference"))}
+         "comparison": _clean(item.get("comparison")), "difference": _clean(item.get("difference")),
+         "why_it_may_mislead": _clean(item.get("why_it_may_mislead"))[:400]}
         for item in (data.get("analogies") or [])[:MAX_ANALOGIES]
         if isinstance(item, Mapping) and _clean(item.get("case_id")).upper() in case_ids
         and _clean(item.get("comparison")) and _clean(item.get("difference")) and ids(item.get("fact_ids"))
+        # v6.36.1 (GPT review): an analogy without its limits is not shown.
+        and _clean(item.get("why_it_may_mislead"))
     ]
     headline = _clean(data.get("headline"))
-    return {"headline": headline, "paragraphs": paragraphs, "implications": implications, "analogies": analogies}
+    return {"headline": headline, "paragraphs": paragraphs, "implications": implications, "analogies": analogies,
+            "position_rejected": position_rejected, "leverage_rejected": leverage_rejected}
 
 
 def grounding_claims(draft: Mapping[str, Any], facts: Sequence[Mapping[str, Any]],
@@ -434,6 +591,14 @@ def grounding_claims(draft: Mapping[str, Any], facts: Sequence[Mapping[str, Any]
             ids = [case_evidence[item["case_id"]]] + ids
             add(("implication", index), PRECEDENT_PREFIX + item["text"], ids, "connection", ANALYSIS_BAR, True)
             difference = next((c["difference"] for c in cases if c["case_id"] == item["case_id"]), "")
+            rate = item.get("base_rate") if isinstance(item.get("base_rate"), Mapping) else {}
+            similar = [c for c in rate.get("similar_case_ids") or [] if c in case_evidence]
+            if len(similar) >= 2 and rate.get("stated"):   # v6.36.5: the base rate is checked as a step
+                with_outcome = [c for c in rate.get("outcome_case_ids") or [] if c in similar]
+                add(("implication", index), BASE_RATE_PREFIX.format(
+                    with_outcome=f"{len(with_outcome)} of {len(similar)}", ids=", ".join(with_outcome) or "none")
+                    + item["text"], [case_evidence[c] for c in similar] + ids[1:], "connection", ANALYSIS_BAR,
+                    True, role="step", field="base_rate")
             if difference:
                 # v6.17.3: the key difference shown under a precedent is checked too.
                 add(("implication_case_difference", index), DIFFERENCE_PREFIX + difference, ids,
@@ -449,6 +614,14 @@ def grounding_claims(draft: Mapping[str, Any], facts: Sequence[Mapping[str, Any]
                 all_evidence, "fact", FACT_BAR, role="fact")
             add(("implication", index), LEVERAGE_MECHANISM_PREFIX.format(holder=holder, counterparty=counterparty)
                 + item["mechanism"], ids, "connection", ANALYSIS_BAR, role="step", field="mechanism")
+            if item.get("counterparty_alternatives"):   # v6.36.4: the leverage test, each part checked
+                add(("implication", index), ALTERNATIVES_PREFIX.format(holder=holder, counterparty=counterparty)
+                    + item["counterparty_alternatives"], ids, "connection", ANALYSIS_BAR, role="step",
+                    field="counterparty_alternatives")
+            if item.get("holder_dependence"):
+                add(("implication", index), ASYMMETRY_PREFIX.format(holder=holder, counterparty=counterparty)
+                    + item["holder_dependence"], ids, "connection", ANALYSIS_BAR, role="step",
+                    field="holder_dependence")
             add(("implication", index), LEVERAGE_PREFIX + item["text"], ids, "connection", ANALYSIS_BAR)
         elif basis == "incentive":
             actor = item["actor"]
@@ -460,6 +633,13 @@ def grounding_claims(draft: Mapping[str, Any], facts: Sequence[Mapping[str, Any]
                 ids, "connection", ANALYSIS_BAR, role="step", field="economic_or_strategic_effect")
             add(("implication", index), INCENTIVE_PREFIX + item["attractive_move"], ids, "connection", ANALYSIS_BAR,
                 role="step", field="attractive_move")
+            if item.get("counterparty") and item.get("counterparty_consequence"):   # v6.36.3
+                add(("implication", index), COUNTERPARTY_PREFIX.format(counterparty=item["counterparty"])
+                    + item["counterparty_consequence"], ids, "connection", ANALYSIS_BAR, role="step",
+                    field="counterparty_consequence")
+            if item.get("competitive_displacement") and item.get("who_gains") and item.get("who_loses"):
+                add(("implication", index), POSITION_PREFIX.format(gains=item["who_gains"], loses=item["who_loses"]),
+                    ids, "connection", ANALYSIS_BAR, role="step", field="position_shift")
             add(("implication", index), INCENTIVE_PREFIX + item["text"], ids, "connection", ANALYSIS_BAR)
         else:
             add(("implication", index), IMPLICATION_PREFIX + item["text"], ids, "connection", ANALYSIS_BAR)
@@ -545,6 +725,21 @@ def sanitize(draft: Mapping[str, Any], claims: Sequence[Mapping[str, Any]],
         fact_ids = list(dict.fromkeys(list(item.get("fact_ids") or []) + rescued))
         kept = dict(item, fact_ids=fact_ids, citations=cite(fact_ids), label="analysis")
         kept["assumption_fields"] = [c.get("_field") for c in soft_fail if c.get("_field")]
+        # v6.36.6/v6.36.7 (Admiralty / NATO system: information credibility - "confirmed by independent
+        # sources" - is rated separately from the source). GPT review of v6.36.6: different publishers
+        # backing DIFFERENT facts is not corroboration, so this is recorded PER stated fact: the sources
+        # whose records backed that one claim. The dashboard counts distinct publishers per fact.
+        source_of_evidence = {fact["evidence_id"]: fact.get("source_id", "") for fact in facts}
+        source_of_evidence.update({case["evidence_id"]: case.get("source_id", "") or case["evidence_id"]
+                                   for case in cases})
+        per_fact = []
+        for c in parts:
+            if c.get("_role") == "fact" and status_of[c["claim_id"]] in set(c["_bar"]):
+                evidence = (supporting or {}).get(c["claim_id"]) or ([] if supporting is not None else c["evidence_ids"])
+                per_fact.append({"claim": _clean(c["claim_text"])[:300],
+                                 "source_ids": list(dict.fromkeys(source_of_evidence[e] for e in evidence
+                                                                  if source_of_evidence.get(e)))})
+        kept["fact_corroboration"] = per_fact
         kept_indices.add(index)
         if item.get("basis") == "precedent":
             kept["case"] = dict(case_by_id[item["case_id"]])

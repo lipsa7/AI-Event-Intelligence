@@ -1,0 +1,226 @@
+# TaxPlan screenshot inventory and review record
+
+Updated 29 October 2026. All 212 referenced screenshot files exist locally; 36 new captures are added below. The original 176-file review follows. All were visually revisited through labelled review sheets; key tables were reopened at original size. Four unrelated files are excluded from business conclusions. No two listed files have the same SHA-256 content hash; different captures can still show overlapping data. A hash establishes file identity, not authenticity of the underlying report.
+
+| ID | Original filename | Review group | Related report sections | SHA-256 |
+|---|---|---|---|---|
+| 1 | Screenshot 2026-10-22 161909.png | Unrelated interface / excluded | Scope only | ec5b0e8c8fb29687a0a87809a6789b67c780252a586e3a212906dc5ea81485d5 |
+| 2 | Screenshot 2026-10-25 160500.png | Unrelated interface / excluded | Scope only | 05aae0e7f8bcf1adc9ceaa2339dd981869ebf23398c8fd2f085be44116065e2d |
+| 3 | Screenshot 2026-10-25 164257.png | Unrelated interface / excluded | Scope only | 6ab5e229ff0c866f35dfe632e7470fadf96d9419211017437594ac148ad39790 |
+| 4 | Screenshot 2026-10-26 185235.png | Short-period overview / comparison | 1, 2, 10, 30 | 366a2f08189f456023f5d142917a41b36e4b6d3a20703288d11e17699a053884 |
+| 5 | Screenshot 2026-10-26 185326.png | Short-period overview / comparison | 1, 2, 10, 30 | 44d899291fd647a881d3f6ceea7ed813376baa090772f8d0550a3a82975ecf87 |
+| 6 | Screenshot 2026-10-26 185339.png | Short-period overview / comparison | 1, 2, 10, 30 | a43cc989a96e01fe0b12fd3ea88252ecfff3e6125ce74b3654c76675b3feb600 |
+| 7 | Screenshot 2026-10-26 185350.png | Short-period overview / comparison | 1, 2, 10, 30 | 5d6082a9215b306c2df4cdffd067aa46ac6e12d3f184ef3ec7f28198034cbf13 |
+| 8 | Screenshot 2026-10-26 185403.png | Short-period overview / comparison | 1, 2, 10, 30 | d72d9e052c7ae4f97753e969754335df419a12cfd54590110eac2bd14ef0bcaa |
+| 9 | Screenshot 2026-10-26 193439.png | Short-period overview / comparison | 1, 2, 10, 30 | 7050294e191c797614fdf99cff1dee90ad0b70e29dd588602aaf37d6e9596149 |
+| 10 | Screenshot 2026-10-26 194025.png | Short-period overview / comparison | 1, 2, 10, 30 | 4a806f2a8791ad01991587f36e4009583c3e6422a5a826d3d5242e774b3986bb |
+| 11 | Screenshot 2026-10-27 101535.png | CRM / unmatched period | 1, 5, 28, 31 | 5f363eff958dca2595a176bdffb9e722365c247600103e33d4d67a6850398a35 |
+| 12 | Screenshot 2026-10-27 154813.png | Overview, cohort, audience or dimension controls | 1, 4, 25, 30 | e49f0da61b5abaf76bbd9d62f785b08264e1cade2a1acab7a701b7c2f5fa55f0 |
+| 13 | Screenshot 2026-10-27 154905.png | Overview, cohort, audience or dimension controls | 1, 4, 25, 30 | 860294967cabb55b96ba9d6091ef6d5e299683863513aa5b70a5f045d2cbcbc5 |
+| 14 | Screenshot 2026-10-27 154945.png | Overview, cohort, audience or dimension controls | 1, 4, 25, 30 | adf14a258dc610c03845c92e67b71f1cde55a23f8bd7f997c73348d1533717b4 |
+| 15 | Screenshot 2026-10-27 154957.png | Overview, cohort, audience or dimension controls | 1, 4, 25, 30 | d8daf62db543ca4be0cb900db051790dd9ec2d1a4daa8b11e4ad028c7b79a7b3 |
+| 16 | Screenshot 2026-10-27 155107.png | Overview, cohort, audience or dimension controls | 1, 4, 25, 30 | 1abce2f8feaf7273fbd1a4dd63674bcbee5ba1b1669d9a619872d6b13c674149 |
+| 17 | Screenshot 2026-10-27 155131.png | Overview, cohort, audience or dimension controls | 1, 4, 25, 30 | 7465ecc5ddcc0b7dbb7be80fd22da314651107a05b11d94e51a346ca7c5dccb0 |
+| 18 | Screenshot 2026-10-27 155253.png | Overview, cohort, audience or dimension controls | 1, 4, 25, 30 | 1acafe348c8eb374bdb7d619c2c2bf1dfc10919f8e0bf533082b0dad404917e7 |
+| 19 | Screenshot 2026-10-27 155307.png | Overview, cohort, audience or dimension controls | 1, 4, 25, 30 | b30b6db000438c5de80ba63bc7c73564d4e8bf25e63fc4841959faa7e086f94e |
+| 20 | Screenshot 2026-10-27 155339.png | Overview, cohort, audience or dimension controls | 1, 4, 25, 30 | 7db4b1a9fc1839102cf0922ff6604ae16080ca44917c59821b4a49bf83b00410 |
+| 21 | Screenshot 2026-10-27 155358.png | Overview, cohort, audience or dimension controls | 1, 4, 25, 30 | bf190bd0e56434b4b42e50d247b775dd75bdf9b4f343d76afa0e55e0b9a921eb |
+| 22 | Screenshot 2026-10-27 155410.png | Overview, cohort, audience or dimension controls | 1, 4, 25, 30 | 7a6ff8a547c28e068d86d30050a2ddb770e8e9cca48b8d413024e1a8c193ed74 |
+| 23 | Screenshot 2026-10-28 091611.png | Overview, cohort, audience or dimension controls | 1, 4, 25, 30 | 34a3f1e22dd25017d85305632f02c4ef68636fae6e6fd41b1e36c0a503fc57fc |
+| 24 | Screenshot 2026-10-28 091628.png | Overview, cohort, audience or dimension controls | 1, 4, 25, 30 | 5a32c5879434fe08ea1ea012bcbb762d959021458a9f5282a14513fb70a28ea8 |
+| 25 | Screenshot 2026-10-28 091835.png | Search, geography and selected metrics | 4, 25, 29 | 1552ec2588a975832864a65d4477b9aac23801038496eee51ef91f1eee9a6d9f |
+| 26 | Screenshot 2026-10-28 091922.png | Search, geography and selected metrics | 4, 25, 29 | 1e6db702569ce9cff7d108378a736d694fa26d6852b00af6901d8a5e987b5b8a |
+| 27 | Screenshot 2026-10-28 092143.png | Search, geography and selected metrics | 4, 25, 29 | 6acbe3d0d5c90a04f907f4eb7fd5702418db7fabf6b59bdffff615817f0d7c88 |
+| 28 | Screenshot 2026-10-28 092229.png | Search, geography and selected metrics | 4, 25, 29 | 6e70f6ea591dd5e2646b894a37e7e945cf295898ee2cc8c24ff734172a86f92a |
+| 29 | Screenshot 2026-10-28 092327.png | Search, geography and selected metrics | 4, 25, 29 | a04af1517aed8091d5de29308a62c17ff3cc35c11620b560139023e245048235 |
+| 30 | Screenshot 2026-10-28 092443.png | Search, geography and selected metrics | 4, 25, 29 | 2d0c13e1acf5485b8aba05ce7835434052a2a97bfc6f12c25bac190ae341fa8a |
+| 31 | Screenshot 2026-10-28 093120.png | Search, geography and selected metrics | 4, 25, 29 | 63ed74414c88387d6b49b36b3fdf9f69247da417b4aa2880970fb3d81aa9ba17 |
+| 32 | Screenshot 2026-10-28 093142.png | Search, geography and selected metrics | 4, 25, 29 | 2efbbed3b7977ae2e68a96af4eb8b050240822ba59ab28fbe8f54b2306104d8e |
+| 33 | Screenshot 2026-10-28 093250.png | Manual source, medium, campaign, empty cards | 3, 21, 28-30 | da22b4b5c8a9f5b61795c1850e35f647cae35d60ed35e82a734bf8b047561342 |
+| 34 | Screenshot 2026-10-28 093308.png | Manual source, medium, campaign, empty cards | 3, 21, 28-30 | 7a927484b9b19579e3b2d382b5e91309c40fda3896276c8075e080883d2778aa |
+| 35 | Screenshot 2026-10-28 093331.png | Manual source, medium, campaign, empty cards | 3, 21, 28-30 | d10d83db59e3027488756a1d9292c1905cd530d57feeea044c8a7d04acd63cc5 |
+| 36 | Screenshot 2026-10-28 093347.png | Manual source, medium, campaign, empty cards | 3, 21, 28-30 | 5ee1b1c4257a826af9084185b2cd181fc790c20932f97b202618218fcba63743 |
+| 37 | Screenshot 2026-10-28 093409.png | Manual source, medium, campaign, empty cards | 3, 21, 28-30 | 226a71a8224a9504b42887f28c9369aa27a6c88ef0fe490393bfc119a6567890 |
+| 38 | Screenshot 2026-10-28 093808.png | Manual source, medium, campaign, empty cards | 3, 21, 28-30 | 615d42a28911bf3074cc0a5a77e1b04edd33502c13359433e5201adad5d59488 |
+| 39 | Screenshot 2026-10-28 093828.png | Manual source, medium, campaign, empty cards | 3, 21, 28-30 | 414cf2bdd852a4dd9defea2cecf9938fd570b16ebd4f9035103b653ac3fa3194 |
+| 40 | Screenshot 2026-10-28 093841.png | Manual source, medium, campaign, empty cards | 3, 21, 28-30 | 6f1e477d9b2b7f4b0c8e5fa609355b5ef4d0889476ae24c669f9c39fdbb88c3f |
+| 41 | Screenshot 2026-10-28 093858.png | Manual source, medium, campaign, empty cards | 3, 21, 28-30 | 62b763744c14819c3da1c31e6661f9be12532ee46379d87bf06ce3d50781b439 |
+| 42 | Screenshot 2026-10-28 093909.png | Manual source, medium, campaign, empty cards | 3, 21, 28-30 | 69bdedb8902f5b9f600b3431fbd2e225e2ac9199ce97bd0819223ea460667925 |
+| 43 | Screenshot 2026-10-28 093947.png | Manual source, medium, campaign, empty cards | 3, 21, 28-30 | 8a987e67996e9320edb1e9cc6cb7bf3d339a01ff2614b74b6fc8ae94bf5fed0d |
+| 44 | Screenshot 2026-10-28 094001.png | Manual source, medium, campaign, empty cards | 3, 21, 28-30 | 738a88e9069b8226a65e66a10e77ecfa47a17cb857a5590e5f420a14d4a98781 |
+| 45 | Screenshot 2026-10-28 094018.png | Manual source, medium, campaign, empty cards | 3, 21, 28-30 | 69dd7f3f5b9a8577a4c77e9dd692a7607d1f197c7e37d4e1fb877fe9cb38b51f |
+| 46 | Screenshot 2026-10-28 094129.png | Manual source, medium, campaign, empty cards | 3, 21, 28-30 | 28d107c72a84c1e5cb3d257d506120102a7104aa641bb346b3a668298b655f33 |
+| 47 | Screenshot 2026-10-28 094235.png | Audience and first-user channels / medium | 1, 2, 14, 30 | 227a2261244e92035f7fd747d9c285e13a3f714663b1908f0fc000b0a651b56d |
+| 48 | Screenshot 2026-10-28 094312.png | Audience and first-user channels / medium | 1, 2, 14, 30 | 7ce229b6635ef9b1fa32c6b37df663f755d41d5f62c7ae7bcefb5baca9ca7e59 |
+| 49 | Screenshot 2026-10-28 094359.png | Audience and first-user channels / medium | 1, 2, 14, 30 | fee79c907867d0ad24c49eac3b9ae567b9f8fd5193422f955e8ddcc2aa46aeee |
+| 50 | Screenshot 2026-10-28 094453.png | Audience and first-user channels / medium | 1, 2, 14, 30 | 5465abaa7784542322b112f1d27a76aafbbbcb226fdd49780856fcd881989567 |
+| 51 | Screenshot 2026-10-28 094530.png | Audience and first-user channels / medium | 1, 2, 14, 30 | 646e35fe87a51c7d900aa83017de33d4814174356419d8865d54418140ba2824 |
+| 52 | Screenshot 2026-10-28 094552.png | Audience and first-user channels / medium | 1, 2, 14, 30 | fcd30735c64f04ee053d21670dbc2e7936b01ec30af3f24c38baba4264b5f8da |
+| 53 | Screenshot 2026-10-28 095017.png | Audience and first-user channels / medium | 1, 2, 14, 30 | 196afffffdf8172d2ea20c9ead9ae36778f059f61ba9d38b3c6fbf1ffec30812 |
+| 54 | Screenshot 2026-10-28 095039.png | Audience and first-user channels / medium | 1, 2, 14, 30 | a003b92cee165d8d3ebea2569ab03257e073aa0da54325e2a207138b19fe0f89 |
+| 55 | Screenshot 2026-10-28 095109.png | Audience and first-user channels / medium | 1, 2, 14, 30 | 238dc46592b9ddfb13773d81c25df016f4ab2425ddd6c31d0a6eb9ffbb22d983 |
+| 56 | Screenshot 2026-10-28 095121.png | Audience and first-user channels / medium | 1, 2, 14, 30 | 57adcea2b2b538f222e4e0f577293df65053b1328f3fe150bd5765742df31155 |
+| 57 | Screenshot 2026-10-28 095132.png | Audience and first-user channels / medium | 1, 2, 14, 30 | 84fba1fca75e6677dab0aa0f60327757544112761128902a82a342c1db847adb |
+| 58 | Screenshot 2026-10-28 095211.png | Audience and first-user channels / medium | 1, 2, 14, 30 | 27fcca01c60c4aebd4bd828c9c497759a3307c9c2f185f2fda5747e88eb96f0a |
+| 59 | Screenshot 2026-10-28 095229.png | Audience and first-user channels / medium | 1, 2, 14, 30 | a55ea133fda64e7c522311d54927ef4e48531d052cbe1209ff976e926a3bded2 |
+| 60 | Screenshot 2026-10-28 095411.png | Audience and first-user channels / medium | 1, 2, 14, 30 | dd7d5b2bfafa110ff89a71b637428d92e2a2924b667d2c239192057a599a80cd |
+| 61 | Screenshot 2026-10-28 095837.png | First-user sources, platform, campaign, network, ad groups | 14, 20, 30 | dc70250281ac60dfa6122a3b66cdd7bbfa2972853f57e8a44fda5e55cdef1175 |
+| 62 | Screenshot 2026-10-28 095851.png | First-user sources, platform, campaign, network, ad groups | 14, 20, 30 | d78152586c061959e28caa000820e2ca11774b032fb01702a0a4c9b5f28543cb |
+| 63 | Screenshot 2026-10-28 095902.png | First-user sources, platform, campaign, network, ad groups | 14, 20, 30 | b7442c3d15ffa4d820e66778a9f3e3625aa0de612dfa29afafeab692bf1e4866 |
+| 64 | Screenshot 2026-10-28 095928.png | First-user sources, platform, campaign, network, ad groups | 14, 20, 30 | f3d9eb73f0cd08b9753250f38ff16da840c1a1655fcd908f954c60ab374624bc |
+| 65 | Screenshot 2026-10-28 095941.png | First-user sources, platform, campaign, network, ad groups | 14, 20, 30 | 1ee7bbb9ddf14d63252f8bd56da2c2bf23cdbd6121a412dc9a58fd497e73f6c1 |
+| 66 | Screenshot 2026-10-28 100111.png | First-user sources, platform, campaign, network, ad groups | 14, 20, 30 | 4077bede70e31f8b472a73b20101c271f4fd01b17688d92667083d62c87e58f4 |
+| 67 | Screenshot 2026-10-28 100126.png | First-user sources, platform, campaign, network, ad groups | 14, 20, 30 | df54e7a57a80a71d0c8cd40b34671a8455d71b87d8f8cc8d726cd7b85ed7a934 |
+| 68 | Screenshot 2026-10-28 100135.png | First-user sources, platform, campaign, network, ad groups | 14, 20, 30 | 23dca8eff1805028aa1430f40776b7a26a74d592a8626d6c43667f5f6cd9d6d2 |
+| 69 | Screenshot 2026-10-28 100204.png | First-user sources, platform, campaign, network, ad groups | 14, 20, 30 | c16c6850b31ad63b2c4e593312d394929d36482a91818f4db20753f74ba182bf |
+| 70 | Screenshot 2026-10-28 100226.png | First-user sources, platform, campaign, network, ad groups | 14, 20, 30 | fbcf908e6450cf7959c3b08f8de3f11e50014330d2ddee503f196b7e16af9336 |
+| 71 | Screenshot 2026-10-28 100810.png | First-user sources, platform, campaign, network, ad groups | 14, 20, 30 | e3d10083adf252ebafe0542b16b8a430bfec306048bdb95be6b4ab7f06aafcfb |
+| 72 | Screenshot 2026-10-28 100821.png | First-user sources, platform, campaign, network, ad groups | 14, 20, 30 | bb12ba683b5b53b8acb793713787886aa5af4ceabaaeaf23f8f76b9ce4fe935b |
+| 73 | Screenshot 2026-10-28 100853.png | Session channel comparisons / anomalies | 15, 21, 30 | a84321e0b92f825f63dcd64fb7bf3ee2e1cba6295add65c9b211c26f3f2dc7b5 |
+| 74 | Screenshot 2026-10-28 100912.png | Session channel comparisons / anomalies | 15, 21, 30 | 0ac17b834d221f7dcbb30538c5720dfdf0626dffba211f75587629f56d13b289 |
+| 75 | Screenshot 2026-10-28 100950.png | Session channel comparisons / anomalies | 15, 21, 30 | cc2db783dfdb7a30e40253f11f0a0c1fd98d39ed080facbca66c453a84d10a2c |
+| 76 | Screenshot 2026-10-28 101024.png | Session channel comparisons / anomalies | 15, 21, 30 | 910e4e88cefb55e6559cf551466b71e860cc0d9cbf92b9cff1c3b7d1f9b34786 |
+| 77 | Screenshot 2026-10-28 101505.png | Session channel comparisons / anomalies | 15, 21, 30 | c4aea194284c296f4fcc60eec01be43391096b877dc4d70c2843e2f49ff34642 |
+| 78 | Screenshot 2026-10-28 101519.png | Session channel comparisons / anomalies | 15, 21, 30 | 9a3e2461e87644ff76d58ecdc618914bc6f952fbb44c0914906a11d154072a32 |
+| 79 | Screenshot 2026-10-28 101530.png | Session channel comparisons / anomalies | 15, 21, 30 | d06aeb86e2bacb239574cad15b49175a42c3889a6932d3fceb406355afef6404 |
+| 80 | Screenshot 2026-10-28 101540.png | Session channel comparisons / anomalies | 15, 21, 30 | a6fa029d4d9072f58a3254b5fbfa5e1d795046118a1ba2e358cbb626f396a8db |
+| 81 | Screenshot 2026-10-28 101600.png | Session source and platform comparisons | 21, 30 | 65a9fb731ab54c644b210c7f3fc35308c555640a638d18e6a80fc87efe786183 |
+| 82 | Screenshot 2026-10-28 101618.png | Session source and platform comparisons | 21, 30 | f416b8b4ba01fb7ee802766ab7c2bcb950970449619ec479e74ef22fc32640c2 |
+| 83 | Screenshot 2026-10-28 101631.png | Session source and platform comparisons | 21, 30 | b3d0a8b0168f380734415cb772a2acfbf7145a351f3eb0d50d2da2adf230bb51 |
+| 84 | Screenshot 2026-10-28 101642.png | Session source and platform comparisons | 21, 30 | 4808b02fe28b53ed9f562059778c1dc5a6103e276afc42a0e2275276da7a51ea |
+| 85 | Screenshot 2026-10-28 101704.png | Session source and platform comparisons | 21, 30 | e807f12aa5d0e87b103d5cc92b8d04e558677b55d93f8514fb72f4b19fbd330e |
+| 86 | Screenshot 2026-10-28 101715.png | Session source and platform comparisons | 21, 30 | c786d8554ab6da5a85b20e0142d60bb1f0166af173879951b78979b5ead0a3ad |
+| 87 | Screenshot 2026-10-28 101726.png | Session source and platform comparisons | 21, 30 | f970e81c34c60fd7a108b7dc8fba2eed72c505cc72d232676877604270d8a258 |
+| 88 | Screenshot 2026-10-28 103305.png | Lead acquisition and dimension comparisons | 20, 28, 30 | 2d2387198927e028e185d7cecf9ab09a3a9fa1140f82200b26280350e32c9aa2 |
+| 89 | Screenshot 2026-10-28 103323.png | Lead acquisition and dimension comparisons | 20, 28, 30 | 7196e8bff1f3cb80337eb76158106c865589041e844c49d302f6d88add2301ce |
+| 90 | Screenshot 2026-10-28 103342.png | Lead acquisition and dimension comparisons | 20, 28, 30 | 3585fe5f5211cd458bc3f71dae59e124a58d0717945a1622e629ec3cd670eeb1 |
+| 91 | Screenshot 2026-10-28 103401.png | Lead acquisition and dimension comparisons | 20, 28, 30 | f6b8fa9d01d28b6c093df19642716a77086ce79fd5abc9f5c82e6d1ed2d1950d |
+| 92 | Screenshot 2026-10-28 103418.png | Lead acquisition and dimension comparisons | 20, 28, 30 | f163ba35199641638bc48778c4223feeb2702761a12f90e8670fc32837686aa3 |
+| 93 | Screenshot 2026-10-28 103438.png | Lead acquisition and dimension comparisons | 20, 28, 30 | 4f3899de1e3ed1135810f60cf595f2c60b55295fc73ba55c585321a6df8b4c4f |
+| 94 | Screenshot 2026-10-28 103458.png | Lead acquisition and dimension comparisons | 20, 28, 30 | 02e1a5a28a3ce4f731385c0beabe797d949250d1b76e5524653c476472587cd5 |
+| 95 | Screenshot 2026-10-28 103510.png | Lead acquisition and dimension comparisons | 20, 28, 30 | a98fbad02ea06e3317d11ace5fc8524d186c1ff2b132118b2532c3f68a8bbf8f |
+| 96 | Screenshot 2026-10-28 103544.png | Lead acquisition and dimension comparisons | 20, 28, 30 | f3f93a4231e3a7cd842b245bc1fbc83f07533024e6ace2ac3b4faf5d5a28ad2d |
+| 97 | Screenshot 2026-10-28 103602.png | Lead acquisition and dimension comparisons | 20, 28, 30 | 88f0e942c916930eb2d2812a1ff328c436d57b26d76c56ce1aba4d2ebf7aa1d9 |
+| 98 | Screenshot 2026-10-28 103612.png | Lead acquisition and dimension comparisons | 20, 28, 30 | fa976e62caea57430907f25da051f8357725d011bc30a727cae762825a4d1401 |
+| 99 | Screenshot 2026-10-28 103719.png | Lead acquisition and dimension comparisons | 20, 28, 30 | 629e18bb1dde10de43050acd70c1aee13fa3af99ed7732068b62b77be8c40c6b |
+| 100 | Screenshot 2026-10-28 103728.png | Lead acquisition and dimension comparisons | 20, 28, 30 | 5b4dbc0400e6bb2dd9fe89f78074f7620a43497be710e94893c7f56be9de8d51 |
+| 101 | Screenshot 2026-10-28 103752.png | Lead acquisition and dimension comparisons | 20, 28, 30 | b517ec84ea456dfa22c6c27d1d1f21314a04bc18f91ae377f8c36e979f9e9069 |
+| 102 | Screenshot 2026-10-28 103847.png | Lead acquisition and dimension comparisons | 20, 28, 30 | 5ae4c64f9753ec3a82198540a6a49c3876bd35efeb8be4610f2ada76dff96a87 |
+| 103 | Screenshot 2026-10-28 103956.png | Landing page versus later page activity | 22, 29, 30 | 6e245244340f82a902f303244957c109b38a2582e033cfca9c2d21f38c2e9472 |
+| 104 | Screenshot 2026-10-28 104011.png | Landing page versus later page activity | 22, 29, 30 | 5c68f3e22dc91405ae2d379064c917265ad3fd053aabe78218b8c39551c8571f |
+| 105 | Screenshot 2026-10-28 104023.png | Landing page versus later page activity | 22, 29, 30 | be0646e5de593217a76fdd64f9109c0cfdb49e6471d183a4c54977c49ef0de47 |
+| 106 | Screenshot 2026-10-28 104033.png | Landing page versus later page activity | 22, 29, 30 | ba47b072d9033fdc5d335d5592fbafc161bce826750ebdfa0820e2987dc093b1 |
+| 107 | Screenshot 2026-10-28 104243.png | Cohort revenue and value coverage | 23, 28, 30 | 9eb3cd4c3c226d40fc3fcc8b90cf0fc00449089fb00946db1c76d579e7c45ae2 |
+| 108 | Screenshot 2026-10-28 104305.png | Cohort revenue and value coverage | 23, 28, 30 | 15e062414dd1ef9ac3e1ce425e2749feab389077c718613adb12e5365b345475 |
+| 109 | Screenshot 2026-10-28 104315.png | Cohort revenue and value coverage | 23, 28, 30 | 9fa524a0252ecf8e2da8303d4e02b07a417bb81eabcdb5df7b3e6deb74d04378 |
+| 110 | Screenshot 2026-10-28 104342.png | Cohort revenue and value coverage | 23, 28, 30 | 51a54f724b7bd5ce6662f55339eced302556f21bdbb0ec794cbcfe41ab5af687 |
+| 111 | Screenshot 2026-10-28 104355.png | Cohort revenue and value coverage | 23, 28, 30 | 61f3c2a09fd648de747b8b6ba2ccb3d50f5fad41623ed2b6177175b58eca650e |
+| 112 | Screenshot 2026-10-28 104403.png | Cohort revenue and value coverage | 23, 28, 30 | fdd514c7a6b25cfadc82b659ecb2b8f0038e2f20919b9f6271b6d2eb83423a7c |
+| 113 | Screenshot 2026-10-28 104422.png | Cohort revenue and value coverage | 23, 28, 30 | f65cb79c3866ce35d1a6efe28f7481dc0ee92a27466c0830a912f8ce22e147f7 |
+| 114 | Screenshot 2026-10-28 105048.png | Cohort revenue and value coverage | 23, 28, 30 | 072cbe383f13b1fca0d885bd2e4360f47f3a937e9933494c5b9f71f83bdb1f7a |
+| 115 | Screenshot 2026-10-28 105116.png | Cohort revenue and value coverage | 23, 28, 30 | 6012d741b5d075e5b864b70d9e724e82f0452b3dcc018700652db907dbf26025 |
+| 116 | Screenshot 2026-10-28 105127.png | Cohort revenue and value coverage | 23, 28, 30 | c186ff5a75934a51e8e187aca623b938816e24e24c7f4af212aa421fa996181b |
+| 117 | Screenshot 2026-10-28 105152.png | Cohort revenue and value coverage | 23, 28, 30 | e47f48bb6feccc8d4a2eb38859dbb70f819a27821298d59497543f6da60373c3 |
+| 118 | Screenshot 2026-10-28 105211.png | Cohort revenue and value coverage | 23, 28, 30 | a35ec5168bf5c08e19665d15d394afa35b39e20bae4ec4079633b1aa1f694efb |
+| 119 | Screenshot 2026-10-28 105231.png | Cohort revenue and value coverage | 23, 28, 30 | 1be6598a2cad88077db73ee8cc53d3939ef41b65389d3145c5604e89d29a5c21 |
+| 120 | Screenshot 2026-10-28 105301.png | Cohort revenue and value coverage | 23, 28, 30 | 08ba72e71245556c338e935be83f9e557ba59d0ed65e3ff08c4206577ab35d2d |
+| 121 | Screenshot 2026-10-28 105312.png | Cohort revenue and value coverage | 23, 28, 30 | c192211ed7456860e11378603179859dc8d04c3718dd032d9cd1675427e1d917 |
+| 122 | Screenshot 2026-10-28 105548.png | Sales / ecommerce / funnel / device | 23, 28, 29 | 5322016c7570ab3593576eb86592a2f5ddfe48f4c3e1b806e1276e137c198162 |
+| 123 | Screenshot 2026-10-28 105603.png | Sales / ecommerce / funnel / device | 23, 28, 29 | e2920a75f8257adfa29c56d6aba62d0864aad601ba694b482bbbdf8a16a1c105 |
+| 124 | Screenshot 2026-10-28 105613.png | Sales / ecommerce / funnel / device | 23, 28, 29 | f42b0bc9fc43737cf72241201c09912d8541311fc5ba5721cdc5a4d0979d5611 |
+| 125 | Screenshot 2026-10-28 105626.png | Sales / ecommerce / funnel / device | 23, 28, 29 | 914ed44bb4c7fba72ee2880a45ca629186a2bc490ebc3da91856fb52f4c191c1 |
+| 126 | Screenshot 2026-10-28 105704.png | Sales / ecommerce / funnel / device | 23, 28, 29 | 58a94896afd3f3240f1df55cecccde0d36aba5223faaba23dce810ebc6d69858 |
+| 127 | Screenshot 2026-10-28 105723.png | Sales / ecommerce / funnel / device | 23, 28, 29 | 743c143d7cb7e3d6cb7c939e43c558c1591de09bff7de4e015564289d1004577 |
+| 128 | Screenshot 2026-10-28 105806.png | Sales / ecommerce / funnel / device | 23, 28, 29 | 554885f51cc3baf40e23eb16e2078d6126bc6bba1cbf6d013b327ce50bcd24b2 |
+| 129 | Screenshot 2026-10-28 105820.png | Sales / ecommerce / funnel / device | 23, 28, 29 | 1cceffb37a50b4016aa7e8947fa8d0cfca1456b65057764e025609fa6850272a |
+| 130 | Screenshot 2026-10-28 105852.png | Sales / ecommerce / funnel / device | 23, 28, 29 | d73c3418b8e069569068e5938ec1855948b023972dd05a8b0ac8d107265b0ed1 |
+| 131 | Screenshot 2026-10-28 105903.png | Sales / ecommerce / funnel / device | 23, 28, 29 | efe68e1fbedb181326f1abd6e47595d9073d51beef971e75ad331ac765b5ac0e |
+| 132 | Screenshot 2026-10-28 105919.png | Sales / ecommerce / funnel / device | 23, 28, 29 | 06750da4a63f989e696096eec7e9f8ae674633ddbc443cd9159cb82d85eb5d67 |
+| 133 | Screenshot 2026-10-28 112130.png | Country, city, engagement, event overview, language | 24, 25, 29 | 33e82db101b5edafb507ce13b63b903a53d0a516867dab72ec1f2a929ae3f17b |
+| 134 | Screenshot 2026-10-28 112145.png | Country, city, engagement, event overview, language | 24, 25, 29 | 82370aead3cc29bfdf7b200cb4980917a05a990d89154e1e9dde529cbfabf276 |
+| 135 | Screenshot 2026-10-28 112156.png | Country, city, engagement, event overview, language | 24, 25, 29 | 04c9e1bd5c11249f9501d9f08392972d135b95c7bb0b5cdd5e751dcab0db03b7 |
+| 136 | Screenshot 2026-10-28 112210.png | Country, city, engagement, event overview, language | 24, 25, 29 | 0690a7662da854646505c5b6c8bf69ba7f7d436e2bea12c7b3dcd804ecced5dd |
+| 137 | Screenshot 2026-10-28 112228.png | Country, city, engagement, event overview, language | 24, 25, 29 | d3db325fcf83220d017d435940cdb673215b84653b5d00c8e6f7287308ce4799 |
+| 138 | Screenshot 2026-10-28 112242.png | Country, city, engagement, event overview, language | 24, 25, 29 | 8024149975bfb2a047e6c4c727a09e7d7baa293f0a302d58787110e1e2465920 |
+| 139 | Screenshot 2026-10-28 112251.png | Country, city, engagement, event overview, language | 24, 25, 29 | d70261e2bb9ceb66129a3dfe12a4216f90cf9455138884c0c990a75f96541181 |
+| 140 | Screenshot 2026-10-28 112306.png | Country, city, engagement, event overview, language | 24, 25, 29 | b7f9189868c98aefb085672606c9d23c5b9d42097cc60073710b14a758435e05 |
+| 141 | Screenshot 2026-10-28 112316.png | Country, city, engagement, event overview, language | 24, 25, 29 | 019f5e50ba165c163890b9a0f835513f94b5ec2b2f848dc955ec8c2fdbc824e8 |
+| 142 | Screenshot 2026-10-28 112331.png | Country, city, engagement, event overview, language | 24, 25, 29 | 9bbfc494fd7362a5e4f40d43059db92a39e87ea7ecf8d5dc0baa35f276090791 |
+| 143 | Screenshot 2026-10-28 112342.png | Country, city, engagement, event overview, language | 24, 25, 29 | 1c7013862437c8f3ad1b1a181f9f42f7f9af343fc460b4947a7af958cf28f8d4 |
+| 144 | Screenshot 2026-10-28 112356.png | Country, city, engagement, event overview, language | 24, 25, 29 | 4382b39faac7ff6eb5000b8555537e39127442ef8876411330352a625a4c6b7d |
+| 145 | Screenshot 2026-10-28 112457.png | Page paths/titles, retention, events and anomalies | 24, 25, 29, 30 | 1ce3fc0a246ac0f0bcb6d8098d2e6de752e9c9d81d5cd4476dc05a4bd27ff2d9 |
+| 146 | Screenshot 2026-10-28 112508.png | Page paths/titles, retention, events and anomalies | 24, 25, 29, 30 | 472cacac55ffdb219792cbe7f37480b1cea00be3cb9c201d1b9b09d3ac1091b8 |
+| 147 | Screenshot 2026-10-28 112523.png | Page paths/titles, retention, events and anomalies | 24, 25, 29, 30 | c6411520c6815a3fe763bac2de4f6f201f34f99dab2e1028b4a3729fba822a91 |
+| 148 | Screenshot 2026-10-28 112533.png | Page paths/titles, retention, events and anomalies | 24, 25, 29, 30 | 9034f31d478b1fe85573d4142ea9606ed0de8eecee147e9ef5edaaf387dc159e |
+| 149 | Screenshot 2026-10-28 112544.png | Page paths/titles, retention, events and anomalies | 24, 25, 29, 30 | 7c66af017b59045fcf2cb9aa57af04ec434d95685053abf4d92fae6c04e51965 |
+| 150 | Screenshot 2026-10-28 112620.png | Page paths/titles, retention, events and anomalies | 24, 25, 29, 30 | a3a500de373d9f814fb2f54b6643d712769c9cc2d90cd07089edd5fe4d8592da |
+| 151 | Screenshot 2026-10-28 112631.png | Page paths/titles, retention, events and anomalies | 24, 25, 29, 30 | a7cf5bf02cb17bee50e9453881174c4ecbfa658001912546d4f78a1adc7da42b |
+| 152 | Screenshot 2026-10-28 112641.png | Page paths/titles, retention, events and anomalies | 24, 25, 29, 30 | f21a39df04a4398a0aec0e5e5e1463c88ace4a58053e2171b55138b7f1441456 |
+| 153 | Screenshot 2026-10-28 112727.png | Page paths/titles, retention, events and anomalies | 24, 25, 29, 30 | 86d7572f34a0d78a1d3bad81869e7b9a80ae56a9212c3ebff4bf10fd8fe63689 |
+| 154 | Screenshot 2026-10-28 112835.png | Page paths/titles, retention, events and anomalies | 24, 25, 29, 30 | 08e703469811ea7df52fd3cb9d5c515dbd072973d6a500862add49688ff1a14a |
+| 155 | Screenshot 2026-10-28 112853.png | Page paths/titles, retention, events and anomalies | 24, 25, 29, 30 | f1faa6a8cc580a63282588415a72be948dfef37ae671155049c3592493389058 |
+| 156 | Screenshot 2026-10-28 112904.png | Page paths/titles, retention, events and anomalies | 24, 25, 29, 30 | aec9f8db55d4704fb6bce716261e0aa62f6ff72a091d82b712e53ec1d96ecec9 |
+| 157 | Screenshot 2026-10-28 112913.png | Page paths/titles, retention, events and anomalies | 24, 25, 29, 30 | 6450e1c13920d25ac128e511487af745ef292629168bb10efad69f398aaf01b6 |
+| 158 | Screenshot 2026-10-28 112942.png | Page paths/titles, retention, events and anomalies | 24, 25, 29, 30 | 5a7ef04ab8523027f0bd3b4dfab2f93475c06053e9de441296e226fdfef3f1ea |
+| 159 | Screenshot 2026-10-28 113004.png | Page paths/titles, retention, events and anomalies | 24, 25, 29, 30 | 92f71c418b983140a85d3693d826661c513069ee80e26ba631653a0c6954b3f5 |
+| 160 | Screenshot 2026-10-28 113021.png | Page paths/titles, retention, events and anomalies | 24, 25, 29, 30 | b6c329ed02613b1ca080260df2b506053c047133d0685fb9f606e2bd039de538 |
+| 161 | Screenshot 2026-10-28 113042.png | Exact event and page corroboration | 24, 28-30 | f7954ff25fc768f52454c4b1dc3c60e7c28efedfeabd365c6727707611a0759b |
+| 162 | Screenshot 2026-10-28 113058.png | Exact event and page corroboration | 24, 28-30 | 83f70d1b962c91ef80627b637f7f31e0b5f6bdf673a76bc20ee949ef08788595 |
+| 163 | Screenshot 2026-10-28 113138.png | Exact event and page corroboration | 24, 28-30 | bd2e2f811ece45d301b0ec3f52f65c59ae1892b57e1065df75f5c00f817e66df |
+| 164 | Screenshot 2026-10-28 113153.png | Exact event and page corroboration | 24, 28-30 | 89a2e0652bf6d0956e87b758be74f4a47e354447a0a52c66f693b1ce9d9f1892 |
+| 165 | Screenshot 2026-10-28 113204.png | Exact event and page corroboration | 24, 28-30 | db31309761c4c10ad41eb9a8b7ea865104cc12fd1a8cb2142e24965686323cb7 |
+| 166 | Screenshot 2026-10-28 113230.png | Business Profile actions and optional menus | 25, 29 | 4d91e588c9ea6516245464726f351e1be1ca8252d2927c9ad81be2f030f045d8 |
+| 167 | Screenshot 2026-10-28 113242.png | Business Profile actions and optional menus | 25, 29 | bbfdbd6618f3351bddb38e17240dfda0e24267571844e6b347bae457d6e60474 |
+| 168 | Screenshot 2026-10-28 113252.png | Business Profile actions and optional menus | 25, 29 | 5e92d794870aa50ca1e93cbb4658763a355b8b2ea05af5204ccc1b796a9bef32 |
+| 169 | Screenshot 2026-10-28 113314.png | Business Profile actions and optional menus | 25, 29 | 1b57449b7e7fe06235ce198f7b7e1d3d9bc01850ddc4935a3c468a502a84c398 |
+| 170 | Screenshot 2026-10-28 113338.png | Business Profile actions and optional menus | 25, 29 | 31525848d61cc20e9889daf5dcfdd2a09a459dec24e03c8aab869979903f7bd2 |
+| 171 | Screenshot 2026-10-28 113415.png | Filtered campaign-import validation | 21, 28, 30, 31 | e583d2cc4babce749dbf430d7c17dc485234a9ea50dd46e4047c190ceee211f2 |
+| 172 | Screenshot 2026-10-28 113427.png | Filtered campaign-import validation | 21, 28, 30, 31 | a6640862e0bfc039d4bdad1cdf4da6dde031f5cbfcf3a5f8646281bbbc8be80e |
+| 173 | Screenshot 2026-10-28 113511.png | Acquisition overview / realtime / rounded summary | 1, 2, 25, 30 | 1b23abe8b5e78a1c73927bfb0cf2593364c2c410a034cb1f5d825dd784931d3b |
+| 174 | Screenshot 2026-10-28 113525.png | Acquisition overview / realtime / rounded summary | 1, 2, 25, 30 | a019d136ba31eb2941827cb5a42176cfff0a08fe868c2e25ba148e8b4719c2cf |
+| 175 | Screenshot 2026-10-28 113541.png | Acquisition overview / realtime / rounded summary | 1, 2, 25, 30 | 247a6d6add6eafe2003e6eaa2beaee55881cdbd6b7c400a911f5d9a0c9b8423b |
+| 176 | Screenshot 2026-10-28 122855.png | Unrelated interface / excluded | Scope only | 7105a41231da0f0297eef53299334759a1a30b67112ec4e3c39596660133ca34 |
+
+
+## 29 October additions
+
+All new attachments visually reviewed; repeated content is retained with its evidence relationship. Date/filter headers are cropped. See sections 37-41 for reconciled analysis.
+
+| ID | Original filename | Review group | Related report sections | SHA-256 |
+|---|---|---|---|---|
+| 177 | Screenshot 2026-10-29 144644.png | Acquisition cohorts / platform / alternate view | 37-41 | 2b500ce4a8d2f8fcf26b1e1131ff6c3525bff121c6f73aeaea414d4d83e833ec |
+| 178 | Screenshot 2026-10-29 144656.png | Acquisition cohorts / platform / alternate view | 37-41 | 4709231831d29e6f66732d01ece3a856176fc758c32e78f4f27b8a49a2ebbe0d |
+| 179 | Screenshot 2026-10-29 144707.png | Acquisition cohorts / platform / alternate view | 37-41 | a1c6417815073967b1ca6a940571bba06e7d1527c6c24955f87460ac3156a82f |
+| 180 | Screenshot 2026-10-29 144733.png | Acquisition cohorts / platform / alternate view | 37-41 | ce5137211953ac35d6c32df75dabb8345a4fc75e897b450856340339b329d703 |
+| 181 | Screenshot 2026-10-29 144746.png | Acquisition cohorts / platform / alternate view | 37-41 | 4e18d72a4427d4dd1f1abfc0a60098b831bae65d84fef3f869801df330710187 |
+| 182 | Screenshot 2026-10-29 144756.png | Acquisition cohorts / platform / alternate view | 37-41 | 277ab6210f38349dc6e8d35881a50d427c64d6513cad35de6f3ae8947485ad49 |
+| 183 | Screenshot 2026-10-29 144816.png | Acquisition cohorts / platform / alternate view | 37-41 | a5ca16de20408098e9b1ad3839940a41ebf93030cb2ee33b16bbac03f9f9338d |
+| 184 | Screenshot 2026-10-29 144827.png | Acquisition cohorts / platform / alternate view | 37-41 | 461709ac82a1cba1d1625b687af567edc808cf7af0d0846afac9d5b785118c27 |
+| 185 | Screenshot 2026-10-29 144836.png | Acquisition cohorts / platform / alternate view | 37-41 | 0dad131b44ef442b69c0ac62caa9d1e9fb07579629375822d51eab590a132387 |
+| 186 | Screenshot 2026-10-29 144944.png | Acquisition cohorts / platform / alternate view | 37-41 | 13d13603dfeb54c5a5b3b5936f80f3ba7f90fa97008e853ececba0d12f97f2fd |
+| 187 | Screenshot 2026-10-29 144954.png | Acquisition cohorts / platform / alternate view | 37-41 | d275036e46c9a54822d21d5b14b186495425ee96c2ed7f9e1682e8842d084205 |
+| 188 | Screenshot 2026-10-29 145002.png | Acquisition cohorts / platform / alternate view | 37-41 | 6d2e75d5484ec43dc33cebed7319fafd3bf810ad542b3e419cbb5202d584e3d4 |
+| 189 | Screenshot 2026-10-29 145245.png | Acquisition cohorts / platform / alternate view | 37-41 | 3911dbec85d2437fc6fc9fa9ceb458775bc82afc469abf0ce161185597563308 |
+| 190 | Screenshot 2026-10-29 145257.png | Acquisition cohorts / platform / alternate view | 37-41 | c7c0d4a7c4a42f5459b4202ee9cb2cd8f87fdaca25a0c5703e44df7d0952b124 |
+| 191 | Screenshot 2026-10-29 145922.png | Engagement, activity and event overview | 37-41 | 913a45a870c4b979ebb5e54773039f7df68ecfbd172f69da03fdcdfbd50305dd |
+| 192 | Screenshot 2026-10-29 145941.png | Engagement, activity and event overview | 37-41 | c7beb71295cfef08e99a8a79d28ca21ddb8098726a06197051d90f668040f489 |
+| 193 | Screenshot 2026-10-29 145952.png | Engagement, activity and event overview | 37-41 | bb6215e0dfba51fd31c92fb8427bb301d135c685bb05c8deae9df37b249fe595 |
+| 194 | Screenshot 2026-10-29 150006.png | Engagement, activity and event overview | 37-41 | d25e5ef571b3f2dcb3f0cfdbd8b35915de51af49153fb508e7dcea7a81e1238e |
+| 195 | Screenshot 2026-10-29 150019.png | Engagement, activity and event overview | 37-41 | daff3285ca3ceb17bc0f62d218d513fe160d970b67c039842a28cfb0f4c289b9 |
+| 196 | Screenshot 2026-10-29 150050.png | Engagement, activity and event overview | 37-41 | 72c63011a750f23df8f98ec09a9f967572b44c2bf6cbacc50ecd518520cea66f |
+| 197 | Screenshot 2026-10-29 150102.png | Engagement, activity and event overview | 37-41 | c396ec5598b18e0e9dc607b948ffe01a13e28fc548946cefc8b8c7d35e3aec25 |
+| 198 | Screenshot 2026-10-29 150120.png | Engagement, activity and event overview | 37-41 | a9e212f53e50f37844ac0e5834b62e1935e397b2bf1fdda7a6bd2c9308b58c7c |
+| 199 | Screenshot 2026-10-29 150150.png | Events / page path / title / content group | 37-41 | bc6defda4933c342272fee1a168399ba0da197f28a4b4709f0b1a0c421b9dc61 |
+| 200 | Screenshot 2026-10-29 150207.png | Events / page path / title / content group | 37-41 | efab6750636c6a8538e0aa88df5f389ae1011fd11b6c4e442a09c7643dbbc93b |
+| 201 | Screenshot 2026-10-29 150221.png | Events / page path / title / content group | 37-41 | db277227f1fc05ba3a2f1dd5d7d5bdc1e88982da5020ee2b7385b75fb374c14f |
+| 202 | Screenshot 2026-10-29 150230.png | Events / page path / title / content group | 37-41 | 000a10020f2e450e613d667e58192a47e3505d30e0433aa5a0cca5661a40fd2b |
+| 203 | Screenshot 2026-10-29 150344.png | Events / page path / title / content group | 37-41 | e0ad05fbdace31e4cd72ab49fb779f21bdc714b5e887f59bb7e2b31dd535057e |
+| 204 | Screenshot 2026-10-29 150419.png | Events / page path / title / content group | 37-41 | 667a618c52dae0c78582160615e2e96e65122199eda2994e19923bb0b6577d20 |
+| 205 | Screenshot 2026-10-29 150434.png | Events / page path / title / content group | 37-41 | 3d5463402b7c7703fa197fdb66548b5dccae6b6dce795319a4fd29848a1d00ce |
+| 206 | Screenshot 2026-10-29 150458.png | Events / page path / title / content group | 37-41 | 978caa190d5a8c8bfcf45980e9b30fc2bc31e9acee034335576a0f96c6384395 |
+| 207 | Screenshot 2026-10-29 150719.png | Events / page path / title / content group | 37-41 | f947b577761d2ad0bd60352d944f4e097bd1badb7b2ea4bfb10b857cffe1b431 |
+| 208 | Screenshot 2026-10-29 150740.png | Events / page path / title / content group | 37-41 | 531b4d95ef6789f888576c990d29be6556e9fe22922137decc12ba6f653b68be |
+| 209 | Screenshot 2026-10-29 150756.png | Events / page path / title / content group | 37-41 | 4091208be57ec5c34ebb8a842778d1518e4898eb14eccbaa8726e536c8410c58 |
+| 210 | Screenshot 2026-10-29 150806.png | Events / page path / title / content group | 37-41 | b290b3cf8b039f130042849f795299e6dee6de04d8fdd103f1566360f212ad47 |
+| 211 | Screenshot 2026-10-29 150825.png | Events / page path / title / content group | 37-41 | 2f1dfe15d2cb044ed8fe4df65d688777c6aa2e07b2b7463af6f05f09038003b6 |
+| 212 | Screenshot 2026-10-29 150837.png | Events / page path / title / content group | 37-41 | 29e806c1c9dc6e228b8dc8bbed506a6c342e4384ee2cd6a711ed0b4affa2e200 |

@@ -14,12 +14,22 @@ import re
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
 import logging
 
 logger = logging.getLogger("event_intelligence.services.hypothesis_evidence_service")
 
 VERSION = "hypothesis-evidence-v1.1"
+# Expert views (23 Oct 2026): a quoted outside expert's assessment had no claim_kind of its own,
+# so it was tagged reported_claim and never reached "What experts are already saying". The
+# mapping (gap "commentary" + analysis/forecast) is unchanged; only the definition is stated.
+EXPERT_VIEW_RULE = (
+    "claim_kind: \"analysis\" is an assessment, explanation or recommendation by the page's author "
+    "or by a named or described expert, analyst or organisation that is NOT a party to the events; "
+    "keep the attribution (who said it) inside the quote. A statement by a party to the events (a "
+    "company, government, official or person involved) is \"reported_claim\", even when it is an "
+    "opinion. The credibility of the website does not change this."
+)
 CHALLENGE_MODES = {"counterevidence", "alternative_explanation"}
 CHALLENGE_ROLES = {"counterevidence", "counter_incentive_evidence", "alternative_explanation_evidence"}
 # Search families are judged separately, so a broken history source cannot
@@ -42,6 +52,30 @@ def digest(value: Any) -> str:
 
 def claim_fingerprint(candidate: Mapping[str, Any]) -> str:
     return digest({k: candidate.get(k) for k in ("insight", "insight_type", "premises", "mechanism")})
+
+
+_MONTHS = ("january february march april may june july august september october november december").split()
+_TEXT_DATE = re.compile(
+    r"\b(?:(?P<m1>[A-Za-z]{3,9})\.?\s+(?P<d1>\d{1,2}),?\s+(?P<y1>20\d\d)"   # October 22, 2026
+    r"|(?P<d2>\d{1,2})\s+(?P<m2>[A-Za-z]{3,9})\.?,?\s+(?P<y2>20\d\d)"        # 22 October 2026
+    r"|(?P<y3>20\d\d)-(?P<m3>\d{2})-(?P<d3>\d{2}))\b")                      # 2026-10-22
+
+
+def page_text_date(body: Any, head_chars: int = 1500) -> str:
+    """The first full calendar date printed near the top of an article (ISO), or ""."""
+    for match in _TEXT_DATE.finditer(str(body or "")[:head_chars]):
+        g = match.groupdict()
+        try:
+            if g["y3"]:
+                year, month, day = int(g["y3"]), int(g["m3"]), int(g["d3"])
+            else:
+                name = (g["m1"] or g["m2"]).casefold()
+                month = next(n for n, m in enumerate(_MONTHS, 1) if m.startswith(name[:3]) and len(name) >= 3)
+                year, day = int(g["y1"] or g["y2"]), int(g["d1"] or g["d2"])
+            return datetime(year, month, day, tzinfo=timezone.utc).isoformat()
+        except (StopIteration, ValueError):
+            continue
+    return ""
 
 
 def parse_date(value: Any) -> datetime | None:
@@ -378,7 +412,8 @@ class HypothesisEvidenceService:
                         candidate: Mapping[str, Any], now: datetime, timeout: float,
                         allow_undated_in_force: bool = False,
                         enforce_window: bool = True,
-                        allow_undated_historical: bool = False) -> dict[str, Any]:
+                        allow_undated_historical: bool = False,
+                        date_from_text: bool = False) -> dict[str, Any]:
         meta = source.get("metadata") or {}
         result = context.get("search_result") or {}
         url = clean(source.get("canonical_url") or source.get("url") or result.get("url"))
@@ -395,6 +430,14 @@ class HypothesisEvidenceService:
             raise ValueError("Document exceeds research context budget; review incomplete")
         published = clean(source.get("published_at") or meta.get("published_at") or result.get("published_at"))
         published_date = parse_date(published)
+        date_basis = ""
+        if published_date is None and date_from_text:
+            # Expert commentary pages (think tanks, law firms) often carry no date tag: RUN-3E2FE
+            # dropped CFR's and Brookings' analyses of the AI Accord for that alone. Use the first
+            # full date printed near the top of the article; the window checks below still apply.
+            published = page_text_date(body)
+            published_date = parse_date(published)
+            date_basis = "date_printed_in_page_text" if published_date else ""
         # v6.19: an official policy page often has no publication-date tag. For
         # policy gap research only, such a page may be reviewed, but each record
         # must then quote the page's own in-force / effective statement with a
@@ -444,7 +487,8 @@ class HypothesisEvidenceService:
             "case as news of that time (then give that publication year). Outcomes must be observed, not "
             "forecast. Include "
             "the actor, action and qualifiers in each quote. Return records=[] when irrelevant; "
-            "do not manufacture a competing explanation. review_complete=false if context is insufficient.\n"
+            "do not manufacture a competing explanation. review_complete=false if context is insufficient. "
+            + EXPERT_VIEW_RULE + "\n"
             + json.dumps({"hypothesis": candidate, "query": context.get("query"),
                           "title": result.get("title"), "published_at": published,
                           "as_of": now.isoformat(), "source_text": body}, ensure_ascii=False),
@@ -517,7 +561,7 @@ class HypothesisEvidenceService:
                 "published_at": published,
                 "publication_date_basis": ("in_force_statement" if undated_policy
                                            else "historical_case_date_quote" if undated_historical
-                                           else "fetched_source_or_search_metadata"),
+                                           else date_basis or "fetched_source_or_search_metadata"),
                 "in_force_quote": in_force_quote or None,
                 "claim_status": "reported_claim", "temporal_status": "future" if kind == "forecast" else "unknown",
                 "admission_status": "admitted", "source_independence_status": "unknown",
@@ -574,7 +618,11 @@ class HypothesisEvidenceService:
     PRECEDENT_FOLLOWUP_SECONDS = 70
 
     def investigate_gaps(self, *, development: Mapping[str, Any], blueprint: Mapping[str, Any] | None = None,
-                         as_of: str = "", search: Any = None) -> dict[str, Any]:
+                         as_of: str = "", search: Any = None, only_gaps: Sequence[str] | None = None,
+                         max_sources: int | None = None) -> dict[str, Any]:
+        """only_gaps / max_sources (v6.36.1): restrict a stage test to some gap types with a hard
+        cap on pages reviewed (try_precedents.py); normal runs pass neither."""
+        only = {clean(g).casefold() for g in only_gaps or [] if clean(g)}
         from agents.evidence_discovery_agent import EvidenceDiscoveryAgent
 
         now = parse_date(as_of) or datetime.now(timezone.utc)
@@ -595,7 +643,8 @@ class HypothesisEvidenceService:
         started = time.monotonic()
         self._source_documents = {}
         policy = {"max_search_rounds_per_insight": 1, "max_search_queries_per_insight": self.GAP_MAX_QUERIES,
-                  "max_results_per_query": 2, "max_sources_fetched_per_insight": self.GAP_MAX_SOURCES,
+                  "max_results_per_query": 2,
+                  "max_sources_fetched_per_insight": min(self.GAP_MAX_SOURCES, max_sources or self.GAP_MAX_SOURCES),
                   "max_elapsed_seconds_per_insight": self.GAP_MAX_SECONDS, "max_parallel_searches": 1,
                   "max_parallel_fetches": 2}
         configured = dict(blueprint.get("evidence_discovery_policy") or {})
@@ -619,11 +668,22 @@ class HypothesisEvidenceService:
             data = self._ask(
                 "An analyst must explain what this current development means and what may follow. List "
                 "the missing facts as web searches, one per gap type:\n"
-                "precedent: TWO different specific earlier cases you know of that resemble this development (same "
-                "kind of action by the same or comparable actors, including one that failed), as two separate "
-                "precedent queries. Search for a report of each case and what followed, naming the actor, the "
-                "action and its year, e.g. \"Facebook Cambridge Analytica 2018 FTC settlement\". Do not search for "
-                "the current development itself;\n"
+                "precedent: TWO different specific earlier cases you know of with the same MECHANISM as this "
+                "development - the same structure of who held what, who depended on it, what rule or incentive "
+                "applied and what each side did - NOT the same wording, topic or headline (v6.36: a renaming is "
+                "not matched by another renaming unless the mechanism matches; e.g. for a vendor whose agent caused "
+                "a breach a customer had to report but could only learn of from the vendor, an earlier breach "
+                "where the customer's legal reporting depended on the vendor's disclosure). Include one where the "
+                "outcome went the other way. Search for a report of each case and what followed, naming the actor, "
+                "the action and its year, e.g. \"SolarWinds 2020 breach customer disclosure SEC\". Do not search "
+                "for the current development itself;\n"
+                "Prefer primary documents for each missing claim: regulator rule text or decisions, company filings, "
+                "official incident notices and published transcripts. A primary document still needs date, scope and "
+                "applicability checks; it is not automatically true. For policy extract who must do what, effective "
+                "date, conditions/exemptions and consequence. For dependencies seek contracts, concentrations, "
+                "switching costs and alternatives; unknown alternatives do not mean no alternatives. "
+                "Seek evidence against the proposed mechanism and the strongest ordinary explanation. "
+                "Do not use a present-day outcome to justify an earlier forecast. "
                 "policy: a current regulation, subsidy, tax rule, procurement rule, zoning rule or incentive "
                 "that applies to these actors or this activity;\n"
                 "dependency: who depends on whom here (suppliers, customers, contracts, access, scarce assets);\n"
@@ -643,6 +703,10 @@ class HypothesisEvidenceService:
                 gap, text = clean(item.get("gap")).casefold(), clean(item.get("query"))
                 if gap not in self.GAP_MODE or not text or text.casefold() in gap_of_query:
                     continue
+                if only and gap not in only:
+                    continue
+                if only and gap == "precedent" and sum(1 for g in gap_of_query.values() if g == "precedent") >= 2:
+                    continue   # stage test: hard cap of two precedent searches
                 query = {"mode": self.GAP_MODE[gap], "query": text, "rationale": clean(item.get("rationale"))}
                 if gap == "precedent":
                     query["from_date"] = (now - timedelta(days=365 * 15)).isoformat()
@@ -663,7 +727,7 @@ class HypothesisEvidenceService:
             if not queries:
                 raise ValueError("No valid gap search plan")
             queries = queries[: self.GAP_MAX_QUERIES]
-            if "commentary" not in gap_of_query.values() and title:
+            if "commentary" not in gap_of_query.values() and title and (not only or "commentary" in only):
                 # v6.22: the expert-commentary search always runs (it sets the novelty bar).
                 text = f"{title[:90]} analysis implications"
                 if len(queries) >= self.GAP_MAX_QUERIES:
@@ -698,7 +762,8 @@ class HypothesisEvidenceService:
                                               timeout=min(timeout_seconds, local_deadline - time.monotonic()),
                                               allow_undated_in_force=(gap == "policy"),
                                               enforce_window=(gap != "precedent"),
-                                              allow_undated_historical=(gap == "precedent"))
+                                              allow_undated_historical=(gap == "precedent"),
+                                              date_from_text=(gap == "commentary"))
             except Exception as error:
                 review_log.append({"gap": gap, "url": url[:120], "outcome": "not_reviewed",
                                    "reason": f"{type(error).__name__}: {clean(error)[:140]}"})
@@ -809,8 +874,10 @@ class HypothesisEvidenceService:
                 data = self._ask(
                     "These searches for an earlier comparable case found nothing usable:\n"
                     + "\n".join(f"- {q}" for q in precedent_queries)
-                    + "\nName ONE DIFFERENT specific earlier case (actor, action, year) that resembles the current "
-                    "development below and write one web search for a report of it and what followed, 2 to 10 "
+                    + "\nName ONE DIFFERENT specific earlier case (actor, action, year) with the same MECHANISM as the "
+                    "current development below - who held what, who depended on it, what rule applied, how each side "
+                    "responded - not merely the same wording or topic - and write one web search for a report of it "
+                    "and what followed, 2 to 10 "
                     "words. Return {\"query\":\"...\"}.\nCURRENT DEVELOPMENT: " + title,
                     timeout=20, task="precedent_retry_plan")
                 query = clean(data.get("query"))

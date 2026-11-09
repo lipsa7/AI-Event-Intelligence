@@ -93,6 +93,7 @@ INCENTIVE = {"headline": "", "paragraphs": [], "analogies": [], "implications": 
      "fact_ids": ["F2"], "actor": "Equals Money", "policy_or_regulation": "payments cannot be initiated by AI agents",
      "company_relevance": "it runs an MCP server", "economic_or_strategic_effect": "avoids fines",
      "attractive_move": "report incidents within days", "conditions": "regulators do not enforce the rule",
+     "counterparty": "the FCA", "counterparty_consequence": "sees fewer agent-initiated payment incidents",
      "watch_for": "an enforcement notice", "horizon": "6-12 months"}]}
 
 

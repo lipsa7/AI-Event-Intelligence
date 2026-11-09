@@ -26,7 +26,7 @@ from services.event_context_audit_service import audit_admission_decision
 # decisions, terminal outcomes) reach data/logs/system.log.
 logger = logging.getLogger("event_intelligence." + __name__)
 
-SERVICE_VERSION = "research-orchestrator-service-v3.27.0-v631-insight-evaluator"
+SERVICE_VERSION = "research-orchestrator-service-v3.31.0-research-substance-ner"
 PATCH_BUILD_ID = "ORCH-V326411-20261009-V6207-FORECAST-MERGED"
 CONTEXT_INTEGRITY_PATCH = "v6.10.1"
 REASONING_RESEARCH_PATCH = "v6.11.0"
@@ -147,7 +147,9 @@ CLAIM_REPAIR_INSTRUCTION = (
     "evidence itself establishes the generalisation. Keep the insight ID. The repaired insight must still answer "
     "the product question: what dependency/control point, incentive or constraint changes a named actor's options, "
     "what move/countermove follows, or what observable signal matters. If the supported core cannot do that, return "
-    "it at a lower tier or return no candidate."
+    "it at a lower tier or return no candidate. NEVER delete the consequence: keep the second-order effect or "
+    "forecast question (narrowed if needed), because a repaired finding without a 'so what' only places facts "
+    "side by side."
 )
 CLAIM_ALTERNATIVE_INSTRUCTION = (
     "DIFFERENT CANDIDATE. The theses below were not released because an independent checker found "
@@ -851,6 +853,8 @@ class ResearchOrchestratorService:
                 "topic cannot be empty."
             )
 
+        self._apply_call_cap()
+
         profile = (
             self._resolve_profile(
                 research_depth
@@ -922,6 +926,8 @@ class ResearchOrchestratorService:
             },
         }
 
+        from services.experiment_controls import snapshot as control_snapshot
+        state["experiment_controls"] = control_snapshot()
         if requested_depth != profile.name:
             raise ResearchConfigurationError(
                 "Depth routing mismatch before execution: "
@@ -972,6 +978,10 @@ class ResearchOrchestratorService:
             # discovery, extraction, evidence construction, admission and
             # cluster expansion (the expensive, credit-consuming stages).
             checkpoint = self._load_checkpoint(replay_checkpoint) if replay_checkpoint else None
+            if checkpoint is not None and isinstance(state, dict):
+                from services.experiment_controls import digest as control_digest
+                state["replay_input_hash"] = control_digest({k:v for k,v in checkpoint.items() if k != "_path"})
+                state["replay_of"] = _clean(checkpoint.get("run_id"))   # v6.35.1: for comparing runs
             if checkpoint is None:
                 if source_ids:
                     selected_source_ids = (
@@ -2889,7 +2899,12 @@ class ResearchOrchestratorService:
         when the run has any source statement.
         """
         from services import editorial_briefing as brief
-        context_records = [r for r in state.get("gap_context_records") or [] if isinstance(r, Mapping)]
+        # Plan fix B: research on the advised organisation now runs before the briefing, but only
+        # its past cases are meant for the briefing. Its current records stay out of the briefing's
+        # context facts and commentary, which keep the general coverage they had before.
+        focus_title = _clean(_as_mapping(state.get("focus_research_early")).get("development_title"))
+        context_records = [r for r in state.get("gap_context_records") or [] if isinstance(r, Mapping)
+                           and not (focus_title and _clean(r.get("gap_for")) == focus_title)]
         facts = brief.select_facts(developments)
         facts += brief.select_context_facts(context_records, start=len(facts) + 1)
         historical = list(_as_mapping(state.get("historical_context")).get("records") or [])
@@ -2906,7 +2921,7 @@ class ResearchOrchestratorService:
         if self._remaining_discretionary_seconds() < self.BRIEFING_MIN_SECONDS:
             return dict(base, **brief.plain_briefing(facts, "time_budget"))
         try:
-            raw_reply = self._ask_briefing_model(brief.build_prompt(topic, facts, cases))
+            raw_reply = self._ask_briefing_model(brief.build_prompt(topic, facts, cases, focus=self._briefing_focus()))
             draft = brief.parse_draft(raw_reply, facts, cases)
             try:  # v6.20.11: how many implications the model wrote vs. how many were well-formed
                 raw_data = raw_reply if isinstance(raw_reply, Mapping) else json.loads(
@@ -2928,15 +2943,42 @@ class ResearchOrchestratorService:
                     brief.MAX_IMPLICATIONS - len(have)))
                 extra_data = extra_reply if isinstance(extra_reply, Mapping) else json.loads(
                     re.search(r"\{.*\}", str(extra_reply or ""), flags=re.S).group(0))
-                extra = brief.parse_draft({"headline": "", "paragraphs": [], "analogies": [],
-                                           "implications": list(extra_data.get("implications") or [])},
-                                          facts, cases).get("implications") or []
+                parsed = brief.parse_draft({"headline": "", "paragraphs": [], "analogies": [],
+                                            "implications": list(extra_data.get("implications") or [])},
+                                           facts, cases)
+                extra = parsed.get("implications") or []
+                for key in ("position_rejected", "leverage_rejected"):   # v6.36.4: every rejection is counted
+                    draft[key] = list(draft.get(key) or []) + list(parsed.get(key) or [])
                 draft["implications"] = brief.dedupe_implications(have + list(extra))[:brief.MAX_IMPLICATIONS]
                 logger.info("editorial_briefing_topup=%s", json.dumps(
                     {"had": len(have), "model_wrote": len(extra_data.get("implications") or []),
                      "added": len(draft["implications"]) - len(have)}))
             except Exception as error:
                 logger.warning("Editorial briefing: implication top-up failed: %s", type(error).__name__)
+        # v6.36.1: policy fit enforced in code. Compliance-only moves are dropped; if no leverage or
+        # incentive implication names the organisation being advised, ask once (1 call) for one.
+        focus = self._briefing_focus()
+        draft, fit = brief.enforce_policy_fit(draft, focus)
+        if focus and fit["advised_organisation_addressed"] is False:
+            try:
+                have = list(draft.get("implications") or [])
+                extra_reply = self._ask_briefing_model(brief.topup_prompt(
+                    topic, facts, cases, [_clean(i.get("text")) for i in have], 2, focus=focus, require_focus=True))
+                extra_data = extra_reply if isinstance(extra_reply, Mapping) else json.loads(
+                    re.search(r"\{.*\}", str(extra_reply or ""), flags=re.S).group(0))
+                parsed = brief.parse_draft({"headline": "", "paragraphs": [], "analogies": [],
+                                            "implications": list(extra_data.get("implications") or [])},
+                                           facts, cases)
+                extra = parsed.get("implications") or []
+                for key in ("position_rejected", "leverage_rejected"):   # v6.36.4: every rejection is counted
+                    draft[key] = list(draft.get(key) or []) + list(parsed.get(key) or [])
+                draft["implications"] = brief.dedupe_implications(have + list(extra))[:brief.MAX_IMPLICATIONS]
+                draft, second = brief.enforce_policy_fit(draft, focus)
+                fit = dict(second, compliance_moves_rejected=fit["compliance_moves_rejected"]
+                           + second["compliance_moves_rejected"], focus_topup=True)
+            except Exception as error:
+                fit["focus_topup_error"] = type(error).__name__
+        logger.info("policy_fit=%s", json.dumps(fit, ensure_ascii=False))
         claims = brief.grounding_claims(draft, facts, cases)
         records = _unique_evidence_records(list(evidence) + list(historical) + context_records)
         statuses = None
@@ -2978,7 +3020,8 @@ class ResearchOrchestratorService:
             checked["implications"], checked["expected_implications"], checked["novelty_check"] = (
                 self._implication_novelty(developments, list(evidence) + context_records, checked["implications"]))
         if not brief.has_content(checked):
-            return dict(base, **brief.plain_briefing(
+            return dict(base, policy_fit=dict(fit, advised_organisation_addressed=brief.addresses(
+                [], fit.get("advised_organisation", ""))), **brief.plain_briefing(
                 facts, "no_sentence_passed_check" if statuses is not None else "grounding_unavailable"))
         logger.info(
             "editorial_briefing=%s",
@@ -2986,7 +3029,12 @@ class ResearchOrchestratorService:
                         "removed": checked["sentences_removed_by_check"],
                         "implications": len(checked["implications"]), "analogies": len(checked["analogies"])}),
         )
-        return dict(base, mode="checked_analysis", **checked)
+        # v6.36.2 (GPT review): the status describes what is SHOWN - recomputed after the source checks
+        # and the novelty split, which can remove the implication that named the organisation.
+        fit = dict(fit, assessed_before_checks=fit.get("advised_organisation_addressed"),
+                   advised_organisation_addressed=brief.addresses(checked.get("implications") or [],
+                                                                  fit.get("advised_organisation", "")))
+        return dict(base, mode="checked_analysis", policy_fit=fit, **checked)
 
     GROUNDING_RATE_LIMIT_PAUSE_SECONDS = 20.0
 
@@ -3096,7 +3144,8 @@ class ResearchOrchestratorService:
         self._gap_search_cache = (state.get("run_id"), combined, grounded)
         return combined
 
-    def _precedent_research(self, developments: Sequence[Mapping[str, Any]], state: dict[str, Any]) -> list[dict[str, Any]]:
+    def _precedent_research(self, developments: Sequence[Mapping[str, Any]], state: dict[str, Any],
+                            only_gaps: Sequence[str] | None = None, max_sources: int | None = None) -> list[dict[str, Any]]:
         """v6.18: gap research for the top developments (precedent, policy,
         dependency, numbers), every Deep run, independent of the hidden insight.
 
@@ -3125,8 +3174,10 @@ class ResearchOrchestratorService:
                 service = service or self._hypothesis_evidence_service()
                 method = getattr(service, "investigate_gaps", None)
                 if callable(method):
+                    limits = ({"only_gaps": list(only_gaps), "max_sources": max_sources}   # v6.36.1 stage tests
+                              if only_gaps else {})
                     receipt = method(development=development, blueprint=_as_mapping(state.get("blueprint")),
-                                     search=search)
+                                     search=search, **limits)
                 else:
                     receipt = service.investigate_precedents(development=development,
                                                              blueprint=_as_mapping(state.get("blueprint")))
@@ -3298,14 +3349,27 @@ class ResearchOrchestratorService:
         from services import editorial_briefing as brief
         context_records = [r for r in state.get("gap_context_records") or [] if isinstance(r, Mapping)]
         facts = brief.select_facts(developments)
-        # v6.30: whose side the advice takes (the research: specific advice comes from writing for ONE
-        # known organisation - Klue, Feedly). Named by the user, else the organisation most involved.
-        focus_name = _clean(os.getenv("EVENT_INTELLIGENCE_FOCUS_ORG") or state.get("focus_organisation"))
-        focus = {"name": focus_name, "chosen_by": "user" if focus_name else "auto"}
-        if not focus_name:
-            focus["name"] = moves.pick_focus(developments, facts)
+        early = _as_mapping(state.get("focus_research_early"))
+        if early.get("attempted"):
+            # Researched before the briefing (_focus_research_before_briefing): reuse it, never search twice.
+            focus = dict(_as_mapping(early.get("focus")))
+            focus["research"] = dict(_as_mapping(early.get("research")))
+        else:
+            focus = self._choose_focus(developments, facts, state)
+        if focus["name"] and not early.get("attempted"):
+            known_cases = {_clean(r.get("evidence_id"))
+                           for r in _as_mapping(state.get("historical_context")).get("records") or []}
+            focus["research"] = dict(self._focus_research(focus["name"], facts, state), position="after_briefing")
+            # A case found now is too late for the briefing's analogies: kept on record, with
+            # whether it would have been selected, instead of being lost silently.
+            historical_now = list(_as_mapping(state.get("historical_context")).get("records") or [])
+            selected = {_clean(c.get("evidence_id")) for c in brief.select_cases(historical_now)}
+            late = [{"evidence_id": _clean(r.get("evidence_id")), "year": _as_mapping(r.get("historical_case")).get("year"),
+                     "selectable_as_analogy": _clean(r.get("evidence_id")) in selected}
+                    for r in historical_now if _clean(r.get("evidence_id")) not in known_cases]
+            if late and isinstance(state, dict):
+                state["case_found_after_briefing"] = late
         if focus["name"]:
-            focus["research"] = self._focus_research(focus["name"], facts, state)
             context_records = [r for r in state.get("gap_context_records") or [] if isinstance(r, Mapping)]
             # Facts found about the organisation being advised come first in the context.
             mine = moves.focus_development(focus["name"], [])["title"]
@@ -3321,7 +3385,8 @@ class ResearchOrchestratorService:
         if self._remaining_discretionary_seconds() < self.ACTOR_MOVES_MIN_SECONDS:
             return dict(base, status="time_budget", actors=[])
         try:
-            reply, model = self._ask_strong_model(moves.build_prompt(topic, facts, focus=focus["name"]))
+            reply, model = self._ask_strong_model(moves.build_prompt(
+                topic, facts, focus=focus["name"], profile=self._profile_block_for(focus["name"])))
             draft = moves.parse(reply, facts)
         except Exception as error:
             logger.warning("actor_moves model failed: %s", type(error).__name__)
@@ -3382,10 +3447,362 @@ class ResearchOrchestratorService:
             "removed": out["removed"][:20]}, ensure_ascii=False, default=str))
         return dict(base, model=model, **out)
 
+    HYPOTHESIS_LAB_MIN_SECONDS = 210.0
+    HYPOTHESIS_LAB_RESEARCH_MIN_SECONDS = 300.0
+    HYPOTHESIS_LAB_RESEARCH_MAX = 2
+    HYPOTHESIS_LAB_NARROW_MIN_SECONDS = 60.0  # v6.34
+
+    def _strategic_hypothesis_lab(
+        self,
+        *,
+        topic: str,
+        developments: Sequence[Mapping[str, Any]],
+        evidence: Sequence[Mapping[str, Any]],
+        state: Mapping[str, Any],
+    ) -> dict[str, Any]:
+        """v6.32: generate -> attack/evolve -> targeted research -> ground.
+
+        This stage raises the candidate-quality ceiling. It is deliberately
+        upstream of InsightEvaluator and deliberately downstream of the checked
+        event/fact corpus. It never authorizes release on its own.
+        """
+        from services import strategic_hypothesis_lab as lab
+        from services import editorial_briefing as brief
+
+        base = {
+            "version": lab.VERSION,
+            "status": "",
+            "raw_count": 0,
+            "evolved_count": 0,
+            "verified": [],
+            "promising_unverified": [],
+            "models": [],
+            "research_receipts": [],
+        }
+        if os.getenv("EVENT_INTELLIGENCE_HYPOTHESIS_LAB", "1") == "0":
+            return dict(base, status="disabled")
+        depth_state = _as_mapping(state.get("depth_integrity"))
+        deep = _enum(
+            state.get("research_depth")
+            or state.get("requested_depth")
+            or depth_state.get("resolved_profile")
+            or depth_state.get("requested")
+        ) == "deep"
+        if not deep:
+            return dict(base, status="deep_only")
+        if self._remaining_discretionary_seconds() < self.HYPOTHESIS_LAB_MIN_SECONDS:
+            return dict(base, status="time_budget")
+
+        context_records = [r for r in state.get("gap_context_records") or [] if isinstance(r, Mapping)]
+        facts = brief.select_facts(developments)
+        facts += brief.select_context_facts(
+            context_records,
+            start=len(facts) + 1,
+            limit=brief.MAX_CONTEXT_FACTS + 10,
+        )
+        # Historical cases are useful only as structural prompts; their factual
+        # content remains grounded through the same evidence records.
+        try:
+            from services import actor_moves as moves
+            historical = list(_as_mapping(state.get("historical_context")).get("records") or [])
+            facts += moves.case_facts(brief.select_cases(historical))
+        except Exception:
+            historical = list(_as_mapping(state.get("historical_context")).get("records") or [])
+        # Memory pass (services/memory_pass.py): earlier runs' events as dated facts M1, M2 ...
+        # Retrieved once per run in _attach_spec_sections (free, local), before any budget check.
+        from services import memory_pass
+        memory = _as_mapping(state.get("memory_pass"))
+        memory_records = [dict(r) for r in memory.get("records") or [] if isinstance(r, Mapping)]
+        base["memory_pass"] = _json_safe(memory.get("meta") or {"status": "not_retrieved"})
+        facts += memory_pass.as_facts(memory_records)
+        facts = lab.dedupe_facts(facts)
+        earlier_facts = {r["fact_id"]: r for r in lab.fact_rows(facts, limit=250) if r.get("earlier")}
+        if len(lab.fact_rows(facts)) < 3:
+            return dict(base, status="insufficient_facts")
+
+        raw: list[dict[str, Any]] = []
+        models: list[str] = []
+        # Insight funnel: losses the lab output does not otherwise record (services/insight_funnel.py).
+        funnel: dict[str, int] = {}
+        base["funnel"] = funnel
+        for batch_no, lenses in enumerate(lab.LENS_GROUPS, start=1):
+            if self._remaining_discretionary_seconds() < self.HYPOTHESIS_LAB_MIN_SECONDS / 2:
+                funnel["generation_batches_skipped_time"] = len(lab.LENS_GROUPS) - batch_no + 1
+                break
+            try:
+                reply, model = self._ask_strong_model(
+                    lab.generation_prompt(topic, facts, lenses, batch=batch_no, profile=self._profile_block_for())
+                )
+                models.append(model)
+                raw.extend(lab.parse_generation(reply, facts, stats=funnel))
+            except Exception as error:
+                funnel["generation_batches_failed"] = funnel.get("generation_batches_failed", 0) + 1
+                logger.warning("Strategic hypothesis generation batch %d failed: %s", batch_no, type(error).__name__)
+        unique_raw = lab.dedupe(raw)
+        funnel["generated_duplicates"] = funnel.get("generated_duplicates", 0) + len(raw) - len(unique_raw)
+        funnel["generated_over_cap"] = funnel.get("generated_over_cap", 0) + max(0, len(unique_raw) - lab.MAX_RAW)
+        raw = unique_raw[:lab.MAX_RAW]
+        # v6.36.5: the user's own hypotheses (replay_run.py --hypotheses) join the evolution stage
+        # under the same rules and checks, as scientists do in Co-Scientist. A broken file stops the run.
+        user_hypotheses = lab.active_user_hypotheses()
+        base["user_hypotheses"] = user_hypotheses
+        if not raw and not user_hypotheses:
+            return dict(base, status="no_candidates", models=models)
+
+        try:
+            reply, model = self._ask_strong_model(lab.evolution_prompt(topic, raw, facts,
+                                                                       profile=self._profile_block_for(),
+                                                                       user_hypotheses=user_hypotheses))
+            models.append(model)
+            evolved = lab.parse_evolution(reply, facts, stats=funnel)
+        except Exception as error:
+            funnel["evolution_failed"] = 1
+            logger.warning("Strategic hypothesis evolution failed: %s", type(error).__name__)
+            evolved = []
+        if not evolved:
+            return dict(base, status="evolution_failed", raw_count=len(raw), models=models)
+
+        records = _unique_evidence_records(list(evidence) + context_records + historical + memory_records)
+        known_ids = {_clean(r.get("evidence_id")) for r in records if isinstance(r, Mapping)}
+        research_receipts: list[dict[str, Any]] = []
+
+        # Search only the strongest few candidates and only when the run still
+        # has enough budget. The research service is already designed to search
+        # supporting, contrary and analogical evidence for a candidate.
+        if (
+            os.getenv("EVENT_INTELLIGENCE_HYPOTHESIS_LAB_RESEARCH", "1") != "0"
+            and self._remaining_discretionary_seconds() >= self.HYPOTHESIS_LAB_RESEARCH_MIN_SECONDS
+        ):
+            for item in evolved[: self.HYPOTHESIS_LAB_RESEARCH_MAX]:
+                try:
+                    seed_ids = lab.evidence_ids_for_fact_ids(
+                        facts, item.get("fact_ids") or [], records
+                    )
+                    receipt = self._hypothesis_evidence_service().investigate(
+                        candidate=lab.to_research_candidate(
+                            item, seed_ids, facts=facts, evidence_records=records
+                        ),
+                        evidence=records,
+                        blueprint=_as_mapping(state.get("blueprint")),
+                    )
+                    receipt.setdefault("seed_evidence_ids", list(seed_ids))
+                    research_receipts.append(_json_safe(receipt))
+                    for record in receipt.get("evidence") or []:
+                        if not isinstance(record, Mapping):
+                            continue
+                        eid = _clean(record.get("evidence_id"))
+                        if eid and eid not in known_ids:
+                            records.append(dict(record))
+                            known_ids.add(eid)
+                except Exception as error:
+                    fallback_seed_ids = lab.evidence_ids_for_fact_ids(
+                        facts, item.get("fact_ids") or [], records
+                    )
+                    research_receipts.append({
+                        "insight_id": f"LAB-{_clean(item.get('id'))}",
+                        "seed_evidence_ids": list(fallback_seed_ids),
+                        "assessment": {
+                            "status": "incomplete",
+                            "limitations": [type(error).__name__],
+                            "note": "Targeted research failed; existing seed evidence remains available for grounding.",
+                        },
+                        "evidence": [],
+                    })
+                    logger.warning("Strategic hypothesis research failed for %s: %s", item.get("id"), type(error).__name__)
+
+        by_eid = {
+            _clean(r.get("evidence_id")): r for r in records
+            if isinstance(r, Mapping) and _clean(r.get("evidence_id"))
+        }
+        def ground_item(item: Mapping[str, Any]) -> dict[str, Any]:
+            # A basis written as bare fact IDs is grounded (and shown) as those facts' text.
+            item = lab.resolve_basis_refs(item, facts)
+            seed_ids = lab.evidence_ids_for_fact_ids(
+                facts, item.get("fact_ids") or [], records
+            )
+            # Include bounded research records tied to this candidate so the
+            # grounder can find both support and contradiction.
+            candidate_id = f"LAB-{_clean(item.get('id'))}".removesuffix("-N")
+            extra_ids: list[str] = []
+            for receipt in research_receipts:
+                if _clean(receipt.get("insight_id")) not in {"", candidate_id}:
+                    continue
+                for eid in receipt.get("seed_evidence_ids") or []:
+                    eid = _clean(eid)
+                    if eid and eid not in extra_ids:
+                        extra_ids.append(eid)
+                for record in receipt.get("evidence") or []:
+                    if isinstance(record, Mapping):
+                        eid = _clean(record.get("evidence_id"))
+                        if eid and eid not in extra_ids:
+                            extra_ids.append(eid)
+            cited_ids = _unique_strings(seed_ids + extra_ids)
+            # A resolved basis may cite facts outside the candidate's fact_ids: their evidence
+            # goes to that basis claim (and is listed with the item), not to the thesis.
+            basis_ids = {field: lab.evidence_ids_for_fact_ids(facts, ids, records)
+                         for field, ids in _as_mapping(item.get("basis_fact_ids")).items()}
+            claims = lab.grounding_claims(item, cited_ids, basis_evidence_ids=basis_ids)
+            if not cited_ids or getattr(self, "grounding_service", None) is None:
+                grounded_rows = [{
+                    "claim_id": c["claim_id"],
+                    "claim_text": c["claim_text"],
+                    "grounding_status": "unsupported",
+                    "supporting_evidence_ids": [],
+                    "unsupported_parts": ["Grounding unavailable or no cited evidence IDs."],
+                } for c in claims]
+            else:
+                result = self._ground_claims_isolated(claims, records, label="Strategic hypothesis lab")
+                grounded_rows = [dict(x) for x in result.get("claims") or [] if isinstance(x, Mapping)]
+            item_for_final = dict(item)
+            item_for_final["resolved_evidence_ids"] = _unique_strings(
+                list(cited_ids) + [eid for ids in basis_ids.values() for eid in ids])
+            final = lab.finalize(item_for_final, grounded_rows, facts)
+            final["grounded_claims"] = _json_safe(grounded_rows)
+            # Shown with the hypothesis: which earlier-run facts it relies on, with their dates.
+            cited = set(item.get("fact_ids") or []) | {x for ids in _as_mapping(item.get("basis_fact_ids")).values()
+                                                       for x in ids}
+            final["earlier_facts_used"] = [
+                {"fact_id": fid, "text": row["text"][:300], "reported": row.get("date", ""),
+                 "occurred": row.get("occurred_on", "")}
+                for fid, row in earlier_facts.items() if fid in cited]
+            # v6.34.1 (GPT review): each supporting quote carries its source link, publisher and rating.
+            final["supporting_evidence"] = [
+                self._quote_with_source(by_eid[eid])
+                for eid in final.get("supporting_evidence_ids") or [] if eid in by_eid
+            ]
+            return final
+
+        verified: list[dict[str, Any]] = []
+        promising: list[dict[str, Any]] = []
+        for item in evolved:
+            final = ground_item(item)
+            if final["status"] == "verified":
+                verified.append(final)
+            else:
+                promising.append(final)
+
+        # v6.34 narrow-and-retry: a candidate blocked by overstated wording or one unsupported
+        # bridge is restated at the strength its facts support and checked again (same
+        # grounding, same promotion blockers). The original stays on record.
+        narrowing = {"tried": 0, "verified": 0, "still_unverified": 0, "dropped": 0, "failed": 0}
+        retry = sorted([p for p in promising if lab.needs_narrowing(p) and p.get("evidence_ids")],
+                       key=lambda x: -int(x.get("critic_total", 0)))[:lab.NARROW_MAX]
+        for original in retry:
+            if self._remaining_discretionary_seconds() < self.HYPOTHESIS_LAB_NARROW_MIN_SECONDS:
+                narrowing["stopped"] = "time_budget"
+                break
+            narrowing["tried"] += 1
+            try:
+                reply = self._ask_briefing_model(
+                    lab.narrow_prompt(original, facts, original.get("grounded_claims") or []))
+                narrowed = lab.parse_narrow(reply, original, facts)
+            except Exception as error:
+                narrowing["failed"] += 1
+                logger.warning("Hypothesis narrowing failed for %s: %s", original.get("id"), type(error).__name__)
+                continue
+            if narrowed is None:
+                narrowing["dropped"] += 1
+                original["narrowing"] = "nothing_strategic_survived_or_still_overstated"
+                continue
+            final = ground_item(narrowed)
+            if final["status"] == "verified":
+                narrowing["verified"] += 1
+                verified.append(final)
+                original["narrowing"] = "narrowed_version_verified:" + _clean(final.get("id"))
+            else:
+                narrowing["still_unverified"] += 1
+                original["narrowing"] = "narrowed_version_still_unverified"
+                original["narrowed_attempt"] = {k: final.get(k) for k in (
+                    "id", "thesis", "mechanism", "grounding", "promotion_blockers", "supporting_evidence_ids")}
+
+        verified = lab.sort_by_critic(verified)
+        promising = lab.sort_by_critic(promising)
+        funnel["verified_over_cap"] = max(0, len(verified) - lab.MAX_VERIFIED)
+        funnel["promising_over_cap"] = max(0, len(promising) - lab.MAX_PROMISING)
+        output = dict(
+            base,
+            status="complete" if verified else "hypotheses_unverified",
+            raw_count=len(raw),
+            evolved_count=len(evolved),
+            verified=verified[:lab.MAX_VERIFIED],
+            promising_unverified=promising[:lab.MAX_PROMISING],
+            models=models,
+            research_receipts=research_receipts,
+            narrowing=narrowing,
+        )
+        logger.info("strategic_hypothesis_lab=%s", json.dumps({
+            "status": output["status"],
+            "narrowing": narrowing,
+            "raw": output["raw_count"],
+            "evolved": output["evolved_count"],
+            "verified": [
+                {"id": x.get("id"), "critic": x.get("critic_total"), "thesis": _clean(x.get("thesis"))[:180]}
+                for x in output["verified"]
+            ],
+            "promising_unverified": [
+                {"id": x.get("id"), "critic": x.get("critic_total"), "grounding": x.get("grounding")}
+                for x in output["promising_unverified"]
+            ],
+        }, ensure_ascii=False, default=str))
+        return output
+
+    def _user_hypotheses_fingerprint(self) -> str:
+        from services import strategic_hypothesis_lab as lab
+        try:
+            return lab.user_hypotheses_fingerprint(lab.active_user_hypotheses())
+        except Exception as error:
+            return "error:" + type(error).__name__
+
+    def _briefing_focus(self) -> str:
+        """v6.36: the organisation being advised, if the user named one (--org or a profile)."""
+        try:
+            profile = self._run_profile() or {}
+        except Exception:
+            profile = {}
+        return _clean(os.getenv("EVENT_INTELLIGENCE_FOCUS_ORG")) or _clean(profile.get("name"))
+
+    def _run_profile(self) -> dict[str, Any] | None:
+        """v6.35: the organisation profile for this run (None = baseline). A broken profile
+        file raises, so an experiment never silently runs as the baseline."""
+        from services import org_profile
+        return org_profile.active()
+
+    def _profile_block_for(self, actor: Any = None) -> str:
+        """The profile text, only for the profiled organisation (rivals and other actors are
+        reasoned about from their own position, not the user's goal)."""
+        from services import org_profile
+        profile = self._run_profile()
+        if not profile:
+            return ""
+        if actor is not None and _clean(actor).casefold() != profile["name"].casefold():
+            return ""
+        return org_profile.prompt_block(profile)
+
+    def _quote_with_source(self, record: Mapping[str, Any]) -> dict[str, str]:
+        """v6.34.1: a quoted record with the link and publisher a reader can follow."""
+        from services import source_credibility as credibility
+        text = _clean(record.get("source_excerpt") or record.get("text") or record.get("claim")
+                      or record.get("statement"))[:500]
+        url = _clean(credibility.record_url(record))
+        publisher = ""
+        if not url and _clean(record.get("source_id")):
+            try:
+                ref = self._source_reference(_clean(record.get("source_id")))
+                url, publisher = _clean(ref.get("url")), _clean(ref.get("publisher"))
+            except Exception:
+                pass
+        if url and not publisher:
+            publisher = credibility.host_of(url)
+        tier = credibility.record_tier(dict(record, source_url=url) if url else record)
+        return {"text": text, "url": url, "publisher": publisher, "credibility": credibility.TIER_LABELS[tier],
+                "evidence_id": _clean(record.get("evidence_id")),
+                "date": _clean(record.get("published_at") or record.get("date"))[:10]}
+
     def _insight_evaluation(self, report: Mapping[str, Any], topic: str) -> dict[str, Any]:
         from services import insight_evaluator as judge
         try:
-            result = judge.evaluate(report, topic, self._ask_briefing_model)
+            result = judge.evaluate(report, topic, self._ask_briefing_model,
+                                    evidence_text=getattr(self, "_evaluation_evidence", None) or {})
         except Exception as error:
             logger.warning("Insight evaluation failed: %s", type(error).__name__)
             return {"version": judge.VERSION, "status": "failed", "error_type": type(error).__name__, "items": []}
@@ -3398,6 +3815,65 @@ class ResearchOrchestratorService:
 
     FOCUS_RESEARCH_MIN_SECONDS = 240.0
     SOURCE_BACKED_MAX_SHOWN = 2  # v6.30.2: backed insights that sources/experts already state
+
+    def _retrieve_memory_pass(self, developments: Sequence[Mapping[str, Any]],
+                              evidence: Sequence[Mapping[str, Any]], state: dict[str, Any]) -> None:
+        """Memory pass, once per run: local, read-only, no model call, so it runs even when the
+        call cap or time budget skips the analysis stages. Never fatal."""
+        from services import memory_pass
+        try:
+            result = memory_pass.retrieve(developments, dict(state, evidence=list(evidence or [])))
+        except Exception as error:
+            result = {"records": [], "meta": {"version": memory_pass.VERSION, "status": "failed:" + type(error).__name__}}
+        state["memory_pass"] = _json_safe(result)
+        meta = result["meta"]
+        logger.info("memory_pass=%s", json.dumps({k: v for k, v in meta.items() if k != "selected"}
+                                                 | {"selected": len(meta.get("selected") or [])}, default=str))
+
+    def _choose_focus(self, developments: Sequence[Mapping[str, Any]], facts: Sequence[Mapping[str, Any]],
+                      state: Mapping[str, Any]) -> dict[str, Any]:
+        """v6.30: whose side the advice takes (the research: specific advice comes from writing for ONE
+        known organisation - Klue, Feedly). Named by the user, else the organisation most involved.
+        v6.35: with a profile, the profiled organisation is the one advised (unless --org says otherwise)."""
+        from services import actor_moves as moves
+        profile = self._run_profile()
+        focus_name = _clean(os.getenv("EVENT_INTELLIGENCE_FOCUS_ORG") or state.get("focus_organisation")
+                            or (profile or {}).get("name"))
+        focus = {"name": focus_name, "chosen_by": "user" if focus_name else "auto"}
+        if not focus_name:
+            focus["name"] = moves.pick_focus(developments, facts)
+        return focus
+
+    def _focus_research_before_briefing(self, developments: Sequence[Mapping[str, Any]], state: dict[str, Any]) -> None:
+        """Plan fix B (23 Oct 2026): research the advised organisation BEFORE the briefing, so a
+        past case it finds (RUN-3BF777: Capital One 2019, found at 12:23 after the briefing chose
+        its analogies at 12:21) can reach the analogies. Runs only when the time left also covers
+        the briefing and actor moves; otherwise _actor_moves researches late, as before. Either
+        way there is one search per run, and state["focus_research_early"] records what happened."""
+        from services import editorial_briefing as brief
+        if not isinstance(state, dict) or state.get("focus_research_early"):
+            return
+        facts = brief.select_facts(developments)
+        focus = self._choose_focus(developments, facts, state)
+        if not focus["name"]:
+            return
+        needed = self.FOCUS_RESEARCH_MIN_SECONDS + self.BRIEFING_MIN_SECONDS + self.ACTOR_MOVES_MIN_SECONDS
+        if self._remaining_discretionary_seconds() < needed:
+            state["focus_research_early"] = {"attempted": False, "reason": "time_budget"}
+            return
+        from services import actor_moves as moves
+        entry = {"attempted": True, "focus": focus,
+                 "research": {"status": "running", "position": "before_briefing"},
+                 "development_title": moves.focus_development(focus["name"], [])["title"]}
+        # Persist the attempt before research can fail after spending calls. Actor moves
+        # must reuse even a failed attempt rather than paying for the same research again.
+        state["focus_research_early"] = entry
+        try:
+            entry["research"] = dict(self._focus_research(focus["name"], facts, state), position="before_briefing")
+        except Exception as error:
+            entry["reason"] = "failed:" + type(error).__name__
+            entry["research"] = {"status": entry["reason"], "position": "before_briefing"}
+            logger.warning("Early focus research failed; attempt retained: %s", type(error).__name__)
 
     def _focus_research(self, org: str, facts: Sequence[Mapping[str, Any]], state: Mapping[str, Any]) -> dict:
         """v6.30: targeted research on the organisation being advised (its rules, dependencies,
@@ -3475,7 +3951,8 @@ class ResearchOrchestratorService:
             entry["tournament"] = {k: v for k, v in log.items() if k != "eliminated"}
             if finalists:
                 try:
-                    reply, chooser = self._ask_strong_model(moves.choose_prompt(actor, finalists, rival_moves, facts))
+                    reply, chooser = self._ask_strong_model(moves.choose_prompt(
+                        actor, finalists, rival_moves, facts, profile=self._profile_block_for(actor.get("actor"))))
                     entry["chosen_by"] = chooser
                     entry["best_response"] = moves.apply_choice(actor, reply, facts)
                 except Exception as error:
@@ -3545,6 +4022,19 @@ class ResearchOrchestratorService:
                 ])
             if state.get("gap_research_summary") is not None:
                 report.setdefault("analysis_metadata", {})["precedent_research"] = state.get("gap_research_summary")
+            if isinstance(state, dict) and "memory_pass" not in state:
+                self._retrieve_memory_pass(developments, evidence, state)
+            if deep and isinstance(state, dict):
+                try:
+                    self._focus_research_before_briefing(developments, state)
+                except Exception as error:   # never fatal; preserve an attempt that already started
+                    early = dict(_as_mapping(state.get("focus_research_early")))
+                    early["reason"] = "failed:" + type(error).__name__
+                    if early.get("attempted"):
+                        early["research"] = {"status": early["reason"], "position": "before_briefing"}
+                    else:
+                        early["attempted"] = False
+                    state["focus_research_early"] = early
             briefing = self._editorial_briefing(
                 topic=topic, developments=developments, evidence=evidence, state=state)
         except Exception as error:
@@ -3552,6 +4042,16 @@ class ResearchOrchestratorService:
             briefing = {"headline": "", "paragraphs": [], "implications": [], "analogies": [],
                         "mode": "failed", "error_type": type(error).__name__}
         report["editorial_briefing"] = _json_safe(briefing)
+        # v6.34: what each record states, so the insight evaluator can show the judge the evidence
+        # behind each implication (implications cite evidence IDs only).
+        try:
+            records_ = list(evidence or []) + list(state.get("gap_context_records") or []) + list(
+                _as_mapping(state.get("historical_context")).get("records") or [])
+            self._evaluation_evidence = {
+                _clean(r.get("evidence_id")): _clean(r.get("source_excerpt") or r.get("text") or r.get("claim"))[:400]
+                for r in records_ if isinstance(r, Mapping) and _clean(r.get("evidence_id"))}
+        except Exception:
+            self._evaluation_evidence = {}
         # v6.27: the core of the product - what the main actors should do next.
         try:
             report["actor_moves"] = _json_safe(self._actor_moves(topic=topic, developments=developments,
@@ -3559,15 +4059,72 @@ class ResearchOrchestratorService:
         except Exception as error:
             logger.warning("Actor next steps failed: %s: %s", type(error).__name__, error)
             report["actor_moves"] = {"status": "failed", "error_type": type(error).__name__, "actors": []}
+        # v6.32: quality-ceiling stage. Generate structurally diverse hypotheses,
+        # evolve/attack them, research the strongest few, then ground them before
+        # the normal evaluator sees them. Never fatal.
+        try:
+            report["strategic_hypotheses"] = _json_safe(self._strategic_hypothesis_lab(
+                topic=topic, developments=developments, evidence=evidence, state=state))
+        except Exception as error:
+            logger.warning("Strategic hypothesis lab failed: %s: %s", type(error).__name__, error)
+            report["strategic_hypotheses"] = {
+                "version": "strategic-hypothesis-lab-v1.1.1-evidence-bridge", "status": "failed",
+                "error_type": type(error).__name__, "verified": [], "promising_unverified": []}
         report["historical_analogies"] = _json_safe(briefing.get("analogies") or [])
+        # Plan fix B: where the advised organisation was researched, and any case found too late.
+        early = _as_mapping(state.get("focus_research_early"))
+        research = _as_mapping(_as_mapping(_as_mapping(report.get("actor_moves")).get("focus_organisation")).get("research"))
+        report.setdefault("analysis_metadata", {})["focus_research"] = _json_safe({
+            "attempted_before_briefing": bool(early.get("attempted")),
+            "early_skipped_reason": _clean(early.get("reason")),
+            "position": _clean(research.get("position")) or "not_run",
+            "status": _clean(research.get("status")),
+            "past_cases": research.get("past_cases"),
+            "case_found_after_briefing": list(state.get("case_found_after_briefing") or []),
+        })
+        # Memory pass: what was selected (ids, hashes, cut-off) so comparisons can hold it fixed.
+        report.setdefault("analysis_metadata", {})["memory_pass"] = _json_safe(
+            _as_mapping(state.get("memory_pass")).get("meta") or {"status": "not_retrieved"})
         report["forecast_followups"] = _json_safe(self._forecast_followups(
             report=report, topic=topic, events=events, evidence=evidence, state=state, briefing=briefing))
+        # v6.35: which arm of the experiment produced this report (baseline or profile).
+        try:
+            from services import org_profile
+            report.setdefault("analysis_metadata", {})["organisation_profile"] = org_profile.summary(
+                self._run_profile(), _clean(os.getenv(org_profile.ENV)))
+        except Exception as error:
+            report.setdefault("analysis_metadata", {})["organisation_profile"] = {
+                "used": False, "error": type(error).__name__}
+        # v6.35.1 (GPT review): what a valid comparison must hold equal.
+        # v6.35.2 (GPT review): the organisation the run actually advised, not only what --org asked for.
+        from services.experiment_controls import snapshot as control_snapshot
+        current_controls = control_snapshot()
+        initial_controls = state.get("experiment_controls") or current_controls
+        focus_meta = _as_mapping(_as_mapping(report.get("actor_moves")).get("focus_organisation"))
+        report.setdefault("analysis_metadata", {})["experiment"] = {
+            "replay_of": _clean(state.get("replay_of")),
+            "replay_input_hash": state.get("replay_input_hash", ""),
+            "control_signature": initial_controls["signature"],
+            "model_settings": initial_controls["settings"],
+            "controls_stable": initial_controls["signature"] == current_controls["signature"],
+            # v6.36 (GPT review of v6.35.2): no fallback to --org - the field proves advice was produced.
+            "focus_organisation": _clean(focus_meta.get("name")),
+            "advice_produced": bool(_as_mapping(report.get("actor_moves")).get("actors")),
+            "focus_chosen_by": _clean(focus_meta.get("chosen_by")),
+            "requested_organisation": _clean(os.getenv("EVENT_INTELLIGENCE_FOCUS_ORG")),
+            "service_version": SERVICE_VERSION,
+            "topic": _clean(topic),
+            # v6.36.5: a comparison must hold the user's own hypotheses equal too.
+            "user_hypotheses": self._user_hypotheses_fingerprint(),
+        }
         report.setdefault("analysis_metadata", {})["report_sections"] = {
             "event_landscape": bool(report.get("event_landscape")),
             "editorial_briefing": briefing.get("mode", ""),
             "forward_looking_implications": len(briefing.get("implications") or []),
             "historical_analogy": len(briefing.get("analogies") or []),
             "hidden_insight": len(report.get("hidden_insights") or []),
+            "strategic_hypotheses_verified": len(_as_mapping(report.get("strategic_hypotheses")).get("verified") or []),
+            "strategic_hypotheses_promising": len(_as_mapping(report.get("strategic_hypotheses")).get("promising_unverified") or []),
             "spec": "docs/PRODUCT_SPEC.md",
         }
 
@@ -16213,9 +16770,16 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
                     known.add(eid)
                     new_count += 1
         history = [record for record in merged if record.get("historical_case")]
+        # v6.36 fix: keep the past cases gap research already found. This step used to REPLACE
+        # them, so the briefing saw no cases (logs, runs of 2026-10-11: 4-5 cases found by gap
+        # research, then "historical_cases=[]" at the briefing).
+        earlier = [r for r in _as_mapping(state.get("historical_context")).get("records") or []
+                   if isinstance(r, Mapping)]
+        seen_ids = {_clean(r.get("evidence_id")) for r in history}
+        history = history + [dict(r) for r in earlier if _clean(r.get("evidence_id")) not in seen_ids]
         state["historical_context"] = {
             "status": "incomplete" if any(r.get("history", {}).get("status") == "incomplete" for r in receipts)
-                      else "searched" if receipts else "not_searched",
+                      else "searched" if receipts or history else "not_searched",
             "records": history,
             "note": "Cited comparisons only; retrieved examples are not a representative base-rate sample. A forecast may instead rely on supported current conditions.",
         }
@@ -16290,7 +16854,37 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
     def _insight_key(insight: Mapping[str, Any]) -> str:
         return _clean(insight.get("insight_revision_id") or insight.get("insight_id"))
 
+    CALL_CAP_ENV = "EVENT_INTELLIGENCE_MAX_GEMINI_CALLS"
+    CALL_CAP_RESERVE = 0.15   # share of the cap kept for the briefing and hypothesis lab
+
+    def _apply_call_cap(self) -> None:
+        """Cost cap (26 Oct 2026): EVENT_INTELLIGENCE_MAX_GEMINI_CALLS caps every Gemini attempt and
+        grounded search in this run (services/gemini_llm_service.consume_call). Unset = no cap."""
+        raw = _clean(os.getenv(self.CALL_CAP_ENV))
+        self._call_cap = None
+        if not raw:
+            return
+        try:
+            cap = max(0, int(raw))
+        except ValueError:
+            logger.warning("%s=%r is not a number; no call cap applied", self.CALL_CAP_ENV, raw)
+            return
+        from services.gemini_llm_service import set_call_budget
+        set_call_budget(cap)
+        self._call_cap = cap
+        logger.info("gemini_call_cap=%s", cap)
+
+    def _call_cap_exhausted(self) -> bool:
+        """Past (1 - reserve) of the cap, optional stages stop so the rest goes to the report."""
+        cap = getattr(self, "_call_cap", None)
+        if cap is None:
+            return False
+        from services.gemini_llm_service import calls_used
+        return calls_used() >= cap * (1 - self.CALL_CAP_RESERVE)
+
     def _remaining_discretionary_seconds(self) -> float:
+        if self._call_cap_exhausted():
+            return 0.0
         remaining = getattr(self.execution_budget_service, "remaining_discretionary_seconds", None)
         if not callable(remaining):
             return float("inf")
@@ -16638,6 +17232,12 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
                 continue
             evidence_id = _clean(record.get("evidence_id"))
             if not evidence_id:
+                continue
+            if (_clean(record.get("gap_type")) == "earlier"
+                    or _clean(record.get("evidence_role")) == "earlier_coverage"):
+                # Coverage from earlier runs (event memory, memory pass) shows a pattern over
+                # time; it never independently confirms today's event, so it adds no event
+                # and no publisher to convergence (GPT review of the memory-pass design).
                 continue
             event_id = _clean(record.get("event_id")).upper()
             if event_id:
@@ -21267,6 +21867,7 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
             "editorial_briefing": _json_safe(report.get("editorial_briefing", {})),
             # v6.30.1: the advice section was built but never saved, so the dashboard never showed it.
             "actor_moves": _json_safe(report.get("actor_moves", {})),
+            "strategic_hypotheses": _json_safe(report.get("strategic_hypotheses", {})),
             "historical_analogies": _json_safe(report.get("historical_analogies", [])),
             "forecast_followups": _json_safe(report.get("forecast_followups", {})),
             "what_is_happening_underneath": (
@@ -21344,6 +21945,21 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
                 "",
             ),
         }
+        # Insight funnel: where each candidate went, from what the sections above record.
+        # Log and metadata only; never fatal and never changes what is released.
+        try:
+            from services import insight_funnel
+            funnel = insight_funnel.build(canonical_sections)
+            canonical_sections["analysis_metadata"]["insight_funnel"] = _json_safe(funnel)
+            # "Never blank" means some inference reaches the reader: count it, flag a report with none.
+            from services import inference_summary
+            inventory = inference_summary.inventory(canonical_sections)
+            canonical_sections["analysis_metadata"]["inference_inventory"] = _json_safe(inventory)
+            if not inventory["inference_count"]:
+                logger.warning("report_without_inference run_id=%s", _clean(report.get("run_id")))
+            logger.info("insight_funnel=%s", json.dumps(insight_funnel.summary(funnel), ensure_ascii=False, default=str))
+        except Exception as error:
+            logger.warning("insight_funnel failed: %s: %s", type(error).__name__, error)
 
         persisted_findings = (
             report.get("strategic_findings", [])

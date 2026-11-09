@@ -66,7 +66,7 @@ StubLLM = FramesAndVerifier
 
 def org_tagger(text):
     spans = []
-    for name in ("Zeta Labs", "Acme Inc.", "Beta Corp"):
+    for name in ("Zeta Labs", "Acme Inc.", "Beta Corp", "Hotel Group", "OpenAI"):
         position = text.find(name)
         if position >= 0:
             spans.append((position, position + len(name), "ORG"))
@@ -74,7 +74,8 @@ def org_tagger(text):
 
 
 def make_agent(frames, fail_on=None, filter_by_window=True, verdicts=None, **kwargs):
-    kwargs.setdefault("entity_tagger", None)
+    # Citation/segmentation tests use explicit independent NER fixtures.
+    kwargs.setdefault("entity_tagger", org_tagger)
     stub = StubLLM(frames, fail_on=fail_on, filter_by_window=filter_by_window, verdicts=verdicts)
     return ExtractionAgentV6(llm_service=stub, **kwargs)
 
@@ -189,7 +190,7 @@ def test_ner_alignment_rejects_non_entity_actor():
 
 def test_person_actor_is_not_promoted_to_gate_institution():
     person = dict(ZETA, actor={"mention": "Zeta Labs", "sentence_id": "S2", "entity_type": "person"})
-    event = make_agent([person]).extract(ARTICLE)["events"][0]
+    event = make_agent([person], entity_tagger=lambda text: [(0, 9, "PERSON")]).extract(ARTICLE)["events"][0]
     assert "actor" not in event
     assert event["roles"]["actor"]["entity_type"] == "person"
 
@@ -256,7 +257,7 @@ def test_unavailable_model_moves_to_next_in_chain():
 def test_no_reachable_model_falls_back_to_v5():
     import os
     os.environ["EVENT_INTELLIGENCE_FAST_SEMANTIC_GATE"] = "0"
-    agent = ExtractionAgentV6(llm_service=OllamaDown(), entity_tagger=None, fallback_to_v5=True)
+    agent = ExtractionAgentV6(llm_service=OllamaDown(), entity_tagger=org_tagger, fallback_to_v5=True)
     result = agent.extract(ARTICLE, research_depth="deep")
     metadata = agent.get_last_run_metadata()
     assert result["source_id"] == "SOURCE-TEST"
@@ -294,7 +295,7 @@ def test_gemini_provider_uses_the_configured_client_class():
     os.environ.pop("EXTRACTION_V6_MODEL", None)
     FakeGeminiLLMService.constructed.clear()
     try:
-        agent = ExtractionAgentV6(entity_tagger=None)
+        agent = ExtractionAgentV6(entity_tagger=org_tagger)
         events = agent.extract(ARTICLE)["events"]
     finally:
         os.environ.pop("EXTRACTION_V6_GEMINI_CLASS", None)
@@ -311,7 +312,7 @@ def test_missing_gemini_client_falls_back_explicitly_with_reason():
     os.environ["EXTRACTION_V6_GEMINI_CLASS"] = "services.does_not_exist:GeminiLLMService"
     os.environ["EVENT_INTELLIGENCE_FAST_SEMANTIC_GATE"] = "0"
     try:
-        agent = ExtractionAgentV6(entity_tagger=None, fallback_to_v5=True)
+        agent = ExtractionAgentV6(entity_tagger=org_tagger, fallback_to_v5=True)
         agent.extract(ARTICLE)
     finally:
         os.environ.pop("EXTRACTION_V6_GEMINI_CLASS", None)
@@ -325,7 +326,7 @@ def test_missing_provider_with_fallback_disabled_fails_loudly():
     import os
     os.environ["EXTRACTION_V6_GEMINI_CLASS"] = "services.does_not_exist:GeminiLLMService"
     try:
-        agent = ExtractionAgentV6(entity_tagger=None, fallback_to_v5=False)
+        agent = ExtractionAgentV6(entity_tagger=org_tagger, fallback_to_v5=False)
         try:
             agent.extract(ARTICLE)
         except RuntimeError as error:
@@ -361,7 +362,7 @@ HOTEL_PARAGRAPH = {"source_id": "SOURCE-HOTEL-2", "title": "",
 
 def run_hotel(article, **stub_kwargs):
     stub = FramesAndVerifier([HOTEL_FRAME], filter_by_window=False, **stub_kwargs)
-    agent = ExtractionAgentV6(llm_service=stub, entity_tagger=None)
+    agent = ExtractionAgentV6(llm_service=stub, entity_tagger=org_tagger)
     events = agent.extract(article)["events"]
     assert len(events) == 1
     return events[0], agent.get_last_run_metadata(), stub
@@ -473,7 +474,7 @@ def test_reviewer_long_distance_link_is_verified():
                "body": f"Hotel Group acquired a resort. {details} The deal includes an AI concierge for guests."}
     frame = dict(HOTEL_FRAME, ai_link_sentence_ids=["S10"])
     stub = FramesAndVerifier([frame], filter_by_window=False)
-    event = ExtractionAgentV6(llm_service=stub, entity_tagger=None).extract(article)["events"][0]
+    event = ExtractionAgentV6(llm_service=stub, entity_tagger=org_tagger).extract(article)["events"][0]
     assert event["roles"]["ai_link_sentence_ids"] == ["S10"]
     context = parse_claims(stub.verification_prompts[0])[0]["context"]
     assert context[0] == "[S1] Hotel Group acquired a resort."
@@ -495,7 +496,7 @@ def test_long_article_context_keeps_relevant_passages_and_marks_omissions():
     candidate = next(s["id"] for s in sentences if s["text"].startswith("The deal includes"))
     frame = dict(HOTEL_FRAME, ai_link_sentence_ids=[candidate])
     stub = FramesAndVerifier([frame], filter_by_window=False)
-    event = ExtractionAgentV6(llm_service=stub, entity_tagger=None).extract(
+    event = ExtractionAgentV6(llm_service=stub, entity_tagger=org_tagger).extract(
         {"source_id": "SOURCE-HOTEL-LONG", "title": "", "body": body})["events"][0]
     context = parse_claims(stub.verification_prompts[0])[0]["context"]
     texts = [line.split("] ", 1)[-1] for line in context]
@@ -515,7 +516,7 @@ def test_paragraph_before_the_candidate_is_shown_even_when_candidate_comes_first
              "actor": {"mention": "Hotel Group", "sentence_id": "S3", "entity_type": "organization"},
              "action_sentence_ids": ["S3"], "ai_link_sentence_ids": ["S2"]}
     stub = FramesAndVerifier([frame], filter_by_window=False)
-    ExtractionAgentV6(llm_service=stub, entity_tagger=None).extract(
+    ExtractionAgentV6(llm_service=stub, entity_tagger=org_tagger).extract(
         {"source_id": "SOURCE-RIVAL", "title": "", "body": body})
     context = parse_claims(stub.verification_prompts[0])[0]["context"]
     assert context[0] == "[S1] Rival Corp agreed to buy a hospitality software firm."
@@ -531,7 +532,7 @@ def test_ai_words_in_the_actors_background_are_verified_not_trusted():
                  "actor": {"mention": "Hotel Group", "sentence_id": "S1", "entity_type": "organization"},
                  "action_sentence_ids": ["S2"], "ai_link_sentence_ids": cited}
         stub = FramesAndVerifier([frame], filter_by_window=False)
-        event = ExtractionAgentV6(llm_service=stub, entity_tagger=None).extract(article)["events"][0]
+        event = ExtractionAgentV6(llm_service=stub, entity_tagger=org_tagger).extract(article)["events"][0]
         assert len(stub.verification_prompts) == 1
         assert event["roles"]["ai_link_sentence_ids"] == []
         rejected = event["extraction_metadata"]["ai_link_rejected"]
@@ -559,7 +560,7 @@ def test_separate_verifier_model_answers_verification():
         model_name = "verifier-model"
 
     extractor, verifier = FramesAndVerifier([HOTEL_FRAME], filter_by_window=False), Verifier([])
-    agent = ExtractionAgentV6(llm_service=extractor, verifier_llm_service=verifier, entity_tagger=None)
+    agent = ExtractionAgentV6(llm_service=extractor, verifier_llm_service=verifier, entity_tagger=org_tagger)
     event = agent.extract(HOTEL_PARAGRAPH)["events"][0]
     assert extractor.verification_prompts == [] and len(verifier.verification_prompts) == 1
     assert event["roles"]["ai_link_verification"][0]["verifier_model"] == "verifier-model"
@@ -572,7 +573,7 @@ def test_verifier_model_from_configuration():
     os.environ["EXTRACTION_V6_VERIFIER_MODEL"] = "gemini-verifier"
     FakeGeminiLLMService.constructed.clear()
     try:
-        agent = ExtractionAgentV6(entity_tagger=None)
+        agent = ExtractionAgentV6(entity_tagger=org_tagger)
     finally:
         os.environ.pop("EXTRACTION_V6_GEMINI_CLASS", None)
         os.environ.pop("EXTRACTION_V6_VERIFIER_MODEL", None)
@@ -582,7 +583,7 @@ def test_verifier_model_from_configuration():
 
 def test_one_verification_call_per_batch_of_claims():
     stub = FramesAndVerifier([ZETA, ACME])
-    ExtractionAgentV6(llm_service=stub, entity_tagger=None).extract(ARTICLE)
+    ExtractionAgentV6(llm_service=stub, entity_tagger=org_tagger).extract(ARTICLE)
     assert len(stub.verification_prompts) == 1
     assert [c["candidate_id"] for c in parse_claims(stub.verification_prompts[0])] == ["S3", "S4"]
 

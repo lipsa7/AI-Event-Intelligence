@@ -3199,8 +3199,13 @@ def actor_moves_markdown(section: Mapping[str, Any]) -> list[str]:
                 lines.append("**Rule / incentive:** " + _markdown_safe(item.get("text")) + cites(item))
         for other in as_list(actor.get("others")):
             if isinstance(other, Mapping):
+                # v6.36.5: a prediction anchored in what the player has already done, or labelled a guess.
+                record = clean_text(other.get("track_record"))
+                basis_note = (f" *(it has done this before: {_markdown_safe(record)})*" if record
+                              else " *(a guess: no past behaviour in the sources backs it)*"
+                              if other.get("guess") else "")
                 lines.append(f"**{_markdown_safe(other.get('actor'))} is likely to:** "
-                             f"{_markdown_safe(other.get('likely_move'))}" + cites(other))
+                             f"{_markdown_safe(other.get('likely_move'))}" + basis_note + cites(other))
         choice = actor.get("choice") if isinstance(actor.get("choice"), Mapping) else {}
         if clean_text(choice.get("move")):
             basis = basis_names.get(clean_text(choice.get("basis")), "")
@@ -3860,6 +3865,15 @@ def insight_ranking_lines(evaluation: Mapping[str, Any]) -> tuple[list[str], lis
         dims = item.get("dimensions") if isinstance(item.get("dimensions"), Mapping) else {}
         weak = [names[d] for d in names if dims.get(d) == 0]
         line = head + "  \n" + _markdown_safe(item.get("text"))
+        audit = item.get("substance") if isinstance(item.get("substance"), Mapping) else {}
+        if clean_text(audit.get("plain_claim")):
+            line += "  \n  **Plain claim:** " + _markdown_safe(audit.get("plain_claim"))
+            if audit.get("lift_eligible"):
+                line += "  \n  **What changes:** " + _markdown_safe(audit.get("decision_change"))
+            else:
+                line += "  \n  _No additional supported strategic insight established by the substance audit._"
+            if clean_text(audit.get("key_assumption")):
+                line += "  \n  **Assumption:** " + _markdown_safe(audit.get("key_assumption"))
         if weak:
             line += f"  \n  _Missing: {', '.join(weak)}_"
         (top if len(top) < 3 else rest).append(line)
@@ -3873,8 +3887,13 @@ def render_insight_ranking(sections: Mapping[str, Any]) -> None:
     top, rest = insight_ranking_lines(evaluation)
     if not top:
         return
-    st.subheader("Top strategic insights")
-    st.caption("Every item already passed its evidence checks. Each is scored on 12 yes/no checks (decision "
+    has_lift = any(isinstance(i, Mapping) and (i.get("substance") or {}).get("lift_eligible")
+                   for i in as_list(evaluation.get("items")))
+    has_audit = any(isinstance(i, Mapping) and "substance" in i for i in as_list(evaluation.get("items")))
+    st.subheader("Ranked observations — no additional insight established" if has_audit and not has_lift
+                 else "Top strategic insights")
+    st.caption("Source support and strategic usefulness are separate judgments. Items with no established "
+               "additional inference remain labelled as observations or weak analysis. Each is scored on 12 yes/no checks (decision "
                "relevance, mechanism, leverage and incentives, specificity, what it adds, specific to these actors) "
                "and ranked by side-by-side comparisons judged in both orders. Expert-backed items are kept and "
                "labelled. Details of each item are in its section below.")
@@ -3884,6 +3903,337 @@ def render_insight_ranking(sections: Mapping[str, Any]) -> None:
         with st.expander(f"The other {len(rest)} ranked items"):
             for line in rest:
                 st.markdown(line)
+
+
+BLOCKER_NOTES = {  # v6.34: plain words for the lab's promotion blockers
+    "direct_evidence_required_for_intent_attribution": "it claims intent (e.g. 'calculated', 'designed to') that no source states",
+    "absolute_or_exclusive_claim_requires_direct_support": "it uses an absolute claim (e.g. 'impossible', 'uniquely') that no source states",
+    "legal_semantic_mechanism_requires_direct_statutory_support": "it rests on a legal or naming argument that no statute quoted supports",
+}
+GROUNDING_NOTES = {"supported": "stated by the sources", "inference_supported": "follows from the sources",
+                   "partially_supported": "only partly backed", "unsupported": "not backed by the cited sources",
+                   "insufficient_evidence": "not enough evidence", "contradicted": "contradicted by a source"}
+
+
+def _leverage_line(lev: Mapping[str, Any]) -> str:
+    holder, counterparty = clean_text(lev.get("holder")), clean_text(lev.get("counterparty"))
+    if not (holder and counterparty):
+        return ""
+    line = f"**Leverage:** {_markdown_safe(holder)} → {_markdown_safe(counterparty)}"
+    if clean_text(lev.get("control_point")):
+        line += f"; controls: {_markdown_safe(lev.get('control_point'))}"
+    if clean_text(lev.get("dependency")):
+        line += f"; {_markdown_safe(counterparty)} needs: {_markdown_safe(lev.get('dependency'))}"
+    return line
+
+
+LEVERAGE_TEST_NOTES = {   # v6.36.4: resource-dependence test (dependence + few alternatives + asymmetry)
+    "passed": "dependence, limited alternatives and one-sided dependence are all backed by the sources",
+    "not_established": "not every part of the test is backed by the sources, so this is not established leverage",
+    "incomplete": "the counterparty's alternatives or the holder's own dependence were not stated, so leverage is "
+                  "not established",
+}
+
+
+def hypothesis_lines(item: Mapping[str, Any], verified: bool) -> list[str]:
+    """v6.34: one strategic hypothesis, verified or not yet backed, with its evidence and gaps."""
+    thesis = clean_text(item.get("thesis") or item.get("insight") or item.get("text"))
+    if not thesis:
+        return []
+    label = ("**Verified** · " if verified else "**Analysis** · " if item.get("status") == "analysis"
+             else "**Not yet backed** · ")
+    lines = [label + _markdown_safe(thesis)]
+    checks = item.get("field_checks") if isinstance(item.get("field_checks"), Mapping) else {}
+
+    def tag(field: str) -> str:
+        """v6.34.1: each displayed field shows its own source-check result."""
+        status = clean_text(checks.get(field))
+        if status in {"supported", "inference_supported"}:
+            return f" *({GROUNDING_NOTES[status]})*"
+        if status and status != "not_checked":
+            return f" *({GROUNDING_NOTES.get(status, status)} - analysis only)*"
+        return " *(not checked against the sources)*"
+
+    lev = item.get("leverage") if isinstance(item.get("leverage"), Mapping) else {}
+    if _leverage_line(lev):
+        lines.append("- " + _leverage_line(lev) + tag("leverage"))
+        # v6.36.4: the other two parts of the leverage test, each with its own check.
+        if clean_text(lev.get("outside_option")):
+            lines.append(f"- **{_markdown_safe(lev.get('counterparty'))}'s alternatives:** "
+                         + _markdown_safe(lev.get("outside_option")) + tag("leverage_alternatives"))
+        if clean_text(lev.get("holder_dependence")):
+            lines.append(f"- **What {_markdown_safe(lev.get('holder'))} needs back:** "
+                         + _markdown_safe(lev.get("holder_dependence")) + tag("leverage_asymmetry"))
+        test = clean_text(item.get("leverage_test"))
+        if test in LEVERAGE_TEST_NOTES:
+            lines.append(f"- **Leverage test:** {'passed' if test == 'passed' else 'not passed'} - "
+                         + LEVERAGE_TEST_NOTES[test])
+    for key, label, basis in (("likely_actor_move", "Likely move", "actor_move_basis"),
+                              ("likely_countermove", "Countermove", "countermove_basis")):
+        if clean_text(item.get(key)):
+            lines.append(f"- **{label}:** {_markdown_safe(item.get(key))}" + tag(key))
+            # v6.36.5: what the actor has already done that the prediction rests on, or "a guess".
+            if clean_text(item.get(basis)):
+                lines.append(f"  - *Based on what it has already done:* {_markdown_safe(item.get(basis))}" + tag(basis))
+            else:
+                lines.append("  - *A guess: no past behaviour in the sources is cited for this move.*")
+    if as_list(item.get("from_user")):   # v6.36.5
+        lines.append("- *Developed from your own hypothesis "
+                     + ", ".join(_markdown_safe(x) for x in as_list(item.get("from_user"))) + ".*")
+    for key, label in (("why_not_obvious", "Why it isn't obvious"), ("watch_signal", "Watch for"),
+                       ("falsifier", "Would be wrong if")):
+        if clean_text(item.get(key)):
+            lines.append(f"- **{label}:** {_markdown_safe(item.get(key))}")
+    narrowed = item.get("narrowed_from") if isinstance(item.get("narrowed_from"), Mapping) else {}
+    if narrowed:
+        lines.append("- *Stated more narrowly than the first version, which was overstated:* "
+                     + _markdown_safe(narrowed.get("thesis"))[:300])
+    quotes = []
+    for q in as_list(item.get("supporting_evidence")):
+        if isinstance(q, Mapping):   # v6.34.1: quote with its source link, publisher and rating
+            text, url = clean_text(q.get("text")), clean_text(q.get("url"))
+            if not text:
+                continue
+            who = ", ".join(x for x in (_markdown_safe(q.get("publisher")), _markdown_safe(q.get("credibility"))) if x)
+            src = (f" ([{who or 'source'}]({url}))" if url.startswith(("http://", "https://"))
+                   else f" ({who})" if who else " (source not linked)")
+            quotes.append("\u201c" + _markdown_safe(text)[:200] + "\u201d" + src)
+        elif clean_text(q):
+            quotes.append("\u201c" + _markdown_safe(q)[:200] + "\u201d (source not linked)")
+    if quotes:
+        lines.append("- **Backed by:** " + " · ".join(quotes[:3]))
+    lines += earlier_coverage_lines(item)
+    if not verified:
+        reasons = []
+        grounding = item.get("grounding") if isinstance(item.get("grounding"), Mapping) else {}
+        for part in ("thesis", "mechanism"):
+            status = clean_text(grounding.get(part))
+            if status and status not in {"supported", "inference_supported"}:
+                reasons.append(f"the {part} is {GROUNDING_NOTES.get(status, status)}")
+        reasons += [BLOCKER_NOTES.get(b, b) for b in as_list(item.get("promotion_blockers"))]
+        reasons += [clean_text(r).replace("_", " ") for r in as_list(item.get("failure_reasons"))]
+        if reasons:
+            lines.append("- **Why not yet backed:** " + "; ".join(_markdown_safe(r) for r in reasons[:4]))
+        needed = [clean_text(x.get("claim")) for x in as_list(item.get("research_needed")) if isinstance(x, Mapping)]
+        ask = clean_text(item.get("research_question")) or (needed[0] if needed else "")
+        if ask:
+            lines.append("- **What would confirm it:** " + _markdown_safe(ask)[:300])
+        attempt = item.get("narrowed_attempt") if isinstance(item.get("narrowed_attempt"), Mapping) else {}
+        if attempt:
+            lines.append("- *A narrower version was also checked and is still not backed:* "
+                         + _markdown_safe(attempt.get("thesis"))[:300])
+    return lines
+
+
+def render_strategic_hypotheses(sections: Mapping[str, Any], exclude_ids: Iterable[str] = ()) -> None:
+    """v6.34: the hypothesis lab's output was saved but never shown.
+    exclude_ids: hypotheses already shown under "Hypotheses to investigate" (plan fix E)."""
+    lab = sections.get("strategic_hypotheses") if isinstance(sections, Mapping) else None
+    lab = lab if isinstance(lab, Mapping) else {}
+    evaluation = sections.get("insight_evaluation") if isinstance(sections.get("insight_evaluation"), Mapping) else {}
+    verified = [h for h in as_list(lab.get("verified")) if isinstance(h, Mapping)]
+    # The lab's own hypotheses first (they carry the leverage chain), then claim-gate near misses.
+    unverified, seen, excluded = [], set(), {clean_text(x) for x in exclude_ids}
+    for h in as_list(lab.get("promising_unverified")) + as_list(evaluation.get("promising_unverified")):
+        if isinstance(h, Mapping) and clean_text(h.get("id")) and clean_text(h.get("id")) in excluded:
+            continue
+        key = clean_text(isinstance(h, Mapping) and (h.get("thesis") or h.get("insight") or h.get("text"))).casefold()
+        if isinstance(h, Mapping) and key and key not in seen:
+            seen.add(key)
+            unverified.append(h)
+    unverified = unverified[:10]
+    if not verified and not unverified:
+        return
+    st.subheader("Strategic hypotheses")
+    st.caption(f"{lab.get('raw_count', 0)} candidate ideas were generated, attacked and evolved into "
+               f"{lab.get('evolved_count', 0)}. Verified means source-checked, not proven novel or useful; strategic value is assessed separately. "
+               "Ones not yet backed are shown so a strong idea is not lost: read them as hypotheses to research, "
+               "not findings.")
+    mine = [h for h in as_list(lab.get("user_hypotheses")) if isinstance(h, Mapping)]
+    if mine:   # v6.36.5: your own hypotheses, tested under the same rules
+        used = {u for item in list(verified) + list(unverified) for u in as_list(item.get("from_user"))}
+        st.caption("Your hypotheses tested this run: " + "; ".join(
+            f"{_markdown_safe(h.get('id'))} " + ("(developed below)" if h.get("id") in used
+                                                 else "(the facts did not support it, so it was dropped)")
+            for h in mine))
+    for item in verified:
+        st.markdown("\n".join(hypothesis_lines(item, True)))
+    if unverified:
+        with st.expander(f"{len(unverified)} hypotheses not yet backed by the sources", expanded=not verified):
+            for item in unverified:
+                st.markdown("\n".join(hypothesis_lines(item, False)))
+
+
+def _profile_meta(sections: Mapping[str, Any]) -> Mapping[str, Any]:
+    meta = sections.get("analysis_metadata") if isinstance(sections.get("analysis_metadata"), Mapping) else {}
+    profile = meta.get("organisation_profile") if isinstance(meta.get("organisation_profile"), Mapping) else {}
+    return profile
+
+
+def render_profile_note(sections: Mapping[str, Any]) -> None:
+    """v6.35: which arm of the experiment this report is (baseline or organisation profile)."""
+    profile = _profile_meta(sections)
+    if profile.get("used"):
+        st.caption(f"Organisation profile used: {_markdown_safe(profile.get('name'))} - decision goal: "
+                   f"{_markdown_safe(profile.get('decision_goal'))} (profile {clean_text(profile.get('fingerprint'))})")
+    elif profile:
+        st.caption("No organisation profile (baseline run).")
+
+
+def rating_items(sections: Mapping[str, Any]) -> list[dict[str, str]]:
+    """Every item worth rating (v6.36.6: shared with compare_runs.py's blind export)."""
+    from services import insight_ratings
+    return insight_ratings.rating_items(sections)
+
+
+def render_rating_form(report: Mapping[str, Any], sections: Mapping[str, Any]) -> None:
+    """v6.35: your ratings are the measure for experiments (data/insight_ratings.jsonl)."""
+    from services import insight_ratings
+    items = rating_items(sections)
+    if not items:
+        return
+    report_id = clean_text(report.get("report_id"))
+    payload = report.get("payload") if isinstance(report.get("payload"), Mapping) else {}
+    run_id = clean_text(report.get("run_id") or payload.get("run_id") or sections.get("run_id"))
+    earlier = {r["item_key"]: r for r in insight_ratings.load() if r.get("report_id") == report_id}
+    done = {key: r["rating"] for key, r in earlier.items()}
+    with st.expander(f"Rate these items ({len(done)} of {len(items)} rated)", expanded=False):
+        st.caption("For an experiment, rate BLIND instead: python compare_runs.py --blind-export, then "
+                   "--blind-import (v6.36.6) - here you can see which run you are rating, which can sway ratings.")
+        st.caption("Your ratings decide whether a change is kept (for example the organisation profile). "
+                   "Useful = you would act on it or it changed your view; meh = true but you knew it or it is generic; "
+                   "poor = wrong, vague or not strategic.")
+        with st.form(key=f"ratings::{report_id}"):
+            answers = []
+            options = ["not rated", "useful", "meh", "poor"]
+            for n, item in enumerate(items):
+                st.markdown(f"**{_markdown_safe(item['label'])}** - {_markdown_safe(item['text'])[:400]}")
+                current = done.get(item["key"], "not rated")
+                choice = st.radio("Rating", options, index=options.index(current), horizontal=True,
+                                  key=f"rate::{report_id}::{n}")
+                reason = st.text_input("Why (one line, optional)", key=f"why::{report_id}::{n}",
+                                       value=clean_text((earlier.get(item["key"]) or {}).get("reason")))
+                answers.append((item, choice, reason))
+            if st.form_submit_button("Save my ratings"):
+                saved = insight_ratings.save(
+                    {"report_id": report_id, "run_id": run_id, "item_key": item["key"], "kind": item["kind"],
+                     "text": item["text"], "rating": choice, "reason": reason,
+                     "profile_used": bool(_profile_meta(sections).get("used"))}
+                    for item, choice, reason in answers if choice in insight_ratings.RATINGS)
+                st.success(f"Saved {saved} ratings.")
+
+
+def earlier_coverage_lines(item: Mapping[str, Any]) -> list[str]:
+    """Memory pass: earlier-run facts a hypothesis relies on, always shown with their dates."""
+    used = [e for e in as_list(item.get("earlier_facts_used")) if isinstance(e, Mapping)]
+    if not used:
+        return []
+    lines = ["- **Uses coverage from earlier runs** (a pattern over time, not confirmation of this run's news):"]
+    for e in used[:4]:
+        when = "; ".join(x for x in (f"occurred {clean_text(e.get('occurred'))}" if clean_text(e.get("occurred")) else "",
+                                     f"reported {clean_text(e.get('reported'))}" if clean_text(e.get("reported")) else "")
+                         if x) or "date not recorded"
+        lines.append(f"  - {_markdown_safe(e.get('fact_id'))} ({when}): {_markdown_safe(e.get('text'))[:220]}")
+    return lines
+
+
+def investigation_lines(item: Mapping[str, Any]) -> list[str]:
+    """Plan fix E: one hypothesis to investigate - what the sources establish, kept apart from
+    what is unresolved or assumed, the reasoning step, and what would disprove it."""
+    from services import hypothesis_tier as tier
+    thesis = clean_text(item.get("thesis"))
+    if not thesis:
+        return []
+    lines = ["**" + _markdown_safe(thesis) + "**"]
+    if item.get("status") == "analysis":
+        stated = "; ".join(_markdown_safe(a) for a in as_list(item.get("key_assumptions")) if clean_text(a))
+        lines.append("*Analysis: the facts are sourced and every reasoning step follows from them except one, "
+                     "stated here as the assumption:* " + stated)
+    if clean_text(item.get("_rating")):
+        lines.append(f"*You rated this {clean_text(item.get('_rating'))}.*")
+    lines.append(f"- **What the sources establish** ({tier.coverage(item)}):")
+    for quote in tier.premises(item)[:4]:
+        url, who = clean_text(quote.get("url")), _markdown_safe(quote.get("publisher")) or "source"
+        src = f"[{who}]({url})" if url.startswith(("http://", "https://")) else who
+        lines.append("  - “" + _markdown_safe(quote.get("text"))[:220] + "” (" + src + ")")
+    grounding = item.get("grounding") if isinstance(item.get("grounding"), Mapping) else {}
+    if clean_text(item.get("mechanism")):
+        status = clean_text(grounding.get("mechanism"))
+        lines.append("- **Reasoning step:** " + _markdown_safe(item.get("mechanism"))
+                     + (f" *({GROUNDING_NOTES.get(status, status)})*" if status else ""))
+    assumed = tier.assumptions(item)
+    if assumed:
+        lines.append("- **Assumed, not stated by any source:** " + "; ".join(_markdown_safe(a) for a in assumed[:3]))
+    unresolved = tier.open_points(item)
+    if unresolved:
+        lines.append("- **Not established by the sources:**")
+        lines += ["  - " + _markdown_safe(point) for point in unresolved[:4]]
+    lines += earlier_coverage_lines(item)
+    for key, label in (("falsifier", "Would be wrong if"), ("watch_signal", "Watch for")):
+        if clean_text(item.get(key)):
+            lines.append(f"- **{label}:** {_markdown_safe(item.get(key))}")
+    return lines
+
+
+
+def investigation_extra_lines(item: Mapping[str, Any]) -> list[str]:
+    """Every unresolved point omitted from the short preview remains accessible."""
+    from services import hypothesis_tier as tier
+    lines = []
+    for point in tier.assumptions(item)[3:]:
+        lines.append("- **Assumed, not stated by any source:** " + _markdown_safe(point))
+    for point in tier.open_points(item)[4:]:
+        lines.append("- **Not established by the sources:** " + _markdown_safe(point))
+    return lines
+
+
+def render_hypotheses_to_investigate(items: Iterable[Mapping[str, Any]]) -> None:
+    """Plan fix E: near misses shown expanded, labelled as hypotheses, never as insights."""
+    items = [item for item in items if isinstance(item, Mapping)]
+    if not items:
+        return
+    st.subheader("Hypotheses to investigate")
+    st.caption("Not insights. Each rests on facts the sources state plus reasoning they do not state; "
+               "nothing here is contradicted by a source. Check the open points before acting on one.")
+    for item in items:
+        st.markdown("\n".join(investigation_lines(item)))
+        extra = investigation_extra_lines(item)
+        if extra:
+            with st.expander(f"{len(extra)} more assumptions and unresolved points"):
+                st.markdown("\n".join(extra))
+
+
+def render_lead_inference(report: Mapping[str, Any], sections: Mapping[str, Any]) -> None:
+    """The report always opens with its strongest inference, under its own label (never relabelled)."""
+    from services import inference_summary
+    ratings: dict[str, str] = {}
+    try:
+        from services import insight_ratings
+        report_id = clean_text(report.get("report_id"))
+        ratings = {r["item_key"]: r["rating"] for r in insight_ratings.load() if r.get("report_id") == report_id}
+    except Exception:
+        ratings = {}
+    lead = inference_summary.lead(sections, ratings)
+    st.subheader("Main inference this run")
+    if not lead:
+        st.warning("This report contains no inference beyond the news itself.")
+        return
+    st.caption(lead["label"])
+    st.markdown("**" + _markdown_safe(lead["text"]) + "**")
+    if lead["kind"] == "hypothesis":
+        st.caption("Details are under \"Hypotheses to investigate\" below.")
+
+
+def _investigation_items(report: Mapping[str, Any], sections: Mapping[str, Any]) -> list[dict[str, Any]]:
+    from services import hypothesis_tier as tier
+    ratings: dict[str, str] = {}
+    try:   # your own ratings of these same saved items order them first
+        from services import insight_ratings
+        report_id = clean_text(report.get("report_id"))
+        ratings = {r["item_key"]: r["rating"] for r in insight_ratings.load() if r.get("report_id") == report_id}
+    except Exception:
+        ratings = {}
+    return tier.select(sections, ratings)
 
 
 def render_main_finding(
@@ -3898,7 +4248,12 @@ def render_main_finding(
     connection is listed with the other checked connections, never as a
     separate "main finding".
     """
+    render_profile_note(sections)
+    render_lead_inference(report, sections)
     render_insight_ranking(sections)
+    investigate = _investigation_items(report, sections)
+    render_strategic_hypotheses(sections, exclude_ids=[clean_text(i.get("id")) for i in investigate])
+    render_rating_form(report, sections)
     render_editorial_briefing(sections)
     hidden = [item for item in as_list(sections.get("hidden_insights")) if isinstance(item, Mapping)]
     findings = [item for item in as_list(sections.get("strategic_findings")) if isinstance(item, Mapping)]
@@ -3920,6 +4275,7 @@ def render_main_finding(
     else:
         st.markdown("**None this run.**")
         st.caption("No candidate passed every evidence check for a hidden insight. The briefing above is complete.")
+    render_hypotheses_to_investigate(investigate)
     checked_connections = [clean_text(item.get("text") or item.get("connection")) for item in connections]
     checked_connections += [
         clean_text(item.get("text")) for item in findings
@@ -3950,6 +4306,42 @@ def _briefing_meta(citations: Any, sources: Mapping[str, Mapping[str, Any]]) -> 
     unique = list(dict.fromkeys(label for label in labels if label))
     return " · ".join(unique[:4])
 
+
+
+def _publishers(source_ids: Any, sources: Mapping[str, Mapping[str, Any]]) -> int:
+    from services import source_credibility as credibility
+    names = []
+    for source_id in as_list(source_ids):
+        ref = sources.get(clean_text(source_id), {})
+        names.append((clean_text(ref.get("publisher")) or credibility.host_of(clean_text(ref.get("url")))
+                      or clean_text(source_id)).casefold())
+    return len(dict.fromkeys(n for n in names if n))
+
+
+def corroboration_note(per_fact: Any, sources: Mapping[str, Mapping[str, Any]]) -> str:
+    """v6.36.7 (GPT review of v6.36.6; Admiralty / NATO system): corroboration is PER stated fact - how
+    many different publishers back that same fact. Different publishers backing different facts is
+    not corroboration. Distinct publishers, not checked for copying each other."""
+    rows = [r for r in as_list(per_fact) if isinstance(r, Mapping)]
+    if not rows:
+        return ""
+    confirmed = sum(1 for r in rows if _publishers(r.get("source_ids"), sources) >= 2)
+    if confirmed == len(rows):
+        return (f"each of its {len(rows)} stated facts is backed by 2 or more different publishers" if len(rows) > 1
+                else "its stated fact is backed by 2 or more different publishers")
+    if confirmed == 0:
+        return ("its stated facts each rest on one publisher (not independently confirmed)" if len(rows) > 1
+                else "its stated fact rests on one publisher (not independently confirmed)")
+    return (f"{confirmed} of its {len(rows)} stated facts are backed by 2 or more different publishers; "
+            "the others rest on one")
+
+
+# v6.36.3: the implication fields the briefing renders with an assumption label, per basis.
+IMPLICATION_FIELDS_SHOWN = {
+    "leverage": {"mechanism", "counterparty_alternatives", "holder_dependence"},
+    "precedent": {"base_rate"},
+    "incentive": {"economic_or_strategic_effect", "attractive_move", "counterparty_consequence", "position_shift"},
+}
 
 def render_editorial_briefing(sections: Mapping[str, Any]) -> None:
     """v6.17 always-present section: briefing, forward-looking implications, analogies."""
@@ -4007,6 +4399,13 @@ def render_editorial_briefing(sections: Mapping[str, Any]) -> None:
                 extra.append(_markdown_safe(item.get("holder")) + " → " + _markdown_safe(item.get("counterparty"))
                              + " via " + _markdown_safe(item.get("leverage_source"))
                              + "; how: " + _markdown_safe(item.get("mechanism")) + tag("mechanism"))
+                if clean_text(item.get("counterparty_alternatives")):   # v6.36.4: the leverage test
+                    extra.append(_markdown_safe(item.get("counterparty")) + "'s alternatives: "
+                                 + _markdown_safe(item.get("counterparty_alternatives"))
+                                 + tag("counterparty_alternatives"))
+                if clean_text(item.get("holder_dependence")):
+                    extra.append("what " + _markdown_safe(item.get("holder")) + " needs back: "
+                                 + _markdown_safe(item.get("holder_dependence")) + tag("holder_dependence"))
             if basis == "incentive" and clean_text(item.get("actor")):
                 extra.append("rule: " + _markdown_safe(item.get("policy_or_regulation"))
                              + "; why it matters to " + _markdown_safe(item.get("actor")) + ": "
@@ -4014,9 +4413,37 @@ def render_editorial_briefing(sections: Mapping[str, Any]) -> None:
                              + "; effect: " + _markdown_safe(item.get("economic_or_strategic_effect"))
                              + tag("economic_or_strategic_effect")
                              + "; move: " + _markdown_safe(item.get("attractive_move")) + tag("attractive_move"))
+                # v6.36.3 (GPT review): the counterparty, what changes for it and - only for a
+                # displacement claim - who gains over whom, each with its assumption label.
+                if clean_text(item.get("counterparty")):
+                    extra.append("acts on " + _markdown_safe(item.get("counterparty")) + ": "
+                                 + _markdown_safe(item.get("counterparty_consequence"))
+                                 + tag("counterparty_consequence"))
+                if clean_text(item.get("who_loses")):
+                    extra.append(_markdown_safe(item.get("who_gains") or item.get("actor")) + " gains position over "
+                                 + _markdown_safe(item.get("who_loses")) + tag("position_shift"))
 
             if clean_text(item.get("conditions")):
                 extra.append("could be wrong if: " + _markdown_safe(item.get("conditions")) + tag("conditions"))
+            # v6.36.3: no assumption label may be lost - any assumed step not shown above is listed.
+            unshown = [f for f in assumed if f not in IMPLICATION_FIELDS_SHOWN.get(basis, set()) | {"conditions"}]
+            if unshown:
+                extra.append("not backed by the sources, shown as assumptions: "
+                             + "; ".join(_markdown_safe(clean_text(item.get(f)) or f.replace("_", " "))
+                                         for f in sorted(unshown)))
+            rate = item.get("base_rate") if isinstance(item.get("base_rate"), Mapping) else {}
+            if basis == "precedent" and rate:   # v6.36.5: a base rate, not one anecdote
+                similar = as_list(rate.get("similar_case_ids"))
+                if len(similar) >= 2 and rate.get("stated"):
+                    hits = as_list(rate.get("outcome_case_ids"))
+                    # v6.36.6 (reference-class forecasting needs a class "broad enough to be statistically
+                    # meaningful"): these are the few cases two searches found, so the count is labelled as such.
+                    extra.append(f"{len(hits)} of {len(similar)} similar past cases found by search ended this way"
+                                 + (f" ({', '.join(_markdown_safe(h) for h in hits)})" if hits else "")
+                                 + tag("base_rate")
+                                 + " - a small sample found by search, not a full base rate; indicative only")
+                else:
+                    extra.append("one past case only - no base rate")
             if basis == "precedent" and case:
                 if clean_text(case.get("difference")):
                     extra.append("key difference: " + _markdown_safe(case.get("difference")))
@@ -4031,6 +4458,9 @@ def render_editorial_briefing(sections: Mapping[str, Any]) -> None:
             meta = _briefing_meta(item.get("citations"), sources)
             if meta:
                 extra.append("based on: " + meta)
+            confirmed = corroboration_note(item.get("fact_corroboration"), sources)
+            if confirmed:   # v6.36.6
+                extra.append(confirmed)
             experts = _briefing_meta(item.get("expert_citations"), citation_sources(item.get("expert_citations")))
             if experts:  # v6.30.2: backed analysis that published experts also argue
                 extra.append("experts or organisations also argue this: " + experts)
@@ -4048,6 +4478,20 @@ def render_editorial_briefing(sections: Mapping[str, Any]) -> None:
                     if "already_in_expert_commentary" in as_list(item.get("novelty_reasons")) else "")
             meta = _briefing_meta(item.get("citations"), sources)  # v6.30.2: with citations
             st.markdown("- " + _markdown_safe(item.get("text")) + note + (f"  \n  _based on: {meta}_" if meta else ""))
+    fit = briefing.get("policy_fit") if isinstance(briefing.get("policy_fit"), Mapping) else {}
+    if fit.get("advised_organisation_addressed") is False:   # v6.36.1: said plainly, not hidden
+        st.caption(f"No leverage or rule-based implication about {_markdown_safe(fit.get('advised_organisation'))} "
+                   "passed this run's checks.")
+    if as_list(fit.get("compliance_moves_rejected")):
+        st.caption(f"{len(as_list(fit.get('compliance_moves_rejected')))} rule-based implication(s) removed because the "
+                   "'move' was only to comply with the rule.")
+    # v6.36.4: every structural filter says how much it removed, so a thin report can be diagnosed.
+    if as_list(fit.get("leverage_rejected")):
+        st.caption(f"{len(as_list(fit.get('leverage_rejected')))} leverage implication(s) removed because they did not "
+                   "state the counterparty's alternatives or what the holder needs back (the leverage test).")
+    if as_list(fit.get("position_rejected")):
+        st.caption(f"{len(as_list(fit.get('position_rejected')))} rule-based implication(s) removed because they did not "
+                   "name a specific counterparty and what changes for it (or the rival, for a displacement claim).")
     render_expert_commentary(briefing)
     render_actor_moves(sections)
     render_forecast_followups(sections)
@@ -4062,6 +4506,8 @@ def render_editorial_briefing(sections: Mapping[str, Any]) -> None:
                         + (f" [source]({url})" if url.startswith(("http://", "https://")) else ""))
             if clean_text(item.get("difference")):
                 st.caption("Key difference: " + _markdown_safe(item.get("difference")))
+            if clean_text(item.get("why_it_may_mislead")):   # v6.36
+                st.caption("Why it may mislead (analysis): " + _markdown_safe(item.get("why_it_may_mislead")))
     st.divider()
 
 

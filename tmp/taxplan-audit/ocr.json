@@ -1,0 +1,882 @@
+﻿[
+    {
+        "file":  "Screenshot 2026-10-22 161909.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied.\r\n\""
+    },
+    {
+        "file":  "Screenshot 2026-10-25 160500.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-25 164257.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied.\r\n\""
+    },
+    {
+        "file":  "Screenshot 2026-10-26 185235.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-26 185326.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-26 185339.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-26 185350.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-26 185403.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-26 193439.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-26 194025.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-27 101535.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-27 154813.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-27 154905.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-27 154945.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-27 154957.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-27 155107.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-27 155131.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-27 155253.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-27 155307.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-27 155339.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-27 155358.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-27 155410.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 091611.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 091628.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 091835.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 091922.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 092143.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 092229.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 092327.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 092443.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 093120.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 093142.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 093250.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 093308.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 093331.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 093347.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 093409.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 093808.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 093828.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 093841.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 093858.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 093909.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 093947.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 094001.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 094018.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 094129.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 094235.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 094312.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 094359.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 094453.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 094530.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 094552.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 095017.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 095039.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 095109.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 095121.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 095132.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 095211.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 095229.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 095411.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 095837.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 095851.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 095902.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 095928.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 095941.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 100111.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 100126.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 100135.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 100204.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 100226.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 100810.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 100821.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 100853.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 100912.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 100950.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 101024.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 101505.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 101519.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 101530.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 101540.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 101600.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 101618.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 101631.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 101642.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 101704.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 101715.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 101726.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 103305.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 103323.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 103342.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 103401.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 103418.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 103438.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 103458.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 103510.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 103544.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 103602.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 103612.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 103719.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 103728.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 103752.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 103847.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 103956.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 104011.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 104023.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 104033.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 104243.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 104305.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 104315.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 104342.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 104355.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 104403.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 104422.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 105048.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 105116.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 105127.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied.\r\n\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 105152.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 105211.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 105231.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 105301.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 105312.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 105548.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 105603.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 105613.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 105626.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 105704.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 105723.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 105806.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 105820.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 105852.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 105903.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 105919.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 112130.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 112145.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 112156.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 112210.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 112228.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 112242.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 112251.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 112306.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 112316.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 112331.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 112342.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 112356.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 112457.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 112508.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 112523.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 112533.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 112544.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 112620.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 112631.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 112641.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 112727.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 112835.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 112853.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 112904.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 112913.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 112942.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 113004.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 113021.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 113042.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 113058.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 113138.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 113153.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 113204.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 113230.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 113242.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 113252.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 113314.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 113338.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 113415.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 113427.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 113511.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 113525.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 113541.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    },
+    {
+        "file":  "Screenshot 2026-10-28 122855.png",
+        "text":  "",
+        "error":  "Exception calling \"GetResult\" with \"0\" argument(s): \"Access is denied. (Exception from HRESULT: 0x80070005 (E_ACCESSDENIED))\""
+    }
+]

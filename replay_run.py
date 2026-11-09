@@ -38,9 +38,39 @@ def main() -> int:
     parser.add_argument("run_id", nargs="?", help="RUN-... id or checkpoint path (default: latest)")
     parser.add_argument("--list", action="store_true", help="list saved checkpoints")
     parser.add_argument("--org", default="", help="organisation to advise in depth (v6.30); default: app picks")
+    parser.add_argument("--profile", default="",
+                        help="v6.35 experiment: organisation profile JSON (e.g. profiles/openai.json); omit for the baseline")
+    parser.add_argument("--hypotheses", default="",
+                        help="v6.36.5: a text file of your own hypotheses (one per paragraph, at most 5) to test "
+                             "alongside the app's; use the SAME file (or none) for both runs of an experiment")
     args = parser.parse_args()
     if args.org:
         os.environ["EVENT_INTELLIGENCE_FOCUS_ORG"] = args.org.strip()
+    os.environ.pop("EVENT_INTELLIGENCE_PROFILE", None)
+    if args.profile:
+        from services import org_profile
+        try:
+            profile = org_profile.load(args.profile)   # a broken file stops here, not halfway through a run
+        except org_profile.ProfileError as error:
+            print(f"Profile error: {error}")
+            return 2
+        os.environ["EVENT_INTELLIGENCE_PROFILE"] = str(Path(args.profile).resolve())
+        print(f"Using organisation profile for {profile['name']} (goal: {profile['decision_goal'][:120]})")
+    else:
+        print("No organisation profile: baseline run.")
+    os.environ.pop("EVENT_INTELLIGENCE_USER_HYPOTHESES", None)
+    if args.hypotheses:
+        from services import strategic_hypothesis_lab as lab
+        try:
+            mine = lab.load_user_hypotheses(args.hypotheses)
+        except OSError as error:
+            print(f"Hypotheses file error: {error}")
+            return 2
+        if not mine:
+            print("Hypotheses file has no hypothesis of 20 characters or more.")
+            return 2
+        os.environ["EVENT_INTELLIGENCE_USER_HYPOTHESES"] = str(Path(args.hypotheses).resolve())
+        print(f"Testing {len(mine)} hypothesis(es) of your own: " + "; ".join(h["text"][:60] for h in mine))
     configure_logging()
     found = checkpoints()
     if args.list:

@@ -2660,7 +2660,10 @@ class StrategicInferenceAgent:
         )
         thread.start()
 
-        if not finished.wait(max(5.0, float(timeout_seconds))):
+        from services.gemini_llm_service import proxy_dir
+        if proxy_dir():   # offline proxy testing: answers are slow by design, so wait for them
+            finished.wait()
+        elif not finished.wait(max(5.0, float(timeout_seconds))):
             raise StrategicInferenceModelTimeoutError(
                 f"Strategic model {model_name} exceeded hard timeout "
                 f"of {float(timeout_seconds):.1f}s."

@@ -41,7 +41,7 @@ from typing import Any, Dict, Mapping, Optional
 logger = logging.getLogger("event_intelligence.services.gemini_llm_service")
 
 
-SERVICE_VERSION = "gemini-llm-service-v1.2.3-credits-fail-fast"
+SERVICE_VERSION = "gemini-llm-service-v1.2.4-call-ceiling"
 
 DEFAULT_STRATEGIC_MODEL = "gemini-3.1-pro-preview"
 DEFAULT_GROUNDING_MODEL = "gemini-3.5-flash-lite"
@@ -527,6 +527,84 @@ def record_usage(model: str, usage: Mapping[str, Any] | None, *, failed: bool = 
                 pass
 
 
+# v6.36.2: an optional hard ceiling on Gemini API attempts (every attempt counts, retries included),
+# for stage tests that must not exceed a stated cost. None = no ceiling (normal runs).
+_CALL_BUDGET: Dict[str, Any] = {"limit": None, "used": 0}
+
+
+class GeminiCallBudgetExceeded(GeminiLLMServiceError):
+    """The stage test's Gemini call ceiling was reached; no further call is made."""
+
+
+def set_call_budget(limit: Optional[int]) -> None:
+    with _USAGE_LOCK:
+        _CALL_BUDGET["limit"] = None if limit is None else max(0, int(limit))
+        _CALL_BUDGET["used"] = 0
+
+
+def consume_call() -> None:
+    """Count one Gemini API attempt; refuse it once the ceiling is reached."""
+    with _USAGE_LOCK:
+        limit = _CALL_BUDGET["limit"]
+        if limit is not None and _CALL_BUDGET["used"] >= limit:
+            raise GeminiCallBudgetExceeded(f"Gemini call ceiling of {limit} reached; call not made.")
+        _CALL_BUDGET["used"] += 1
+
+
+PROXY_ENV = "EVENT_INTELLIGENCE_LLM_PROXY_DIR"
+PROXY_TIMEOUT_ENV = "EVENT_INTELLIGENCE_LLM_PROXY_TIMEOUT"
+_PROXY_SEQ = {"next": 0}
+
+
+def proxy_dir() -> str:
+    """Offline testing: when set, model requests are written here and answered from here; Gemini
+    is never called. Unset in normal use."""
+    return " ".join(str(os.getenv(PROXY_ENV) or "").split())
+
+
+def proxy_generate(model: str, prompt: str, json_mode: bool, metadata: Mapping[str, Any] | None) -> Any:
+    """Write the request to <dir>/pending/NNNNN.json and wait for <dir>/answers/NNNNN.txt.
+
+    The answer file holds exactly what the model would have returned (JSON text in JSON mode).
+    A request left unanswered past the timeout fails like a model error, so stages degrade as
+    they would on an outage."""
+    from types import SimpleNamespace
+    root = Path(proxy_dir())
+    pending, answers = root / "pending", root / "answers"
+    pending.mkdir(parents=True, exist_ok=True)
+    answers.mkdir(parents=True, exist_ok=True)
+    with _USAGE_LOCK:
+        _PROXY_SEQ["next"] += 1
+        seq = f"{_PROXY_SEQ['next']:05d}"
+    request = {"id": seq, "model": model, "json_mode": bool(json_mode),
+               "task": (metadata or {}).get("task", ""), "metadata": dict(metadata or {}), "prompt": prompt}
+    tmp = pending / f"{seq}.json.tmp"
+    tmp.write_text(json.dumps(request, ensure_ascii=False, indent=1, default=str), encoding="utf-8")
+    tmp.replace(pending / f"{seq}.json")
+    answer = answers / f"{seq}.txt"
+    started = time.time()
+    deadline = started + float(os.getenv(PROXY_TIMEOUT_ENV) or 7200)
+    while not answer.exists():
+        if time.time() > deadline:
+            raise GeminiInferenceError(f"Proxy request {seq} was not answered in time.")
+        time.sleep(1.0)
+    time.sleep(0.2)   # let the writer finish
+    # A test launcher may install a paused clock (builtins.__proxy_pause__): time spent waiting
+    # for an answer then does not count against the run's time budgets.
+    import builtins
+    paused = getattr(builtins, "__proxy_pause__", None)
+    if isinstance(paused, list) and paused:
+        paused[0] += time.time() - started
+    text = answer.read_text(encoding="utf-8")
+    (pending / f"{seq}.json").replace(root / "done" / f"{seq}.json") if (root / "done").is_dir() else None
+    return SimpleNamespace(text=text, usage_metadata=None)
+
+
+def calls_used() -> int:
+    with _USAGE_LOCK:
+        return int(_CALL_BUDGET["used"])
+
+
 def usage_snapshot(reset: bool = False) -> Dict[str, Dict[str, int]]:
     with _USAGE_LOCK:
         snapshot = {model: dict(row) for model, row in _USAGE.items()}
@@ -1004,6 +1082,12 @@ class GeminiLLMService:
         transient_attempts = 0
 
         while True:
+            if proxy_dir():
+                # Offline testing (26 Oct 2026): the request goes to a folder and is answered
+                # there, never to Gemini. See proxy_generate.
+                response = proxy_generate(chosen_model, user_text, wants_json, metadata)
+                break
+            consume_call()   # v6.36.2: every attempt (retries included) counts toward an optional ceiling
             try:
                 response = (
                     self

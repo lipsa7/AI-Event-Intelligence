@@ -1,0 +1,8 @@
+{
+  "_note": "Neutral profile for the v6.35 experiment (v6.35.1: disputed conclusions removed after the GPT review). It states the decision to analyse and widely documented background only - nothing the app is supposed to establish from evidence (dependencies, leverage, motives). Edit the decision_goal if you want a different decision analysed.",
+  "name": "OpenAI",
+  "decision_goal": "Decide what OpenAI should do next in response to the reported incidents involving its AI agents and government systems.",
+  "business_lines": ["ChatGPT (consumer and business plans)", "API access to its models for developers and companies", "AI agents that can take actions on the web"],
+  "operating_footprint": ["United States", "European Union", "Australia"],
+  "constraints": ["The EU AI Act sets obligations for providers of general-purpose AI models"]
+}

@@ -1,4 +1,4 @@
-"""Insight evaluator v1.2 — leverage-first, evidence-aware ranking.
+"""Insight evaluator v1.2 â€” leverage-first, evidence-aware ranking.
 
 Product objective:
     development -> dependency -> leverage/control point -> incentives -> constraint
@@ -22,7 +22,7 @@ import math
 import re
 from typing import Any, Callable, Mapping, Sequence
 
-VERSION = "insight-evaluator-v1.2-leverage-first"
+VERSION = "insight-evaluator-v1.7-substance-audit"
 MAX_ITEMS = 14
 RUBRIC_BATCH = 4
 PAIRWISE_TOP = 5
@@ -32,13 +32,13 @@ RUBRIC = (
     ("A1", "decision_relevance", "Would knowing this materially change what a reader should monitor?"),
     ("A2", "decision_relevance", "Could it affect an actual decision, risk, opportunity or priority for a named actor?"),
     ("B1", "mechanism", "Does it explain WHY A leads to B, rather than placing A and B side by side?"),
-    ("B2", "mechanism", "Is the mechanism supported by the supplied evidence/context, or explicitly labelled as a hypothesis/assumption?"),
+    ("B2", "mechanism", "Is the causal bridge supported by the supplied evidence, beyond merely being labelled an assumption?"),
     ("C1", "leverage_incentives", "Does it identify who holds a control point, who depends on it, and what the dependency is?"),
     ("C2", "leverage_incentives", "Does it explain the relevant actors' incentives, constraints, alternatives or likely responses?"),
     ("D1", "predictive_specificity", "Does it name a concrete next move or effect, not merely 'things may change'?"),
     ("D2", "predictive_specificity", "Does it give a timeframe, threshold, signpost, watch item, countermove or falsifier?"),
-    ("E1", "informational_lift", "Does it add something a knowledgeable reader would probably miss from the individual source articles?"),
-    ("E2", "informational_lift", "Does combining the facts create additional strategic value rather than simply restating them?"),
+    ("E1", "informational_lift", "Would this materially change a knowledgeable reader's mental model, rather than merely add another implication?"),
+    ("E2", "informational_lift", "Does it reveal an overlooked constraint, control point, incentive, anomaly, feedback loop or consequence that the individual sources do not make explicit?"),
     ("F1", "actor_specificity", "Does the conclusion materially depend on these particular organisations or events?"),
     ("F2", "actor_specificity", "Would it become false or substantially weaker if the organisation names were swapped for similar actors?"),
 )
@@ -113,14 +113,20 @@ def _leverage_contract(actor: Mapping[str, Any]) -> dict[str, Any]:
     dependency = _clean(p.get("dependency") or lev.get("dependency"))
     control_point = _clean(p.get("control_point") or lev.get("control_point"))
     outside_option = _clean(p.get("outside_option") or lev.get("outside_option"))
+    holder_dependence = _clean(p.get("holder_dependence") or lev.get("holder_dependence"))
     benefit = _clean(p.get("benefit") or lev.get("benefit") or lev.get("text"))
-    complete = bool(holder and counterparty and dependency and control_point)
+    # v6.36.4 (resource-dependence theory): leverage also needs the counterparty's alternatives and the
+    # holder's own (smaller) dependence; without them it is a dependency, not a leverage decision.
+    from services.leverage_validation import alternatives_known
+    complete = bool(holder and counterparty and dependency and control_point and holder_dependence
+                    and alternatives_known(outside_option) and p.get("leverage_test") == "passed")
     return {
         "holder": holder,
         "counterparty": counterparty,
         "dependency": dependency,
         "control_point": control_point,
         "outside_option": outside_option,
+        "holder_dependence": holder_dependence,
         "benefit": benefit,
         "complete": complete,
     }
@@ -134,7 +140,7 @@ def _hidden_type(item: Mapping[str, Any]) -> str:
     dependency = _clean(lev.get("dependency") or lev.get("what_dependent_needs"))
     control = _clean(lev.get("control_point") or lev.get("controlled_asset") or lev.get("controls"))
     move = _clean(lev.get("predicted_move"))
-    if holder and dependent and dependency and control and move:
+    if holder and dependent and dependency and control and move and lev.get("leverage_test") == "passed":
         return "leverage_decision"
     if route == "cross_development":
         return "cross_event"
@@ -174,12 +180,20 @@ def provenance_label(item: Mapping[str, Any]) -> str:
         suffix.append("Expert corroborated")
     if bool(item.get("widely_expected")):
         suffix.append("Widely expected")
-    return main + (" · " + " · ".join(suffix) if suffix else "")
+    return main + (" Â· " + " Â· ".join(suffix) if suffix else "")
 
 
-def candidates(report: Mapping[str, Any]) -> list[dict[str, Any]]:
-    """Only evidence-eligible, shown analytical items. Rejected hypotheses stay separate."""
+def candidates(report: Mapping[str, Any], evidence_text: Mapping[str, str] | None = None) -> list[dict[str, Any]]:
+    """Only evidence-eligible, shown analytical items. Rejected hypotheses stay separate.
+
+    v1.5: evidence_text (evidence_id -> what the record states) lets items that cite only
+    evidence IDs (implications) show the judge their evidence too."""
+    evidence_text = evidence_text or {}
     out: list[dict[str, Any]] = []
+
+    def cited_text(citations: Any) -> list[str]:
+        return [evidence_text[_clean(c.get("evidence_id"))] for c in citations or []
+                if isinstance(c, Mapping) and _clean(c.get("evidence_id")) in evidence_text]
 
     def add(
         kind: str,
@@ -213,6 +227,41 @@ def candidates(report: Mapping[str, Any]) -> list[dict[str, Any]]:
             "leverage_complete": bool(leverage_complete),
             "widely_expected": bool(widely_expected),
         })
+
+    # v6.32: Strategic Hypothesis Lab candidates are already grounded before they
+    # enter the evaluator. Put them first so a mature structural thesis is not
+    # crowded out by routine actor moves when MAX_ITEMS is reached.
+    lab = report.get("strategic_hypotheses") if isinstance(report.get("strategic_hypotheses"), Mapping) else {}
+    for n, item in enumerate(lab.get("verified") or []):
+        if not isinstance(item, Mapping):
+            continue
+        leverage = item.get("leverage") if isinstance(item.get("leverage"), Mapping) else {}
+        from services.leverage_validation import alternatives_known
+        complete = (item.get("leverage_test") == "passed"
+                    and alternatives_known(leverage.get("outside_option")))
+        stype = "leverage_decision" if complete else "cross_event"
+        detail = " ".join(x for x in (
+            f"Novel proposition: {_clean(item.get('novel_proposition'))}." if _clean(item.get("novel_proposition")) else "",
+            f"Why non-obvious: {_clean(item.get('why_not_obvious'))}." if _clean(item.get("why_not_obvious")) else "",
+            f"Mechanism: {_clean(item.get('mechanism'))}." if _clean(item.get("mechanism")) else "",
+            f"Alternative: {_clean(item.get('alternative_explanation'))}." if _clean(item.get("alternative_explanation")) else "",
+            f"Countermove: {_clean(item.get('likely_countermove'))}." if _clean(item.get("likely_countermove")) else "",
+            f"Watch: {_clean(item.get('watch_signal'))}." if _clean(item.get("watch_signal")) else "",
+            f"Falsifier: {_clean(item.get('falsifier'))}." if _clean(item.get("falsifier")) else "",
+            f"Narrowed from: {_clean((item.get('narrowed_from') or {}).get('thesis'))}."
+            if isinstance(item.get("narrowed_from"), Mapping) else "",
+        ) if x)
+        add(
+            "strategic_hypothesis",
+            f"strategic_hypotheses.verified[{n}]",
+            item.get("thesis"),
+            stype,
+            detail=detail,
+            evidence=_evidence_texts(item.get("supporting_evidence")) or
+                     [evidence_text[e] for e in item.get("supporting_evidence_ids") or [] if e in evidence_text],
+            leverage_complete=complete,
+            derivation="cross_event",
+        )
 
     for n, item in enumerate(report.get("hidden_insights") or []):
         if not isinstance(item, Mapping):
@@ -257,6 +306,8 @@ def candidates(report: Mapping[str, Any]) -> list[dict[str, Any]]:
                     f"Leverage: {contract['holder']} controls {contract['control_point']}; "
                     f"{contract['counterparty']} depends on {contract['dependency']}."
                     + (f" Outside option: {contract['outside_option']}." if contract["outside_option"] else "")
+                    + (f" What the holder needs back: {contract['holder_dependence']}."
+                       if contract["holder_dependence"] else "")
                 )
             add(
                 "strategic_decision",
@@ -292,7 +343,7 @@ def candidates(report: Mapping[str, Any]) -> list[dict[str, Any]]:
             "derived",
             corroboration=experts,
             detail=_clean(item.get("watch_for")),
-            evidence=_evidence_texts(item.get("sources"), item.get("evidence")),
+            evidence=_evidence_texts(item.get("sources"), item.get("evidence")) + cited_text(item.get("citations")),
             derivation="derived",
         )
     for n, item in enumerate(briefing.get("expected_implications") or []):
@@ -303,43 +354,68 @@ def candidates(report: Mapping[str, Any]) -> list[dict[str, Any]]:
                 item.get("text"),
                 "widely_expected",
                 widely_expected=True,
-                evidence=_evidence_texts(item.get("sources"), item.get("evidence")),
+                evidence=_evidence_texts(item.get("sources"), item.get("evidence")) + cited_text(item.get("citations")),
                 derivation="derived",
             )
     return out[:MAX_ITEMS]
 
 
 def promising_unverified(report: Mapping[str, Any]) -> list[dict[str, Any]]:
-    direct = report.get("promising_hypotheses") or []
-    if isinstance(direct, Sequence) and not isinstance(direct, (str, bytes, bytearray)):
-        return [dict(x) for x in direct if isinstance(x, Mapping)][:5]
+    """Combine repairable claim-gate rejects with ambitious lab hypotheses.
+
+    These are never mixed into the verified ranking; they are surfaced so a
+    strong idea with one missing bridge is not silently lost.
+    """
+    out: list[dict[str, Any]] = []
+    seen: set[str] = set()
+
+    def add_many(values: Any) -> None:
+        if not isinstance(values, Sequence) or isinstance(values, (str, bytes, bytearray)):
+            return
+        for value in values:
+            if not isinstance(value, Mapping):
+                continue
+            row = dict(value)
+            text = _clean(row.get("thesis") or row.get("insight") or row.get("text"))
+            key = text.casefold()
+            if key and key not in seen:
+                seen.add(key)
+                out.append(row)
+
+    add_many(report.get("promising_hypotheses") or [])
+    lab = report.get("strategic_hypotheses") if isinstance(report.get("strategic_hypotheses"), Mapping) else {}
+    add_many(lab.get("promising_unverified") or [])
     meta = report.get("analysis_metadata") if isinstance(report.get("analysis_metadata"), Mapping) else {}
     gate = meta.get("claim_support_gate") if isinstance(meta.get("claim_support_gate"), Mapping) else {}
-    return [dict(x) for x in gate.get("promising_rejected") or [] if isinstance(x, Mapping)][:5]
+    add_many(gate.get("promising_rejected") or [])
+    return out[:8]
 
 
 def rubric_prompt(question: str, items: Sequence[Mapping[str, Any]]) -> str:
+    from services.substance_audit import INSTRUCTION
     checks = "\n".join(f"{key}: {q}" for key, _, q in RUBRIC)
     rows = []
     for i in items:
-        row = f"[{i['id']}] ({i['kind']}; type={i.get('strategic_type')}) {i['text']}"
+        row = f"[{i['id']}] Claim: {i['text']}"
         if i.get("detail"):
             row += f"\n    Context: {i['detail']}"
         if i.get("evidence"):
-            row += "\n    Supported facts/context:\n      - " + "\n      - ".join(i["evidence"][:6])
-        if i.get("strategic_type") == "leverage_decision":
-            row += f"\n    Deterministic leverage contract complete: {bool(i.get('leverage_complete'))}"
+            row += "\n    Source excerpts (check what they actually support):\n      - " + "\n      - ".join(i["evidence"][:6])
         rows.append(row)
     listing = "\n".join(rows)
     return (
-        f"Research question: {question}\n\n"
+        f"Research question: {question}\n\n" + INSTRUCTION + "\n\n"
         "Judge each item with 12 strict yes/no checks. Answer false when the supplied context does not let you verify "
         "the criterion. Do NOT reward confident wording. A normal compliance action, cooperation step, regulator "
         "request, or sensible operating recommendation is not leverage merely because it is specific. Leverage requires "
         "a holder, counterparty, dependency and control point. Being already argued by experts is NOT a weakness.\n\nCHECKS\n"
         + checks + "\n\nITEMS\n" + listing
         + '\n\nReturn JSON: {"scores":[{"id":"I1","answers":{"A1":true,"A2":false,...,"F2":true},'
-          '"weakest":"one short phrase"}]} with all 12 keys for every item.'
+          '"weakest":"one short phrase","substance":{"plain_claim":"...","ordinary_reading":"...",'
+          '"added_inference":"...","decision_change":"...","alternative_explanation":"...",'
+          '"discriminating_evidence":"...","key_assumption":"...","facts_supported":true,'
+          '"bridge_supported":true,"adds_information":true,"uncertainty_preserved":true}}]} '
+          'with all 12 answer keys AND the full substance object for every item. Use false when evidence is missing.'
     )
 
 
@@ -358,21 +434,35 @@ def parse_rubric(reply: Any, items: Sequence[Mapping[str, Any]]) -> dict[str, di
         for key, dim, _ in RUBRIC:
             dims[dim] += int(_bool(answers.get(key)))
         item = by_id[item_id]
+        from services.substance_audit import parse as parse_substance
+        audit = parse_substance(row.get("substance"), item.get("evidence"))
+        if not audit["lift_eligible"]:
+            dims["informational_lift"] = 0
+        if not audit["bridge_supported"]:
+            dims["mechanism"] = 0
         # Deterministic guardrail: the model cannot manufacture a leverage score where
         # the structured contract is incomplete.
         if not item.get("leverage_complete"):
             dims["leverage_incentives"] = min(dims["leverage_incentives"], 1)
         raw_score = sum(dims.values())
         cap = 12
+        if not audit["complete"] or not audit["facts_supported"] or not audit["uncertainty_preserved"]:
+            cap = min(cap, 3)
         if _clean(item.get("strategic_type")) == "strategic_action":
             cap = min(cap, 9)
         if bool(item.get("widely_expected")) or _clean(item.get("strategic_type")) == "widely_expected":
             cap = min(cap, 8)
-        if dims["informational_lift"] < 2:
+        if dims["informational_lift"] == 0:
+            # A candidate that adds no information beyond the source material
+            # may still be useful operating advice, but it cannot score like a
+            # premium strategic insight.
+            cap = min(cap, 7)
+        elif dims["informational_lift"] == 1:
             cap = min(cap, 9)
         score = min(raw_score, cap)
         out[item_id] = {
             "score": score,
+            "substance": audit,
             "raw_score": raw_score,
             "score_cap": cap,
             "dimensions": dims,
@@ -383,8 +473,8 @@ def parse_rubric(reply: Any, items: Sequence[Mapping[str, Any]]) -> dict[str, di
 
 def pairwise_prompt(question: str, a: Mapping[str, Any], b: Mapping[str, Any]) -> str:
     def show(label: str, item: Mapping[str, Any]) -> str:
-        context = f"\n   Context: {item['detail']}" if item.get("detail") else ""
-        return f"{label} [{provenance_label(item)}]: {item['text']}" + context
+        from services.substance_audit import judging_view
+        return f"{label}: " + judging_view(item)
     return (
         f"Research question: {question}\n\n"
         "The product's purpose is strategic decisions based on leverage. Which candidate gives a knowledgeable reader "
@@ -392,7 +482,8 @@ def pairwise_prompt(question: str, a: Mapping[str, Any], b: Mapping[str, Any]) -
         "control point -> incentives/constraints -> move -> countermove/watch signal over routine compliance or generic "
         "good practice. Reward a non-obvious cross-event mechanism when it is supported. A specific administrative action "
         "is not automatically strategic leverage. Being already argued by experts is NOT a weakness. Ignore which one is shown first and ignore "
-        "confident wording.\n\n" + show("A", a) + "\n\n" + show("B", b)
+        "confident wording. Compare the plain claims and evidence, not prose length, badges or rhetorical labels. "
+        "Restating or naming an event is not an additional mechanism. A plausible causal story is not proof.\n\n" + show("A", a) + "\n\n" + show("B", b)
         + '\n\nReturn JSON: {"winner":"A"|"B"|"tie","deciding_dimension":"...","reason":"one sentence"}'
     )
 
@@ -468,8 +559,9 @@ def _rank_priority(item: Mapping[str, Any]) -> int:
     }.get(_clean(item.get("strategic_type")), 6)
 
 
-def evaluate(report: Mapping[str, Any], question: str, judge: Callable[[str], Any]) -> dict[str, Any]:
-    items = candidates(report)
+def evaluate(report: Mapping[str, Any], question: str, judge: Callable[[str], Any],
+             evidence_text: Mapping[str, str] | None = None) -> dict[str, Any]:
+    items = candidates(report, evidence_text)
     result: dict[str, Any] = {
         "version": VERSION,
         "eligible": len(items),
@@ -490,14 +582,31 @@ def evaluate(report: Mapping[str, Any], question: str, judge: Callable[[str], An
     if not scored:
         return dict(result, status="judge_unavailable", rubric_failures=failures)
     scored.sort(key=lambda i: (-i["score"], _rank_priority(i)))
-    ranking = rank(question, scored, judge) if len(scored) > 1 else {"strength": {}, "stability": {}, "log": {}}
+
+    # Product rule: pairwise ranking is for insights, not merely sensible advice.
+    # If at least one candidate has positive informational lift, zero-lift items
+    # are quarantined from the pairwise tournament and cannot take the #1 slot.
+    # This directly prevents a routine action from beating a supported structural
+    # thesis simply because the action is concrete.
+    lifted = [i for i in scored if int((i.get("dimensions") or {}).get("informational_lift", 0)) > 0]
+    zero_lift = [i for i in scored if int((i.get("dimensions") or {}).get("informational_lift", 0)) <= 0]
+    tournament_pool = lifted if lifted else scored
+    ranking = rank(question, tournament_pool, judge) if len(tournament_pool) > 1 else {
+        "strength": ({tournament_pool[0]["id"]: 1.0} if tournament_pool else {}),
+        "stability": {},
+        "log": {"pairs": 0, "uncertain": 0, "failed": 0},
+    }
     strength = ranking["strength"]
     head = sorted(
-        [i for i in scored if i["id"] in strength],
+        [i for i in tournament_pool if i["id"] in strength],
         key=lambda i: (-strength[i["id"]], -i["score"], _rank_priority(i)),
     )
-    tail = [i for i in scored if i["id"] not in strength]
-    ordered = head + tail
+    tail_lifted = [i for i in lifted if i["id"] not in strength]
+    tail_lifted.sort(key=lambda i: (-i["score"], _rank_priority(i)))
+    zero_lift.sort(key=lambda i: (-i["score"], _rank_priority(i)))
+    ordered = head + tail_lifted + ([] if not lifted else zero_lift)
+    if not lifted:
+        ordered = head + [i for i in scored if i["id"] not in strength]
     for n, item in enumerate(ordered, start=1):
         consistent, judged = ranking["stability"].get(item["id"], (0, 0))
         ratio = (consistent / judged) if judged else None
@@ -544,3 +653,15 @@ def gold_agreement(gold_pairs: Sequence[Mapping[str, Any]], question: str, judge
         "tie_rate": round(ties / n, 2),
         "rows": rows,
     }
+
+
+
+def agreement(gold: Mapping[str, Any], judge: Callable[[str], Any]) -> dict[str, Any]:
+    """v1.5 (restored from v6.31.1; eval_insight_judge.py calls it): only pairs where the user
+    chose the winner count as agreement with the user; reference pairs are a separate sanity check."""
+    question = gold.get("question", "")
+    human = gold.get("human_pairs") or []
+    reference = gold.get("reference_pairs") or []
+    return {"agreement_with_you": gold_agreement(human, question, judge) if human else None,
+            "reference_sanity": gold_agreement(reference, question, judge) if reference else None,
+            "human_pairs": len(human), "reference_pairs": len(reference)}
