@@ -1,0 +1,6 @@
+Blind event: B007
+Source: S007
+
+--- Evidence 1 ---
+type: source_excerpt
+New Delhi: In an interview with ET, Anthony Capuano , president and CEO of Marriott International talks about the rising focus on India and the chain's expansion strategy here, the geopolitical developments impacting business, how AI could shape travel and hospitality and what India could do to attract more tourists.

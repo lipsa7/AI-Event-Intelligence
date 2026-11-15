@@ -1,0 +1,10 @@
+Blind event: B002
+Source: S002
+
+--- Evidence 1 ---
+type: quantitative_claim
+stated_quantity 1.2 billion
+
+--- Evidence 2 ---
+type: source_excerpt
+Furthermore, in February and June, the Company reached consecutively an early-stage collaboration worth tens of millions of RMB with CMS (China Medical System), followed by a deepened collaboration agreement totaling RMB 1.2 billion in June, to utilize generative AI for innovative solutions in the central nervous system (CNS) disease area.

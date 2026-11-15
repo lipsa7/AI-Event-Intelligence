@@ -1,0 +1,6 @@
+Blind event: B037
+Source: S001
+
+--- Evidence 1 ---
+type: source_excerpt
+For brands running Twitch sponsorships or influencer programs, the announcement raises questions about whether branded content appearing in streams is now being used to train Amazon's AI models without explicit consent.

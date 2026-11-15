@@ -1,0 +1,6 @@
+Blind event: B038
+Source: S001
+
+--- Evidence 1 ---
+type: source_excerpt
+Optimove Introduces the New OptiGenie: Natural-Language Conversational Agent Directly Inside the Platform

@@ -1,0 +1,18 @@
+Blind event: B028
+Source: S005
+
+--- Evidence 1 ---
+type: quantitative_claim
+stated_quantity $294.0 million
+
+--- Evidence 2 ---
+type: quantitative_claim
+stated_quantity 10 billion
+
+--- Evidence 3 ---
+type: source_excerpt
+As of June 30, 2026, the Company had RMB1.99 billion (US$294.0 million) in long-term investment (excluding the investments accounted for under the equity method and held-to-maturity debt securities) and available-for-sale securities, compared with RMB1.10 billion as of March 31, 2026.
+
+--- Evidence 4 ---
+type: quantitative_claim
+stated_quantity 99 billion

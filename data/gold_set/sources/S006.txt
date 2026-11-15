@@ -1,0 +1,140 @@
+UPDATED 13:00 EDT / AUGUST 22 2026
+From tokenmaxxing to sovereign alpha: Who controls your AI economics?
+BREAKING ANALYSIS by David Vellante and Amit Eyal Govrin
+The artificial intelligence industry wants enterprises to measure progress in tokens, model calls and usage. But those are largely vendor-revenue metrics - not enterprise-value metrics.
+The Canva example shows why.
+On Aug. 6, The Information reported that Canva Inc. cut its 2026 revenue-growth forecast from 30% to 20% because its AI features cost far more to run than expected. Let that sink in: A company generating more than $900 million a quarter - and growing above 25% - lowered its outlook because of an input cost.
+Canva said it had relied too heavily on expensive third-party frontier models. The fix was not a negotiated vendor discount. It rebuilt the stack with in-house models, Leonardo.AI and task-level routing - reportedly cutting the cost of an AI task by roughly 90%. Its video and image models were reportedly 17 and 30 times cheaper than frontier alternatives.
+Your CFO is not buying tokens. The enterprise wants outcomes.
+So who captures the economic benefit after the model, cloud, integration, governance and energy bills are paid? That is what financial sovereignty is all about. It is not just about governments, data residency or self-hosting. It is the ability to control - and change - the economic terms under which AI operates.
+A sovereign enterprise controls its data, evaluations, policies, routing, cost telemetry and exit paths. It decides what to own, what to rent and when frontier capability creates an advantage.
+Capability can be rented. Control must be architected.
+Palantir Technologies Inc. Chief Executive Alex Karp attacks tokenmaxxing : optimizing the vendor's bill rather than the value the enterprise retains. The alternative is what we call sovereign alpha - retaining more of the value created from your data, workflows and domain expertise because you control the cost curve and preserve the ability to move.
+No vendor can confer that sovereignty. Vendors provide components.
+Only the enterprise can define and enforce its sovereignty boundary.
+In this week's Breaking Analysis, we are going to examine what enterprises must control, what they can safely rent, where the real unit economics are created - and why financial sovereignty may determine whether organizations capture the value of AI or simply fund someone else's alpha.
+Watch the full video analysis:
+The surprise invoice
+Let's start with the evidence that this is not an ideological debate. These companies we're showing below are not rejecting AI. In each case, the capability appears to have delivered real value. The problem was control of the economics.
+Uber Technologies Inc. reportedly consumed an entire year's AI budget in one quarter. The response was not to stop using AI. It was to reset defaults and route workloads toward lower-cost models.
+Microsoft Corp. is building more of its own model capability while openly stating that it wants to reduce - and ultimately eliminate - the cost of paying Anthropic.
+And Lindy (registered as Crivello Corp.) offers the clearest supplier-switching example. Anthropic PBC had become its largest expense - bigger than payroll. Lindy moved its traffic to another model provider and says it reduced costs while improving performance on its core use cases.
+The Swiss government embarked on a major sovereign initiative but realized it needed to write a large check to Microsoft.
+The takeaway here is notable: The product can work and still fail the financial-sovereignty test. Nobody is doing this because of ideology. They are doing it because the invoice arrived.
+It cannot be overstated that financial sovereignty is not a pass-or-fail exercise. There is a spectrum of acceptable risk, and every organization must decide where to place its boundary conditions and what it can live with. To wit:
+As an example, Microsoft has a platform called Microsoft Foundry that offers a broad spectrum of AI solutions, including Microsoft models, partner models and customer-controlled deployments. Its use of Anthropic can be understood as a developer-focused decision: Simply put, engineers may prefer Claude for certain tasks over OpenAI Group PBC's or Microsoft's own models. But once that preference breaches the company's pain tolerance for margin degradation, it creates a financial tripwire to impose controls, and route work elsewhere or use lower-cost internal and open-weight models.You can argue that this is as much a technological sovereignty issue as anything else, but the takeaway is that this tripwire was a financial pillar trigger.
+Uber , unlike Microsoft, where there is an element of coopetition with Anthropic, viewed that partnership as a straightforward one: Use state-of-the-art models for the highest and best use of its engineering talent. And that strategy worked well - up until it ran into a brick wall going 200 mph. Because when you burn through an entire year's budget in roughly four months, there is no way confidently to budget two or three years out the way a CFO is required to do.
+Lindy and Canva , much like Uber, discovered that owning their financial alpha was more strategic than claiming state-of-the-art capability. At the end of the day, we are all running a business here. If your financial livelihood relies on a vendor whose economics can compress your margins, as the saying goes: Houston, we have a problem.
+Switzerland gives us a more nuanced example. ETH Zurich, EPFL and the Swiss National Supercomputing Centre developed Apertus, a fully open model trained on the Alps supercomputer across more than 1,000 languages. That is a truly impressive engineering feat and a meaningful sovereign asset.
+The catch is that owning a model and training infrastructure does not automatically make every downstream deployment sovereign.
+Swiss organizations may still choose commercial cloud capacity - including Microsoft's locally hosted services - when that is easier or cheaper to operationalize.
+The purist in us says those deployments still have to be tested against the operational and legal pillars, including exposure to laws such as the U.S. CLOUD Act.
+But as we know from the real world, true sovereignty has a price tag, and each organization must decide whether that residual risk is acceptable.
+Nothing to fault there - so long as it is intentional and they do not live under the illusion that every layer is truly sovereign.
+Karp is right, but Palantir doesn't equate to sovereignty
+Alex Karp's argument is that enterprises should control their compute, their models, their data stack and the alpha created from their proprietary knowledge. He attacks usage-based frontier pricing as a kind of wealth tax on the enterprise.
+Our shorthand for the behavior he is criticizing is tokenmaxxing : optimizing the vendor's meter - more tokens, more calls, more consumption - rather than optimizing the economic value the enterprise actually retains.
+But this slide below extends Karp's argument:
+There are really two forms of alpha at risk: 1) the differentiated capability created from your data, knowledge and workflows; and 2) the financial surplus you retain - or surrender - depending on who controls the cost curve.
+The alpha described by Alex Karp falls under the Technology Pillar , and it directly relates to intelligence. His thesis, which is mostly correct, is that renting the intelligence can mean giving up your alpha: The provider can learn the shape of your market from aggregate demand and product signals, and may eventually compete in adjacent workflows. Just ask companies such as Cursor how they feel when a frontier provider moves into their space.
+Karp's solution is to take open-weight models, host them on Nvidia Corp. graphics processing units in a customer-controlled data center, and use his proprietary operating layer to own everything outright.
+Right advice - wrong approach, in our view. Why? Because effectively he told you to go to the pawn shop and swap financial capture for technology capture. If you really wanted to execute on his advice in a sovereign way, you would use an inspectable, forkable, fully open-source operating system that allows you to own your crown jewels.
+And to be precise about open source, licensing has to fit the deployment and distribution model. Permissive licenses such as Apache 2.0 or MIT are often simpler for enterprises; AGPL copyleft licenses can also be used, but only when the organization understands and complies with their obligations, which in our experience is much harder to do.
+Take as an example the Chinese auto manufacturer MG, which is currency in litigation in German courts concerning its alleged failures to provide notices and source code required by GPL-family licenses that they used in its car chips.
+So the right conclusion is not that Palantir delivers sovereignty in a box. It is that Palantir can make an organization more sovereign while leaving important dependencies intact. That brings us to the definition: What exactly is financial sovereignty if it is not a purity test - or simply a synonym for lower cost?
+Financial sovereignty is all about control
+At this point, some people may be asking whether financial sovereignty is simply total cost of ownership with a new label?
+We don't think so. TCO calculates what a system costs under a given set of assumptions over a period of time. Financial sovereignty asks who controls those assumptions - and whether the enterprise can change them without ripping and replacing the core system.
+And we should highlight the key point straight away - up front, self-hosting is more expensive.
+The objective is not to simply lower external spending. It is to make the cost curve predictable, keep dependencies controlled and preserve a tested exit.
+As the line on the slide above implies: Cheap is a price. Sovereign is a position.
+So what makes financial sovereignty a control posture rather than just another cost calculation - and how should enterprises think about the sovereign-alpha equation at the bottom of the slide?
+As a major enterprise doing financial modeling three years out, what is the scarier scenario: Budgeting $500 million for reserved infrastructure and a self-hosted model that gives your organization a predictable intelligence baseline for three years - or signing a three-year, $500 million commitment with a frontier lab, where you may find yourself burning through those three-year token budgets in 18 months?
+What we're are describing is the same paradox enterprises faced in the early days of cloud, circa 2010 to 2015. And guess what the solution was? Keep the data center for steady state and burst into the cloud. Or, for the cloud purists out there, reserve capacity and burst into on-demand and spot instances.
+What does this history lesson teach us? The alpha stayed with the company because it retained the ability to choose where the workload ran - no different from using frontier models today. There are many ways to architect these systems of intelligence so that frontier intelligence is used only for orchestration and smaller models do the work. You can do that with a hyperscaler and, to a lesser degree, with one of the frontier labs - all of that is true.
+But the hard lesson here is that it is easier to price in financial sovereignty, even when the baseline is expensive, versus living with unknown risks that can materially damage your economics.
+True sovereignty is not a purity test, and you do not necessarily need to be sovereign to stay in business. But financial sovereignty is ultimately a measure of control - and you'll be out of business if you end up losing your alpha.
+So the strategy is not simply to self-host every request. It is to own the base, burst purposefully and control the intelligence flow.
+Where are the crossover points?
+The key takeaway here is the practical answer is not to repatriate every AI workload or run every request on infrastructure you own.
+The strategy is a hybrid as we're showing below. Put persistent, sensitive and predictable workloads on a controlled baseline - using vetted open weights and serving infrastructure you govern. Burst to frontier models when their better capability justifies the premium. Things like deep reasoning, model evals or specialized tasks.
+And then own the dial - the gateway that decides which request goes where based on quality, cost, policy, jurisdiction and availability.
+The frontier application programming interface is a useful tool. But don't let it become the enterprise control plane by accident.
+Let's walk through these three zones in detail and explain why owning the routing decision is the foundation of financial sovereignty. And let's double-click on the economics. Because cloud providers can spread demand across thousands of customers in a way one enterprise cannot. When does owned baseline capacity actually make economic sense? What utilization, steady workload and operating burden justify building that floor rather than continuing to rent?
+To be fair, this is a very case-specific question because the buy-versus-build discussion assumes several factors. That includes access to GPUs and compute capacity and the in-house operational know-how to run a multi-cluster, multi-region GPU super-node capable of hosting a large open-weight model with high availability and strong service-level agreements for a multinational user base.
+Depending on your requirements, this can become an investment in the hundreds of millions - or even billions - over several years. It is not trivial for most companies. Often, just modeling these things out is where the conversation dies on the vine.
+That said, there are mitigating cost controls - or FinOps practices, as the industry knows them. The most obvious is owning your large language model gateway. There is a reason Stripe announced this week its intent to acquire OpenRouter for a reported $7.5 billion.
+The ability to route intelligence to the best-value model for each task allows workload optimization at the edge. And given the capabilities of smaller models, especially for repeatable work, there are many lower-cost alternatives to frontier models that can take on those workloads.
+So this is hybrid, not an binary exit path. The key sovereign decision is not "cloud or on-premises." It is deciding which workloads belong on the floor you control - and which capability is rational to rent.
+The gateway controls the routing, but it is only one lever. The economics are engineered across the entire inference stack.
+Financial sovereignty up and down the stack
+Now we get into the make-or-break economics. Most AI dashboards we see emphasize tokens consumed, requests completed or cost per token. Those are operating inputs - but they are not the enterprise outcome. The enterprise captures value only after security, governance, integration, human review, rework and audit.
+So the key performance indicator at the top of this slide is the one that matters:
+Cost per accepted, governed business outcome - not cost per token.
+That might mean a support ticket that never gets opened, an SLA that is met at lower cost, a higher first-pass acceptance rate, less rework or an audit that takes days instead of weeks and lowers risk further. Tokens and completed workflows are vendor-input metrics ; the buyer should measure what the organization actually retains.
+There's a lot to unpack on the slide above. So rather than covering six technologies equally, let's take a deeper dive on:
+How caching and context management eliminate repeated work and can improve quality.
+How the LLM gateway turns routing, budget controls, failover and provider competition into a financial-control mechanism - not just a cost-optimization feature.
+Context management has a direct correlation to token consumption because an agent will attempt to run through a brick wall trying to fulfill a user request until it succeeds or hits a limit.
+If you send it to scan a repo to run a QA test or fix a bug, but do not specify which repo or arm it with the right skills and access, it can loop - even burning through millions of tokens while scanning the codebase and writing scripts to gain access, giving the security team mini heart attacks, and eventually timing out.
+Or it can bloat the model's context window, degrading its relevance and increasing the risk of errors and hallucinations. Either way, the output is a lose-lose proposition.
+Now we are intentionally oversimplifying the solution, but imagine if you instead used a knowledge graph to inject just-in-time context, allowing the agent to traverse the graph and query its state? This would support more deterministic and repeatable actions using a fraction of the context and tokens - not to mention faster SLAs and fewer hallucinations.
+To bring back the AI gateway routing strategy, there are added benefits around governance and cost control. You can set daily, weekly or monthly budget limits for workloads, users and teams, enforce them when breached, or reroute them to human-in-the-loop approvals. You can identify anomalous usage behavior and flag it to security or production operation teams. This is, in many ways, the API gateway or cloud access security broker of previous generations - but this time with a FinOps twist.
+By owning this layer, you are not tied to any single model, infrastructure or technology provider.
+So the value is not simply that the gateway finds a cheaper model. It is that the enterprise owns the policy deciding which model gets the work, under what budget, with what fallback - and the owner can change that decision without rebuilding the application.
+These components may come from many vendors. But the sovereignty boundary cannot belong to any one of them.
+Sovereignty isn't a SKU
+Now this is where we apply the same sovereignty test to every vendor , not just the frontier labs.
+Palantir brings orchestration, ontology, governance and deployment - but the inconvenient truth is its operating layer is proprietary.
+Microsoft and Databricks Inc. bring cloud, data, governance and enterprise integration - but they introduce platform, jurisdiction and roadmap dependencies.
+OpenAI and Anthropic provide exceptional frontier capability - but the buyer inherits the meter, the policy, availability risk and the provider's deprecation schedule.
+And Nvidia provides the leading compute platform and software ecosystem - but that creates concentration around silicon, supply and its CUDA software stack.
+None of those dependencies automatically makes the vendor a bad choice. The mistake is allowing the company selling the component to define the enterprise's sovereignty strategy.
+No vendor can confer sovereignty, because the sovereignty boundary is ultimately the enterprise's risk decision.
+Let's explore the minimum control plane an enterprise must retain so it can use these vendors without surrendering control of the whole system.
+We see the agentic operating system as the minimum viable technology stack that moves you toward a sovereign posture. What this consists of at a high level: It is a self-hosted, full-stack agentic system that includes everything from the context engine to multi-agent orchestration, harness profiles, skills, the AI gateway, policy and governance, and infrastructure as code.
+Ideally it's all on an open-source framework that is fully extensible, inspectable and forkable. These are the crown jewels you must own, or you give up the Alpha. There is no other way around it. This is the same technology capture that Alex Karp wants you to deposit with him.
+Not coincidentally, the team at Agentcy Labs work closely every day with customers in media and entertainment, manufacturing and government. They consistently raise these exact concerns, and the advice is consistent: own your "agentic operating system' which is your alpha outright, and then rent around the edges.
+We'd give this same advice if you were a startup or a publicly traded company.
+The point is, a vendor can sell components that support your sovereign stack. It cannot sell the enterprise sovereignty as a finished product. That leaves a short set of questions every architecture - and every vendor - should be able to survive, such as:
+Can you substitute the model without rewriting the application?
+If the vendor disappears, refuses service or gets acquired, can you still operate at the intended levels?
+Are your agent definitions, prompts, evals and memory in a format that is portable? Or is it stuck in a vendor's lockbox?
+The final financial sovereignty test
+We've covered a lot of architecture, so let's turn the thesis into something an enterprise can take into a vendor meeting next week.
+Let's put these six questions below into three tests:
+First, economics : Can we forecast the cost per accepted, governed outcome over the next 36 months? And if the provider doubles its price, what happens to our margins - and what would it actually cost us to switch?
+Second, ownership : Who owns the weights, data, evaluations, policies and routing logic that make this system valuable?
+And third, exit : Can the frontier dependency be metered, substituted and shut off?
+Is control enforced in the architecture - or merely promised in a contract?
+The honest truth is that no organization clears every bar entirely, let alone all five together. The reason is that there are so many dependencies that go far beyond what any one nation or organization can account for.
+For example, how many organizations can claim they own a semiconductor fab that can replace Nvidia GPUs, or that they control their own energy grid? Even if you did, do you own the mines and refining capacity needed to remove dependencies on foreign critical minerals? Let's be honest: No company or country can credibly claim perfectly air-gapped sovereignty.
+Luckily, sovereignty is not binary. It is a scale against which you can measure yourself, define acceptable risk and assess when you fall outside those boundaries. Most importantly, be aware of the risks and exposures you are willing to accept.
+If you are a Fortune 50 company comfortable developing with Anthropic models and hitching yourself to its price list, so be it - that is a choice. But make sure your critical infrastructure and vendors do not quietly compound those same dependencies, because that makes costs and risk much harder to predict if it compounds across your entire vendor list.
+We are using these as illustrative examples of how procurement departments should think through the issue. And if you are a German company comfortable using Amazon Web Services in the Frankfurt region, by all means do so. But do not assume regional hosting alone eliminates legal sovereignty exposure, since the U.S. CLOUD Act can reach data within the possession and custody or control of any U.S. provider - subject to applicable legal protections and challenges.
+And that is the practical conclusion. Sovereignty is not binary, and almost no enterprise will maximize every pillar across every workload. The sensible approach is to name the dependency and make one of three decisions:
+Accept it.
+Accept it with a compensating control.
+Or reject it.
+Every exposure you accept should have a named owner, a defined set of boundaries, an expiration date and a trigger for reassessment. The failure is not accepting risk.
+The failure is not knowing which risk you accepted.
+So where do we land today?
+Cheap is a price. Sovereign is a position. A vendor can sell you sovereign components. It cannot sell you sovereignty. That control - and the alpha it protects - have to remain yours. It is perfectly legitimate and acceptable not to be fully sovereign across all five pillars. In the absence of legal or regulatory requirements, a fully sovereign posture may not make sense at all.
+However, if there is one thing we'd caution is be honest with yourself and don't "sovereign-wash" your actual posture because that can come back to haunt you in multiple ways.
+And if there is one area where you must exert full ownership and control, it is your financial alpha - because if you do not own it, someone else does.
+Action item for procurement officers
+Procurement officers should replace binary "sovereign or not sovereign" questionnaires with a three-verdict framework: Accept, Accept with Compensating Control, or Reject . Before any AI, cloud or agentic contract is executed, procurement should require a signed, one-page Risk Acceptance Record that identifies the exposure, the sovereignty pillar affected, the commercial reason for accepting it, the controls that bound it, a named executive owner, an expiration date and specific triggers for reassessment. This moves sovereignty from checkbox compliance to explicit, auditable risk ownership.
+The vendor review must also extend beyond data residency to the entire intelligence supply chain: which models sit in the request path, whose account pays for them, where inference and telemetry run, which jurisdictions and subprocessors apply, who can suspend service, what happens after an acquisition or deprecation, and whether the enterprise has a tested exit for its prompts, agent definitions, tool schemas, memory structures and evaluation assets. We believe the goal is not zero risk; it is no unmanaged surprises . Every dependency should be named, bounded, priced, reversible and survivable if the vendor reprices, refuses service, is acquired or disappears.
+Check out our sovereign AI research.
+Image: theCUBE Research
+Disclaimer: All statements made regarding companies or securities are strictly beliefs, points of view and opinions held by SiliconANGLE Media, Enterprise Technology Research, other guests on theCUBE and guest writers. Such statements are not recommendations by these individuals to buy, sell or hold any security. The content presented does not constitute investment advice and should not be used as the basis for any investment decision. You and only you are responsible for your investment decisions.
+Disclosure: Many of the companies cited in Breaking Analysis are sponsors of theCUBE and/or clients of Wikibon or theCUBE Research. None of these firms or other companies have any editorial control over or advanced viewing of what's published in Breaking Analysis.
+A message from John Furrier, co-founder of SiliconANGLE:
+Support our mission to keep content open and free by engaging with theCUBE community. Join theCUBE's Alumni Trust Network , where technology leaders connect, share intelligence and create opportunities.
+15M+ viewers of theCUBE videos , powering conversations across AI, cloud, cybersecurity and more
+11.4k+ theCUBE alumni - Connect with more than 11,400 tech and business leaders shaping the future through a unique trusted-based network
+Are you an AWS customer? Support SiliconANGLE financially by buying your AWS services from our Marketplace portal page and links: https://siliconangle.com/aws-marketplace/
+About SiliconANGLE Media
+SiliconANGLE Media is a recognized leader in digital media innovation, uniting breakthrough technology, strategic insights and real-time audience engagement. As the parent company of SiliconANGLE , theCUBE Network , theCUBE Research , CUBE365 , theCUBE AI and theCUBE SuperStudios - with flagship locations in Silicon Valley and the New York Stock Exchange - SiliconANGLE Media operates at the intersection of media, technology and AI.
+Founded by tech visionaries John Furrier and Dave Vellante, SiliconANGLE Media has built a dynamic ecosystem of industry-leading digital media brands that reach 15+ million elite tech professionals. Our new proprietary theCUBE AI Video Cloud is breaking ground in audience interaction, leveraging theCUBEai.com neural network to help technology companies make data-driven decisions and stay at the forefront of industry conversations.
+From tokenmaxxing to sovereign alpha: Who controls your AI economics? - SiliconANGLE

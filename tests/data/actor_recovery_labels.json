@@ -1,0 +1,293 @@
+{
+"description": "Actors recovered by services/actor_recovery.py on the events in dedup_gold_pairs.json, judged by hand: correct = the recovered actor is the one acting in the event.",
+"labels": {
+"EVENT-06156EC9B21BC29787A6259B": {
+"actor": "Donald Trump",
+"correct": true
+},
+"EVENT-4EF343E28FE89742DA1FF847": {
+"actor": "Donald Trump",
+"correct": true
+},
+"EVENT-DD26BDFD4A718E60A6CEAF72": {
+"actor": "Donald Trump",
+"correct": true
+},
+"EVENT-C944AF654CA1792C2DE50B16": {
+"actor": "Mike Johnson",
+"correct": true
+},
+"EVENT-21088D228A6EE39AAABB9C0A": {
+"actor": "Donald Trump",
+"correct": true
+},
+"EVENT-FC271557CFA6C9A6F59F3344": {
+"actor": "China",
+"correct": true
+},
+"EVENT-EF4BE702DADF66533C0C0C91": {
+"actor": "US",
+"correct": true
+},
+"EVENT-14BDFBCB47B218AE08CCDB78": {
+"actor": "White House Office",
+"correct": true
+},
+"EVENT-65C13782945DCF4B21F37301": {
+"actor": "Scott Bessent",
+"correct": true
+},
+"EVENT-AA41675A5D5DFD613F05101A": {
+"actor": "US",
+"correct": true
+},
+"EVENT-554B006F6F97877536BC4121": {
+"actor": "Donald Trump",
+"correct": true
+},
+"EVENT-AD72BCC2BC07DD40A78BA755": {
+"actor": "Donald Trump",
+"correct": true
+},
+"EVENT-062EC810C8E4D4E00F53D633": {
+"actor": "Kimi K3",
+"correct": true
+},
+"EVENT-429DE89DC8C5E20598FC9D9E": {
+"actor": "Anthropic",
+"correct": false
+},
+"EVENT-8F3F423C5071472A08E5F942": {
+"actor": "Pete Hegseth",
+"correct": true
+},
+"EVENT-5FA965ECF1B333CAE0BEF3B5": {
+"actor": "India",
+"correct": true
+},
+"EVENT-CAA388FB192B56F894B94019": {
+"actor": "Donald Trump",
+"correct": false
+},
+"EVENT-580B30DE08F6CFE370EF448D": {
+"actor": "Google DeepMind",
+"correct": true
+},
+"EVENT-0EF5979507B27901ADB044F9": {
+"actor": "Anthropic",
+"correct": true
+},
+"EVENT-4D2246F68371F7347EA28271": {
+"actor": "Donald Trump",
+"correct": true
+},
+"EVENT-2CD442764E2941C50CD84D2D": {
+"actor": "Donald Trump",
+"correct": true
+},
+"EVENT-63DEA5E89F7A1D880E1FA676": {
+"actor": "Donald Trump",
+"correct": true
+},
+"EVENT-DF5B765EA923A12AB3A65791": {
+"actor": "Donald Trump",
+"correct": true
+},
+"EVENT-7169AAEB90D5A6FAB24D0ACD": {
+"actor": "Donald Trump",
+"correct": true
+},
+"EVENT-DC58711E2134CBDFB75E5AD2": {
+"actor": "Donald Trump",
+"correct": true
+},
+"EVENT-5EB6A41084C00E2FF39B7A34": {
+"actor": "Donald Trump",
+"correct": true
+},
+"EVENT-6E1C19E6EF375A08B3AF70E5": {
+"actor": "UAE",
+"correct": true
+},
+"EVENT-FBD7DE27F0A7ED14B1DC4624": {
+"actor": "UAE",
+"correct": true
+},
+"EVENT-E9CE63C01CAC4BC06FF4E8D5": {
+"actor": "Donald Trump",
+"correct": true
+},
+"EVENT-529E0282448FC0778932B724": {
+"actor": "Donald Trump",
+"correct": true
+},
+"EVENT-E563C9EC636D95264E3E6B7C": {
+"actor": "Donald Trump",
+"correct": true
+},
+"EVENT-1774C769927257466420D87E": {
+"actor": "Anthropic",
+"correct": true
+},
+"EVENT-90F821FFCC0BFC8E5A06387A": {
+"actor": "OpenAI",
+"correct": true
+},
+"EVENT-6EDD717504AB8768A2116BCD": {
+"actor": "Greg Casar",
+"correct": true
+},
+"EVENT-7DF51CAF9B02A05C3991BBC6": {
+"actor": "Anthropic",
+"correct": true
+},
+"EVENT-FA7B68FA0D003D7665CF58CF": {
+"actor": "Donald Trump",
+"correct": true
+},
+"EVENT-BD5B08D085BC874ABD4DF73C": {
+"actor": "Donald Trump",
+"correct": true
+},
+"EVENT-66810A219A2F0BD385DFF117": {
+"actor": "Donald Trump",
+"correct": true
+},
+"EVENT-DE4A5A093FBC27783FEA0FE4": {
+"actor": "Donald Trump",
+"correct": true
+},
+"EVENT-7256626D1BC9109CEA597CEF": {
+"actor": "Katy Gallagher",
+"correct": true
+},
+"EVENT-ED6A2881216066359EF22239": {
+"actor": "Anthony Albanese",
+"correct": true
+},
+"EVENT-D5DD8CA1F59B14D32042261D": {
+"actor": "Pete Hegseth",
+"correct": true
+},
+"EVENT-9A49768F86A0697072DB44B6": {
+"actor": "Mike Johnson",
+"correct": true
+},
+"EVENT-70295F7B932A7B99FFD7D785": {
+"actor": "Donald Trump",
+"correct": true
+},
+"EVENT-62EB671503031856679B9B3C": {
+"actor": "Donald Trump",
+"correct": true
+},
+"EVENT-C9A67236C72B84A0CE05D85F": {
+"actor": "Donald Trump",
+"correct": true
+},
+"EVENT-8B5FF53013BA6D445A70613F": {
+"actor": "U.S.",
+"correct": true
+},
+"EVENT-138D5D52CA5DB7CD1A6DB663": {
+"actor": "Donald Trump",
+"correct": true
+},
+"EVENT-3D9A553D5AADE2B11648C0AF": {
+"actor": "Bernie Sanders",
+"correct": true
+},
+"EVENT-92487BD00FA31DABFF610A36": {
+"actor": "Anthropic",
+"correct": true
+},
+"EVENT-2C596456D1B7598647A6D3DA": {
+"actor": "Xi Jinping",
+"correct": true
+},
+"EVENT-D747AFDB36A1FF4CEE486764": {
+"actor": "Donald Trump",
+"correct": true
+},
+"EVENT-C7C7DC71DB38D31244A59718": {
+"actor": "Donald Trump",
+"correct": true
+},
+"EVENT-F1D9A3F7D600432E467DD926": {
+"actor": "Anthropic",
+"correct": false
+},
+"EVENT-4C4DEBE3A2A06B27AB123C3D": {
+"actor": "Anthony Albanese",
+"correct": true
+},
+"EVENT-54C6889074514DB80817D5F1": {
+"actor": "Anthony Albanese",
+"correct": true
+},
+"EVENT-54FE46CBF38531EB75AB95D7": {
+"actor": "Donald Trump",
+"correct": true
+},
+"EVENT-09DB00E94BBA5E5055EC8770": {
+"actor": "Anthony Albanese",
+"correct": true
+},
+"EVENT-EEAFAACFEC96103F4BC48451": {
+"actor": "Donald Trump",
+"correct": true
+},
+"EVENT-26A62808943FE3B71D3C172A": {
+"actor": "Donald Trump",
+"correct": true
+},
+"EVENT-9127258D2841030ADFB44CCA": {
+"actor": "France",
+"correct": true
+},
+"EVENT-3C6A7265ECABDBF4091F6F5D": {
+"actor": "Nvidia",
+"correct": true
+},
+"EVENT-B70B0036E073D38F3FFDB068": {
+"actor": "Google",
+"correct": true
+},
+"EVENT-C652FDD88975D92C8DF2FE34": {
+"actor": "Donald Trump",
+"correct": true
+},
+"EVENT-E1850DED74B8A5E57AA1D9B6": {
+"actor": "Microsoft",
+"correct": true
+},
+"EVENT-46E26DDCF6AB5A8CC9C7DE83": {
+"actor": "Talkdesk",
+"correct": true
+},
+"EVENT-0EBC631674E69BA99205E42F": {
+"actor": "OpenAI",
+"correct": true
+},
+"EVENT-CBE0E75E9DD07A4AF2808529": {
+"actor": "Anthropic",
+"correct": true
+},
+"EVENT-C4C48998B23A8B52C2DC52D5": {
+"actor": "Folk",
+"correct": true
+},
+"EVENT-42AE9B6C4E85D6D5B9D09BC3": {
+"actor": "Poke",
+"correct": true
+},
+"EVENT-DD2106828EEB483B5A596C24": {
+"actor": "Greece",
+"correct": true
+},
+"EVENT-5EFF10EC5C3B2CC381BD7685": {
+"actor": "BRICS",
+"correct": true
+}
+}
+}

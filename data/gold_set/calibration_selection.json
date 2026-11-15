@@ -1,0 +1,110 @@
+{
+  "algorithm": "per-source random.Random(f'{seed}:{source_blind_id}').choice; sorted blind IDs",
+  "blind_csv_sha256": "7719cba967be79a17f56045875fa0aa18ab2975abd330a6954f37dee7227f2c5",
+  "calibration_blind_ids": [
+    "B019",
+    "B029",
+    "B009",
+    "B017",
+    "B015",
+    "B033",
+    "B016",
+    "B026"
+  ],
+  "corpus_fingerprint": "75193842d1c9b3582b21c4af7b781cbb72375cc2fc52863c0b9eb60cb6b62391",
+  "definition_version": "gold-semantics-v1.0",
+  "draft_eligible_blind_ids": [
+    "B001",
+    "B002",
+    "B003",
+    "B004",
+    "B005",
+    "B006",
+    "B007",
+    "B008",
+    "B010",
+    "B011",
+    "B014",
+    "B018",
+    "B020",
+    "B021",
+    "B022",
+    "B023",
+    "B025",
+    "B027",
+    "B028",
+    "B030",
+    "B032",
+    "B034",
+    "B035",
+    "B036",
+    "B037",
+    "B038"
+  ],
+  "gold_manifest_sha256": "e8287c3dd384650c0213fe873a9888500dc2c73efbd5c6b5477602148c12278f",
+  "preview_anchor_checks_passed": true,
+  "preview_detection": "recovered corpus-specific blind-ID mapping",
+  "preview_manual_last_blind_ids": [
+    "B012",
+    "B013",
+    "B024",
+    "B031"
+  ],
+  "preview_mapping_provenance": "Recovered from an earlier saved gold_preannotation.py dated 2026-08-30. Event descriptions matched against the supplied blind CSV; corresponding anchors also appear in test_strategic_topic_signal_service.py. Original preview chat excerpts were not recovered.",
+  "preview_original_chat_verified": false,
+  "python_version": "3.13.2",
+  "rows_per_source": {
+    "S001": {
+      "non_preview_rows": 7,
+      "preview_rows": 0,
+      "total_rows": 7
+    },
+    "S002": {
+      "non_preview_rows": 9,
+      "preview_rows": 4,
+      "total_rows": 13
+    },
+    "S003": {
+      "non_preview_rows": 4,
+      "preview_rows": 0,
+      "total_rows": 4
+    },
+    "S004": {
+      "non_preview_rows": 2,
+      "preview_rows": 0,
+      "total_rows": 2
+    },
+    "S005": {
+      "non_preview_rows": 6,
+      "preview_rows": 0,
+      "total_rows": 6
+    },
+    "S006": {
+      "non_preview_rows": 2,
+      "preview_rows": 0,
+      "total_rows": 2
+    },
+    "S007": {
+      "non_preview_rows": 3,
+      "preview_rows": 0,
+      "total_rows": 3
+    },
+    "S008": {
+      "non_preview_rows": 1,
+      "preview_rows": 0,
+      "total_rows": 1
+    }
+  },
+  "seed": 20260928,
+  "selected_by_source": {
+    "S001": "B019",
+    "S002": "B029",
+    "S003": "B009",
+    "S004": "B017",
+    "S005": "B015",
+    "S006": "B033",
+    "S007": "B016",
+    "S008": "B026"
+  },
+  "version": "gold-preannotation-selection-v1.2"
+}

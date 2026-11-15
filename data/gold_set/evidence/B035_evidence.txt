@@ -1,0 +1,14 @@
+Blind event: B035
+Source: S002
+
+--- Evidence 1 ---
+type: source_excerpt
+In July, the Company announced a strategic collaboration with Takeda Pharmaceutical totaling approximately US$600 million, including approximately US$60 million in project initiation fees, near-term payments and milestones, leveraging generative AI to empower multi-domain drug discovery and deeply participating in the strategic transformation of MNCs toward an AI-native R&D model.
+
+--- Evidence 2 ---
+type: quantitative_claim
+stated_quantity $60 million
+
+--- Evidence 3 ---
+type: quantitative_claim
+stated_quantity $600 million

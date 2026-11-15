@@ -1,0 +1,6 @@
+Blind event: B017
+Source: S004
+
+--- Evidence 1 ---
+type: source_excerpt
+Stock Market Today Highlights, Aug 25: Sensex settles 286 points higher, Nifty touches 24,334

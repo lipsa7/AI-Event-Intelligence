@@ -1,0 +1,6 @@
+Blind event: B009
+Source: S003
+
+--- Evidence 1 ---
+type: source_excerpt
+Higher financing costs, inflation and exchange rate volatility have made project execution more challenging for both the public and private sectors.

@@ -1,0 +1,6 @@
+Blind event: B011
+Source: S002
+
+--- Evidence 1 ---
+type: source_excerpt
+In April, the UAE team announced the successful nomination of ISM0387, an MTA-cooperative PRMT5 inhibitor, less than 12 months after launching local AI drug R&D.

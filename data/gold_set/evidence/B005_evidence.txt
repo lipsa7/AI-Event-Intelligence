@@ -1,0 +1,6 @@
+Blind event: B005
+Source: S005
+
+--- Evidence 1 ---
+type: source_excerpt
+Shipments of energy storage system for the first half of 2026 increased significantly year-over-year, accompanied by an expansion in gross margin.

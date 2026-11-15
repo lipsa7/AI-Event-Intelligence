@@ -1,0 +1,6 @@
+Blind event: B013
+Source: S002
+
+--- Evidence 1 ---
+type: source_excerpt
+Garutadustat (ISM5411): In January, Insilico Medicine announced that Garutadustat, an innovative PHD inhibitor with gut-restricted properties, successfully completed first-patient dosing in the Phase IIa BETHESDA clinical trial for the treatment of inflammatory bowel disease (IBD).

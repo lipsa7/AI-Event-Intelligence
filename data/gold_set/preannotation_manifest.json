@@ -1,0 +1,52 @@
+{
+  "agreement_measured": false,
+  "blind_csv_sha256": "7719cba967be79a17f56045875fa0aa18ab2975abd330a6954f37dee7227f2c5",
+  "calibration_label_origin": "pending_unaided_human",
+  "calibration_manual_initial_sha256": "d6abbe72818ac135da5558d581b971a3df039fd0ac1a7450ff3988b4dc3bcc44",
+  "calibration_selection_sha256": "4151cc3aba6f5fb606102218c6df0ba84ea6fca16216cfa09a7d95816d07775a",
+  "corpus_fingerprint": "75193842d1c9b3582b21c4af7b781cbb72375cc2fc52863c0b9eb60cb6b62391",
+  "definition_version": "gold-semantics-v1.0",
+  "drafts_generated": false,
+  "gold_manifest_sha256": "e8287c3dd384650c0213fe873a9888500dc2c73efbd5c6b5477602148c12278f",
+  "label_columns": [
+    "actor_surface",
+    "actor_role",
+    "actor_role_confidence",
+    "canonical_actor",
+    "identity_status",
+    "identity_relation",
+    "identity_confidence",
+    "article_topic",
+    "article_topic_confidence",
+    "event_ai_linkage",
+    "linkage_confidence",
+    "material_development",
+    "material_development_confidence",
+    "supporting_source_spans",
+    "label_notes"
+  ],
+  "label_merge_policy": "After human review, merge LABEL_COLUMNS by blind_id into gold_set_blind.csv; verify source_blind_id and definition_version, preserve other rows and metadata, and reject conflicting existing labels. No merge occurs here. derive continues reading gold_set_blind.csv unchanged.",
+  "llm_called": false,
+  "llm_model": null,
+  "llm_prompt_version": null,
+  "preview_anchor_checks_passed": true,
+  "preview_detection": "recovered corpus-specific blind-ID mapping",
+  "preview_manual_last_blind_ids": [
+    "B012",
+    "B013",
+    "B024",
+    "B031"
+  ],
+  "preview_mapping_provenance": "Recovered from an earlier saved gold_preannotation.py dated 2026-08-30. Event descriptions matched against the supplied blind CSV; corresponding anchors also appear in test_strategic_topic_signal_service.py. Original preview chat excerpts were not recovered.",
+  "preview_original_chat_verified": false,
+  "sampling_design": "one non-preview event per source; source-stratified",
+  "sampling_limitation": "Unequal event counts per source: calibration agreement is not a representative event-level estimate; 8 rows do not justify a numeric gate.",
+  "seed": 20260928,
+  "split_counts": {
+    "calibration": 8,
+    "draft_eligible": 26,
+    "preview_last": 4
+  },
+  "stage": "selection_only_manual_calibration_pending",
+  "version": "gold-preannotation-selection-v1.2"
+}

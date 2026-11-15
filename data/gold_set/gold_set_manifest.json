@@ -1,0 +1,18 @@
+{
+  "tool_version": "gold-set-tool-v1.0-blind-derived-admission",
+  "definition_version": "gold-semantics-v1.0",
+  "report_id": "REPORT-FF59222B19F714AB8918D407",
+  "topic": "artificial intelligence",
+  "row_count": 38,
+  "source_count": 8,
+  "corpus_fingerprint": "75193842d1c9b3582b21c4af7b781cbb72375cc2fc52863c0b9eb60cb6b62391",
+  "evidence_histogram": {
+    "0": 0,
+    "1": 23,
+    "2": 6,
+    "3+": 9
+  },
+  "events_with_at_least_1_evidence": 38,
+  "events_with_at_least_2_evidence": 15,
+  "warning": "Do not inspect gold_set_key.json until manual labels are frozen."
+}

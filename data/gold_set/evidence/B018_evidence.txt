@@ -1,0 +1,18 @@
+Blind event: B018
+Source: S005
+
+--- Evidence 1 ---
+type: quantitative_claim
+stated_quantity 370.3 million
+
+--- Evidence 2 ---
+type: quantitative_claim
+stated_quantity $54.6 million
+
+--- Evidence 3 ---
+type: source_excerpt
+The Company recognized a gain from change in fair value of long-term investment of RMB 370.3 million (US$54.6 million) in the second quarter of 2026, compared with a gain of RMB124.4 million in the first quarter of 2026 and a gain of RMB42.3 million in the second quarter of 2025.
+
+--- Evidence 4 ---
+type: quantitative_claim
+stated_quantity 4 million
