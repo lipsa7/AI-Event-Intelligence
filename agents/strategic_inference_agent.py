@@ -1483,9 +1483,15 @@ class StrategicInferenceAgent:
             )
             current_synthesis = synthesis
 
+            # v13.6 (20 Nov 2026): an exploration call (execution_stage "refinement", one story at a
+            # time) that returns NO candidate gets no second opinion: it doubled the calls for every
+            # story that had nothing (simulated run, 20 Nov). Rejected candidates are still repaired.
+            exploration_abstained = (execution_stage == "refinement"
+                                     and not self._returned_candidates(synthesis))
             if (
                 reasoning_guidance.get("desired_depth") in {"deep", "very_deep"}
                 and not normalized.get("candidate_insights")
+                and not exploration_abstained
             ):
                 quality_repair_used = True
                 # 8 Nov 2026 (cost): a model that returns NO candidate has judged the packet, not

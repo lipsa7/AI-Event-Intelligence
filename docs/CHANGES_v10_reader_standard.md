@@ -535,3 +535,45 @@ available to write queries) follows the same angles. The prompt version is
 `cluster-queries-v2-insight-angles`.
 
 **Tests:** 1 new test (13 in `tests/test_v13_quality_regression.py`). Full suite: no new failures.
+
+# v13.6: several distinct stories explored, copies of one story merged, honest quality gates (20 Nov 2026)
+Found by reviewing the code and a simulated deep run on the saved corpus (10 Sep - 25 Oct 2026).
+- **Every top story gets its own reading.** Exploration read at most two stories, so its limit of 5
+  never came into play and a run could not reach several insights. Now each top-ranked story (by
+  insight potential) gets its own single-story reading until the limit is reached
+  (`_development_combinations`).
+- **Copies of one story are merged** (new `services/same_story.py`). One story reported by several
+  outlets arrived as several "stories" (the OpenAI / Australia breach as about ten), so exploration
+  spent its slots on the same story. Two events are the same story when they share rare words
+  (weighted by how rare each word is in the run), at least four words and at least two names; outlet
+  names at the end of titles ("- SiliconANGLE") and bylines ("by Maria Deutscher") are ignored. A
+  size guard (25 events, or 4% of the run) stops chaining. On the saved corpus the breach becomes one
+  10-event story with no unrelated item. A first attempt that merged on one or two shared capitalised
+  words was rejected: it built a "China" story mixing BRICS, a coal deal and a funding round.
+  Known limits: a lone sentence with one name ("Despite the breach happening in June, Albanese
+  said...") stays separate and can take one exploration slot; interview write-ups from one outlet
+  that share its hosts' names are grouped together (low insight value).
+- **Second route for single-story readings.** When no context record (rule, deadline, precedent)
+  applies, the model derives the insight from the story's own records: a computed gap listed in the
+  prompt, or two records that do not reconcile. In the simulation, three stories returned nothing
+  because only the context-record route was offered.
+- **No second opinion after an empty refinement call.** A refinement-stage call (exploration, repair
+  or alternative candidate) that returns no candidate is not asked again; it doubled the calls for
+  every story with nothing to say. Rejected candidates are still repaired.
+- **Quality gates computed after the release decision.** The run-quality gates were computed before
+  the release decision, so a run whose insights were then withheld still reported them as passed.
+  They are recomputed in `_persist_report` with the withheld insights removed
+  (`quality_gates.computed_after_release_decision = true`).
+
+**Tests:** 15 outcome tests in `tests/test_v13_quality_regression.py` (2 new: several distinct
+stories with one coherent breach story; outlet names and bylines do not merge unrelated funding
+rounds, and no story exceeds the size guard). Full suite: the same 67 failures and collection errors
+as GitHub 113edb6 (missing packages in the test machine), none added.
+
+# v13.6.1: no story lost when copies of one story are merged (20 Nov 2026)
+Review fix to v13.6. A group could belong to two stories (one shared with a larger group, one with a
+smaller group). The smaller group was copied into the middle group after the middle group had
+already been merged into the larger one, so its events were lost from exploration. Groups are now
+joined transitively (union-find over group keys) and each merges straight into its final group.
+**Tests:** 1 new test (16 in `tests/test_v13_quality_regression.py`); it fails on v13.6 and passes now.
+Full suite: no new failures.

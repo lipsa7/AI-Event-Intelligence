@@ -1,0 +1,23 @@
+# RSS/Atom feeds read by services/free_news_providers.RSSFeedProvider.
+# One URL per line; text after '#' is ignored.
+# Check them on your computer:   python -m tools.check_news_feeds
+# Enable the candidates that work: python -m tools.check_news_feeds --enable-working
+
+# Checked 2026-10-04 (valid feed, recent items):
+https://techcrunch.com/category/artificial-intelligence/feed/
+https://www.technologyreview.com/feed/
+https://siliconangle.com/category/ai/feed/
+#candidate https://www.business-standard.com/rss/technology-108.rss  # disabled v6.12: article pages return no usable text
+#candidate https://inc42.com/feed/  # disabled v6.12: article pages return no usable text
+https://yourstory.com/feed
+
+# Candidates NOT checked (the checking service was blocked from these sites).
+# Run the check above; it uncomments the ones that work from your computer.
+#candidate https://www.theverge.com/rss/ai-artificial-intelligence/index.xml
+#candidate https://economictimes.indiatimes.com/tech/rssfeeds/13357270.cms
+#candidate https://www.livemint.com/rss/technology
+#candidate https://www.wired.com/feed/tag/ai/latest/rss
+#candidate https://www.zdnet.com/topic/artificial-intelligence/rss.xml
+#candidate https://www.moneycontrol.com/rss/technology.xml
+#candidate https://www.thehindubusinessline.com/info-tech/feeder/default.rss
+#candidate https://feeds.arstechnica.com/arstechnica/technology-lab

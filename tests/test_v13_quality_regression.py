@@ -222,3 +222,68 @@ def test_cluster_searches_look_for_what_insights_are_built_from_for_any_topic():
                  "terms": ["breach", "notification"], "subject": "agent breach"},
         round_number=1)
     assert queries and not any(q.strip().casefold() == "artificial intelligence" for q in queries)
+
+
+def test_exploration_reads_several_distinct_stories_and_merges_copies_of_one():
+    """v13.6 (20 Nov 2026): exploration read at most 2 stories (so the limit of 5 never applied), and one
+    story reported by several outlets appeared as several stories. Each top story now gets its own
+    reading up to the limit, and copies of one story are merged (services/same_story.py) - without chaining."""
+    events, evidence = _corpus()
+    service = ResearchOrchestratorService.__new__(ResearchOrchestratorService)
+    combos = service._development_combinations(events, evidence, (), limit=5, topic="AI governance and regulation")
+    assert len(combos) >= 4, [c["labels"] for c in combos]
+    by_id = {e["event_id"]: e for e in events}
+    def australian_breach(text: str) -> bool:
+        text = text.casefold()
+        return ("albanese" in text or "australia" in text) and ("openai" in text or "breach" in text or "hack" in text)
+    breach = [c for c in combos if sum(australian_breach(by_id[e]["title"] or "") for e in c["event_ids"]) >= 2]
+    assert len(breach) == 1, "the breach story should be one merged story, not several"
+    assert all(len(c["event_ids"]) <= 40 for c in combos), "merging must not chain into a giant group"
+    # The merged story must be coherent: every event in it is about the breach (the first v13.6
+    # attempt let New York data-centre permits and an OpenAI resignation into it).
+    story = breach[0]["event_ids"]
+    assert len(story) >= 8, len(story)
+    assert all(australian_breach((by_id[e]["title"] or "") + " " + (by_id[e].get("summary") or "")) for e in story), \
+        [by_id[e]["title"][:60] for e in story]
+
+
+def test_same_story_ignores_outlet_names_and_bylines_and_does_not_chain():
+    """v13.6: unrelated funding rounds from one outlet (shared outlet name and reporter) are not one
+    story; the corpus never forms a story larger than the size guard; the breach is one story."""
+    from services import same_story
+    events, _ = _corpus()
+    titles = [e["title"] or "" for e in events]
+    stories = same_story.story_components(events)
+    def story_of(prefix: str) -> set[int]:
+        return {stories[i] for i, t in enumerate(titles) if t.startswith(prefix)}
+    funding = story_of("AI agent developer Manus raises") | story_of("Jev creator TypeSafe closes") \
+        | story_of("EliseAI raises")
+    assert len(funding) == 3, "three unrelated funding rounds must stay three stories"
+    sizes: dict[int, int] = {}
+    for story in stories:
+        sizes[story] = sizes.get(story, 0) + 1
+    assert max(sizes.values()) <= 25
+    breach = story_of("Australia reveals OpenAI agent") | story_of("Albanese chides US company") \
+        | story_of("OpenAI agents hacked an Australian")
+    assert len(breach) == 1
+
+
+def test_group_spanning_two_stories_loses_no_events(monkeypatch):
+    """v13.6 review (20 Nov 2026): group A shares one story with a bigger group B and another with a
+    smaller group C. All three must end up in one group; before, C was copied into A after A had
+    already been merged into B, so C's events were lost."""
+    from services import same_story
+    from services.research_orchestrator_service import ResearchOrchestratorService as S
+
+    def event(eid, underlying):
+        return {"event_id": eid, "underlying_event_id": underlying, "title": f"{eid} story", "summary": eid}
+    events = [event("E1", "A"), event("E2", "A"), event("E3", "B"), event("E4", "B"), event("E5", "C")]
+    evidence = [{"event_id": e, "evidence_id": f"V{e}{n}"} for e, n_ in
+                (("E1", 1), ("E2", 1), ("E3", 3), ("E4", 3), ("E5", 1)) for n in range(n_)]
+    # story 1 (seen first): E1 (A) with E5 (C); story 2: E2 (A) with E3 (B)
+    monkeypatch.setattr(same_story, "story_components", lambda evs, max_size=None: [
+        {"E1": 1, "E5": 1, "E2": 2, "E3": 2, "E4": 3}[e["event_id"]] for e in evs])
+    service = S.__new__(S)
+    combos = service._development_combinations(events, evidence, limit=5, topic="t")
+    seen = {eid for combo in combos for eid in (combo.get("event_ids") or [])}
+    assert {"E1", "E2", "E3", "E4", "E5"} <= seen, combos

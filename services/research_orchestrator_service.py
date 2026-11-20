@@ -211,8 +211,13 @@ INSIGHT_CONSTRAINT_INSTRUCTION = (
     "question with a deadline, or a concrete watch signal. Premises must quote their records and the "
     "conclusion must cite the context record: the development's own reports alone must not already say it. "
     "Discount stated intentions; weigh what the constraint makes unavoidable. Do not claim a cause no record "
-    "states. Do not reuse these rejected theses: {rejected}. Return no candidate if no context record changes "
-    "what the headlines imply."
+    "states. Do not reuse these rejected theses: {rejected}. "
+    "SECOND ROUTE (v13.6, used when no context record applies or none was found): derive the insight from "
+    "inside this development's own records - a COMPUTED GAP listed in the prompt (two dates far apart, an "
+    "event reported months later, two amounts) or two records that do not reconcile (dates, numbers, who "
+    "knew what and when). State the gap as fact, what it changes for a named company, agency or group, and "
+    "the likely next move as a watch signal; cite every record of the gap. Return no candidate only if "
+    "neither route yields an insight a headline reader would not already have."
 )
 
 # V3.26.4: authoritative analytical material is useful research context, but it
@@ -4268,6 +4273,7 @@ class ResearchOrchestratorService:
             try:
                 from services import run_quality
 
+                self._quality_gate_inputs = (state, events, evidence)
                 quality = run_quality.gates(state, report, events, evidence,
                                             depth=_clean(state.get("research_depth") or state.get("depth") or "deep"))
                 report.setdefault("analysis_metadata", {})["quality_gates"] = _json_safe(quality)
@@ -17721,10 +17727,53 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
             group["evidence_ids"] += evidence_by_event[event_id]
         # v13: insight potential first (services/insight_potential.py), coverage as the tie-breaker.
         from services import insight_potential
-        for group in groups.values():
+        # v13.6 (20 Nov 2026): one story reported by several outlets arrived as several groups (the
+        # OpenAI/Australia breach arrived as ~10 events), so exploration spent its slots on the same
+        # story. Groups whose events report the same story are merged, using near-duplicate text
+        # detection in services/same_story.py (rare shared words, shared names; outlet names and
+        # bylines ignored). A merge links groups only through a same-story pair of events.
+        from services import same_story
+        all_events = [e for g in groups.values() for e in g["events"]]
+        owner = [g["key"] for g in groups.values() for _ in g["events"]]
+        story_of = same_story.story_components(all_events)
+        story_groups: dict[int, list[str]] = {}
+        for index, key in enumerate(owner):
+            keys = story_groups.setdefault(story_of[index], [])
+            if key not in keys:
+                keys.append(key)
+        # Groups linked by any shared story are joined transitively (union-find over group keys), and
+        # every group merges straight into its final target: a group can span two stories, and with
+        # one-step targets its events were copied into a group that was itself merged away (lost).
+        group_parent = {key: key for key in groups}
+
+        def group_root(key: str) -> str:
+            while group_parent[key] != key:
+                group_parent[key] = group_parent[group_parent[key]]
+                key = group_parent[key]
+            return key
+
+        rank_key = lambda k: (-len(groups[k]["evidence_ids"]), k)
+        for keys in story_groups.values():
+            roots = sorted({group_root(k) for k in keys}, key=rank_key)
+            for other in roots[1:]:
+                group_parent[other] = roots[0]
+        absorbed = {key: group_root(key) for key in groups if group_root(key) != key}
+        merged: list[dict[str, Any]] = []
+        for group in sorted(groups.values(), key=lambda g: (-len(g["evidence_ids"]), g["key"])):
+            target_key = absorbed.get(group["key"])
+            if not target_key:
+                merged.append(group)
+                continue
+            target = groups[target_key]
+            target["event_ids"] += [e for e in group["event_ids"] if e not in target["event_ids"]]
+            target["underlying"] |= set(group["underlying"])
+            target["evidence_ids"] += [e for e in group["evidence_ids"] if e not in target["evidence_ids"]]
+            target["actors"] |= set(group["actors"])
+            target["events"] += group["events"]
+        for group in merged:
             group["potential"] = insight_potential.score(group["events"], topic=topic)
-        ranked = sorted(groups.values(), key=lambda g: (-float(g["potential"]["score"]), -len(g["underlying"]),
-                                                       -len(g["evidence_ids"]), g["key"]))[:6]
+        ranked = sorted(merged, key=lambda g: (-float(g["potential"]["score"]), -len(g["underlying"]),
+                                               -len(g["evidence_ids"]), g["key"]))[:max(6, limit)]
         ranked = [g for g in ranked if "funding_only" not in g["potential"]["parts"]] or ranked
         # v6.21.6: skip only the EXACT combinations earlier candidates used.
         # (v6.21.4 skipped any combination inside the union of all used
@@ -17756,8 +17805,13 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
         has_context = any(isinstance(r, Mapping) and r.get("analytical_context_only") for r in evidence or [])
         if ranked and (has_context or not combos):
             combos.insert(1 if combos else 0, [ranked[0]])
-        if ranked and not has_context and len(ranked) >= 2 and len(combos) < limit:
-            combos.append([ranked[1]])
+        # v13.6 (20 Nov 2026): every top story gets its own reading, up to the limit (it was at most
+        # two, so the exploration limit of 5 - and with it multiple insights - never came into play).
+        for group in ranked[1:]:
+            if len(combos) >= limit:
+                break
+            if [group] not in combos:
+                combos.append([group])
         out = []
         for combo in combos:
             keys = {g["key"] for g in combo}
@@ -22393,6 +22447,32 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
             Any,
         ],
     ) -> dict[str, Any]:
+
+        # v13.6 (20 Nov 2026): the quality gates are computed again here, AFTER the red team and the
+        # release policy. They first run before those checks, which can still remove insights, so a
+        # gate could report insights that never reached the reader. A blocked release counts as 0.
+        try:
+            from services import run_quality
+
+            inputs = getattr(self, "_quality_gate_inputs", None)
+            if inputs and isinstance(report, dict):
+                state, events, evidence = inputs
+                released_report = dict(report)
+                if not self._release_is_authorized(release_decision):
+                    released_report["hidden_insights"] = []
+                quality = run_quality.gates(state, released_report, events, evidence,
+                                            depth=_clean(state.get("research_depth") or "deep"))
+                quality["computed_after_release_decision"] = True
+                report.setdefault("analysis_metadata", {})["quality_gates"] = _json_safe(quality)
+                failed = [name for name, result in quality["gates"].items() if not result["passed"]]
+                if failed:
+                    logger.warning("run_quality_gates_failed_after_release=%s funnel=%s", failed,
+                                   json.dumps(_json_safe(quality["funnel"]), default=str))
+                else:
+                    logger.info("run_quality_gates_passed_after_release funnel=%s",
+                                json.dumps(_json_safe(quality["funnel"]), default=str))
+        except Exception as error:   # never fatal
+            logger.warning("Run quality gates (after release) failed to compute: %s", type(error).__name__)
 
         if (
             self.report_service
