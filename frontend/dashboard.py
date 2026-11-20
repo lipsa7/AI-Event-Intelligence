@@ -5306,9 +5306,10 @@ def main() -> None:
             # v13.1: what makes a topic yield insights (simulated runs, 18-19 Nov 2026).
             help=("Works best: a field with several active companies, governments or regulators, "
                   "in a few words (e.g. 'AI governance and regulation', 'semiconductor export "
-                  "controls', 'EV battery supply chain'). Too broad ('artificial intelligence') "
-                  "fills the run with unrelated funding and product news; too narrow (one "
-                  "company's single issue) leaves too few events to compare. Use the organisation "
+                  "controls', 'EV battery supply chain'). A broad topic ('artificial intelligence') also "
+                  "works: the run ranks its stories by insight potential and reads the strongest "
+                  "few, though it collects more unrelated news first. Too narrow (one company's "
+                  "single issue) leaves too few events to compare. Use the organisation "
                   "profile for whose point of view the insights take."),
             height=110,
         )
