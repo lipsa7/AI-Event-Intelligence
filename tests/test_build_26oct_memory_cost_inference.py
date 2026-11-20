@@ -162,6 +162,9 @@ def test_call_cap_stops_optional_stages_before_the_reserve(monkeypatch):
     obj = ros.ResearchOrchestratorService.__new__(ros.ResearchOrchestratorService)
     obj.execution_budget_service = None
     monkeypatch.setenv(obj.CALL_CAP_ENV, "20")
+    # v10.1 holds calls for the final checks by default (tested in test_reader_standard.py);
+    # this test is about the optional-stage threshold, so no calls are held here.
+    monkeypatch.setenv("EVENT_INTELLIGENCE_FINAL_CHECK_RESERVED_CALLS", "0")
     try:
         obj._apply_call_cap()
         assert obj._remaining_discretionary_seconds() == float("inf")

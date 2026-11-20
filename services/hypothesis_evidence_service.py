@@ -299,6 +299,36 @@ class HypothesisEvidenceService:
         self.budget = budget_service
         self.discovery_agent = discovery_agent
 
+    def _outcome_query(self, record: Mapping[str, Any]) -> str:
+        """20 Nov 2026 (RUN-87BF): the follow-up query was built from the case's DATE quote ("Published:
+        08 May 2024 2024 outcome what happened next"), so the one search meant to find what followed a
+        past case found nothing - none of that run's 4 cases had an outcome. Ask for a search about the
+        CASE; without a model answer, use the case's own words minus date boilerplate."""
+        case = record.get("historical_case") or {}
+        case_text = clean(record.get("text") or record.get("source_excerpt"))[:600]
+        try:
+            data = self._ask(
+                "Write ONE web search (3 to 10 words) for what happened AFTER this past case - its result, "
+                "enforcement, compliance, reversal or effect. Name the actors and the action; no dates copied "
+                "from the page. Return {\"query\":\"...\"}.\nCASE (" + str(case.get("year") or "") + "): "
+                + case_text, timeout=20, task="precedent_outcome_query")
+            query = clean(data.get("query"))
+        except Exception:
+            query = ""
+        if query:
+            return query
+        months = r"(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?"
+        text = re.sub(r"(?i)\b(?:published|updated|posted)\b:?", " ", case_text)
+        text = re.sub(rf"(?i)\b\d{{1,2}}\s+{months}\s+\d{{4}}\b|\b{months}\s+\d{{1,2}},?\s+\d{{4}}\b", " ", text)
+        if not text.strip():
+            # no page text on the record: the case's own quote, with the same date clean-up
+            text = clean(case.get("event") or case.get("date_quote"))
+            text = re.sub(r"(?i)\b(?:published|updated|posted)\b:?", " ", text)
+            text = re.sub(rf"(?i)\b\d{{1,2}}\s+{months}\s+\d{{4}}\b|\b{months}\s+\d{{1,2}},?\s+\d{{4}}\b", " ", text)
+        words = [w.strip(",.;:") for w in text.split() if len(w.strip(",.;:")) > 2][:8]
+        year = str(case.get("year") or "").strip()
+        return (" ".join(words) + (f" {year}" if year else "") + " outcome what happened next").strip() if words else ""
+
     def _ask(self, prompt: str, *, timeout: float, task: str) -> dict[str, Any]:
         if self.llm is None or not callable(getattr(self.llm, "ask", None)):
             raise RuntimeError("Configured extraction model is unavailable for hypothesis research")
@@ -505,6 +535,13 @@ class HypothesisEvidenceService:
             "case as news of that time (then give that publication year). Outcomes must be observed, not "
             "forecast. Include "
             "the actor, action and qualifiers in each quote. Return records=[] when irrelevant; "
+            # 20 Nov 2026 (RUN-87BF: AMD's 'Instinct' GPUs were taken for the startup Instinct; an acquisition was
+            # taken as a precedent for a voluntary safety accord)
+            "SAME ENTITY: a record must be about the same organisation, product or person the hypothesis names, "
+            "not a different one with the same or a similar name (a startup vs a chip line, a fund vs a company); "
+            "if the page is about a different entity, return records=[]. A historical_case must share the "
+            "MECHANISM (the same kind of commitment, rule, dependency or move), not just the sector or topic; "
+            "otherwise historical_case=null. "
             "do not manufacture a competing explanation. review_complete=false if context is insufficient. "
             + EXPERT_VIEW_RULE + "\n"
             + json.dumps({"hypothesis": candidate, "query": context.get("query"),
@@ -624,19 +661,23 @@ class HypothesisEvidenceService:
     # Google co-scientist Reflection agent and Sakana's AI Scientist judge
     # novelty against retrieved literature). Analysis/forecast passages become
     # gap_type "commentary"; reported facts on those pages become "reported".
-    GAP_TYPES = ("precedent", "policy", "dependency", "numbers", "commentary")
-    GAP_MODE = {"precedent": "direct_precedent", "policy": "feasibility",
+    # v11 (15 Nov 2026): "primary" - the original document THIS development is about (the bill or
+    # accord text, the company's own notice or filing). Better inputs raised insight depth more than
+    # better prompting in DeepResearch Bench (Du et al. 2025); the plan previously forbade searching
+    # for the development itself, so its own document was never read.
+    GAP_TYPES = ("primary", "precedent", "policy", "dependency", "numbers", "commentary")
+    GAP_MODE = {"primary": "premise_support", "precedent": "direct_precedent", "policy": "feasibility",
                 "dependency": "premise_support", "numbers": "premise_support", "commentary": "premise_support"}
     COMMENTARY_WINDOW_DAYS = 60
     # v6.21.4: up to two precedent searches (two different named cases), so
     # five queries x two results = ten pages.
-    GAP_MAX_QUERIES = 6   # v6.22: + one expert-commentary search
+    GAP_MAX_QUERIES = 7   # v6.22: + one expert-commentary search; v11: + the primary document
     # v6.20.9: 4 queries x 2 results = 8 candidate pages. With 5, three pages
     # per development were never read (live run RUN-ED2409…: "result not
     # reviewed (source_fetch_budget_exhausted)" on precedent, dependency,
     # numbers and policy). Gap research took ~35 s per development, so the
     # time cap is raised with it.
-    GAP_MAX_SOURCES = 12
+    GAP_MAX_SOURCES = 14   # v11: + two pages for the primary document
     GAP_MAX_SECONDS = 240
     PRECEDENT_FOLLOWUP_SECONDS = 70
 
@@ -685,12 +726,19 @@ class HypothesisEvidenceService:
             local_deadline = max(local_deadline, time.monotonic() + seconds)
 
         gap_of_query: dict[str, str] = {}
+        questions: list[str] = []
         review_log: list[dict[str, Any]] = []
 
         def plan(_: str) -> dict[str, Any]:
             data = self._ask(
-                "An analyst must explain what this current development means and what may follow. List "
-                "the missing facts as web searches, one per gap type:\n"
+                "An analyst must explain what this current development means and what may follow. FIRST write "
+                "up to three sharp QUESTIONS whose answers would most change what the development means (who must do "
+                "what and by when, what the document actually says, what happened last time, who is missing). THEN "
+                "list the missing facts as web searches, one per gap type, each answering one question:\n"
+                "primary: the ORIGINAL DOCUMENT this development is about - the bill, rule, accord or agreement text, "
+                "or the company's or agency's own notice, filing or statement - searched by its exact name and "
+                "issuer (e.g. \"OpenAI incident report September agent breach\"). This is the one search that IS "
+                "about the current development;\n"
                 "precedent: TWO different specific earlier cases (8 Nov 2026: reference-class method - start from the "
                 "closest class, Kahneman and Lovallo's outside view; Neustadt and May, Thinking in Time). The FIRST is "
                 "the DIRECT precedent: the most recent earlier case of the same kind of instrument or action, by the "
@@ -704,7 +752,7 @@ class HypothesisEvidenceService:
                 "where the customer's legal reporting depended on the vendor's disclosure); prefer a SECOND case whose "
                 "outcome went the other way. Search for a report of each case and what FOLLOWED it, naming the actor, "
                 "the action and its year, e.g. \"SolarWinds 2020 breach customer disclosure SEC\". Do not search "
-                "for the current development itself;\n"
+                "for the current development itself except in the primary search;\n"
                 "Prefer primary documents for each missing claim: regulator rule text or decisions, company filings, "
                 "official incident notices and published transcripts. A primary document still needs date, scope and "
                 "applicability checks; it is not automatically true. For policy extract who must do what, effective "
@@ -720,8 +768,9 @@ class HypothesisEvidenceService:
                 "groups or trade press say it means (e.g. \"<actor> <event> analysis implications\").\n"
                 "Use concise real search terms (names, products, rules), 2 to 8 words; no years except in the "
                 "precedent query. Skip a gap "
-                "type only if it cannot apply. Return {\"queries\":[{\"gap\":\"precedent|policy|dependency|"
-                "numbers|commentary\",\"query\":\"...\",\"rationale\":\"...\"}]}, at most six queries.\nCURRENT DEVELOPMENT\n"
+                "type only if it cannot apply. Return {\"questions\":[\"...\"],\"queries\":[{\"gap\":\"primary|"
+                "precedent|policy|dependency|numbers|commentary\",\"query\":\"...\",\"question\":\"the question it "
+                "answers\",\"rationale\":\"...\"}]}, at most seven queries.\nCURRENT DEVELOPMENT\n"
                 + json.dumps({"development": title, "facts": facts, "actors": actors}, ensure_ascii=False),
                 timeout=min(20, local_deadline - time.monotonic()), task="gap_query_plan")
             queries = []
@@ -754,6 +803,9 @@ class HypothesisEvidenceService:
                 queries.append(query)
             if not queries:
                 raise ValueError("No valid gap search plan")
+            # v11: the primary document is searched first, so a short budget still reads it.
+            queries.sort(key=lambda q: 0 if gap_of_query.get(q["query"].casefold()) == "primary" else 1)
+            questions[:] = [clean(q) for q in data.get("questions") or [] if clean(q)][:3]
             queries = queries[: self.GAP_MAX_QUERIES]
             if "commentary" not in gap_of_query.values() and title and (not only or "commentary" in only):
                 # v6.22: the expert-commentary search always runs (it sets the novelty bar).
@@ -788,7 +840,7 @@ class HypothesisEvidenceService:
             try:
                 result = self._process_source(source=source, context=discovery_context, candidate=candidate, now=now,
                                               timeout=min(timeout_seconds, local_deadline - time.monotonic()),
-                                              allow_undated_in_force=(gap == "policy"),
+                                              allow_undated_in_force=(gap in {"policy", "primary"}),
                                               enforce_window=(gap != "precedent"),
                                               allow_undated_historical=(gap == "precedent"),
                                               date_from_text=(gap == "commentary"))
@@ -867,6 +919,7 @@ class HypothesisEvidenceService:
             "limitations": [f"{name}: {x}" for name, item in assessment["gaps"].items()
                             for x in item["blockers"] + item["limitations"]],
             "queries": [{"gap": gap, "query": q} for q, gap in gap_of_query.items()],
+            "questions": list(questions),
             "records": records,
             "found_by_gap": {gap: sum(1 for r in records if r.get("gap_type") == gap) for gap in self.GAP_TYPES},
             "precedent_followup": precedent_followup,
@@ -894,9 +947,7 @@ class HypothesisEvidenceService:
         reason = ""
         try:
             if partial:
-                case = partial[0]["historical_case"]
-                words = " ".join(clean(case.get("date_quote") or partial[0].get("text")).split()[:10])
-                query = f"{words} {case.get('year')} outcome what happened next"
+                query = self._outcome_query(partial[0])
                 reason = "case_found_without_outcome"
             else:
                 data = self._ask(

@@ -2836,11 +2836,19 @@ Rules:
 
         return _sha256_hex(_canonical_json_bytes(semantic))
 
+    # 20 Nov 2026: the fingerprint used to cover the WHOLE record, so a record the app had annotated
+    # itself (precedent_for, gap_type, ...) counted as "same evidence ID, different content" and the whole
+    # development's research was aborted (EvidenceIntegrityError - RUN-87BF lost the mathematicians/Simons
+    # development twice). An ID collision is about the evidence itself: its source, date and text.
+    CONTENT_FIELDS = ("evidence_id", "source_url", "url", "source_id", "published_at", "source_excerpt",
+                      "text", "quote", "claim")
+
     def _full_evidence_fingerprint(
         self,
         record: Mapping[str, Any],
     ) -> str:
-        return _sha256_hex(_canonical_json_bytes(record))
+        content = {k: record.get(k) for k in self.CONTENT_FIELDS if record.get(k) not in (None, "", [])}
+        return _sha256_hex(_canonical_json_bytes(content or dict(record)))
 
     def _source_group(
         self,

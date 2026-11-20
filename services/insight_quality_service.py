@@ -213,6 +213,20 @@ def _clean(value: Any) -> str:
     return " ".join(str(value).split()).strip()
 
 
+_FORWARD = re.compile(r"\b(will|would|is likely to|are likely to|likely|expected to|is set to|are set to|may soon|"
+                      r"next year|by 20\d\d|within the next|forecast)\b", re.I)
+_SIGNPOST = re.compile(r"^\s*(watch for|watch:|what to watch|signpost|forecast:)", re.I)
+
+
+def _forecasts_outside_signposts(text: str) -> bool:
+    """v13 (19 Nov 2026, simulated run): an insight counts as a forecast for the feasibility check
+    only when it predicts something OUTSIDE its "Watch for ..." lines. The writing standard puts a
+    signpost line on every insight, which made the model label past findings (the breach delay)
+    "prospective"; the feasibility check then blocked them for lacking policy research."""
+    sentences = re.split(r"(?<=[.!?])\s+", _clean(text))
+    return any(_FORWARD.search(s) for s in sentences if s and not _SIGNPOST.match(s))
+
+
 def _normalize_enum(value: Any) -> str:
     text = _clean(value).casefold()
     text = text.replace("-", "_").replace(" ", "_")
@@ -1172,7 +1186,7 @@ class InsightQualityService:
             grounding=grounding,
         )
 
-        if insight["insight_type"] == "prospective":
+        if insight["insight_type"] == "prospective" and _forecasts_outside_signposts(insight["text"]):
             dimensions["prospective_feasibility"] = prospective_checks[
                 "score"
             ]
@@ -2159,10 +2173,14 @@ Do not include chain-of-thought.
                 },
             )
 
+        # v13 (19 Nov 2026, simulated run): the strategic generator stores its citations as
+        # "supporting_evidence_ids"; this check read only "evidence_ids"/"support_evidence_ids",
+        # reported "No supporting evidence records are attached" for an insight citing 10 records,
+        # scored its evidence 0 and sent it to repair.
         normalized["evidence_ids"] = _stable_unique_strings(
-            insight.get("evidence_ids")
-            or insight.get("support_evidence_ids")
-            or []
+            list(insight.get("evidence_ids") or [])
+            + list(insight.get("support_evidence_ids") or [])
+            + list(insight.get("supporting_evidence_ids") or [])
         )
 
         normalized["counterevidence_ids"] = _stable_unique_strings(

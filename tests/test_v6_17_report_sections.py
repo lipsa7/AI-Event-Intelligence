@@ -762,7 +762,7 @@ def _gap_setup(results_per_query=1):
 def test_grounded_link_redirect_fetch_date_and_quote_become_evidence():
     service, search, grounded = _gap_setup()
     receipt = service.investigate_gaps(development=DEVELOPMENTS[0], as_of="2026-10-09T00:00:00+00:00", search=search)
-    assert receipt["found_by_gap"] == {"precedent": 1, "policy": 1, "dependency": 1, "numbers": 1,
+    assert receipt["found_by_gap"] == {"primary": 0, "precedent": 1, "policy": 1, "dependency": 1, "numbers": 1,
                                        "commentary": 1}, receipt
     for record in receipt["records"]:
         assert record["source_url"].startswith(("https://publisher.example/", "https://www.lawfaremedia.org/"))

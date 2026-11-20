@@ -9,7 +9,7 @@ FACTS = [{"fact_id": "F1", "evidence_id": "EVID-1", "text": "The accord has no p
 
 
 def _row(**extra):
-    row = {"id": "E1", "thesis": "The accord may become the federal baseline.", "novel_proposition": "x",
+    row = {"id": "E1", "thesis": "The accord signed in October may become the federal baseline.", "novel_proposition": "x",
            "why_not_obvious": "y", "mechanism": "A (F1) -> B (F2)", "fact_ids": ["F1", "F2"],
            "falsifier": "z", "watch_signal": "w", "lens": "incentive",
            "alternative_explanation": "The accord may simply be symbolic."}
@@ -21,7 +21,7 @@ def test_unscored_and_low_scored_rows_are_kept_and_flagged():
     stats = {}
     low = {k: 1 for k in ("mental_model_change", "mechanism_depth", "surprise_nonobviousness",
                           "strategic_consequence", "falsifiability")}
-    reply = json.dumps({"hypotheses": [_row(), _row(id="E2", critic_scores=low, thesis="State preemption will push disclosure duties onto federal procurement terms.")]})
+    reply = json.dumps({"hypotheses": [_row(), _row(id="E2", critic_scores=low, thesis="State preemption will push disclosure duties onto federal procurement terms by 2027.")]})
     out = lab.parse_evolution(reply, FACTS, stats=stats)
     assert [x["critic_total"] for x in out] == [None, 5]
     assert stats["evolution_unscored"] == 1 and stats["evolution_low_critic_kept"] == 1

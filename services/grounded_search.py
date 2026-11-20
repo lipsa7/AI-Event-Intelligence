@@ -249,6 +249,17 @@ class CombinedSearch:
             stats.update(raw.get("provider_stats") or {})
         elif isinstance(raw, list):
             results.extend(item for item in raw if isinstance(item, Mapping))
+        if not results:
+            # v13.4 (20 Nov 2026): free providers failed or found nothing (RUN-87BF: GDELT and NewsAPI
+            # rate-limited) - Exa search, within its free-credit budget (services/exa_contents.py).
+            try:
+                from services import exa_contents
+                found = exa_contents.search(query)
+                if found is not None:
+                    results.extend(found)
+                    stats["exa_search"] = {"status": "ok", "results": len(found)}
+            except Exception as error:
+                stats["exa_search"] = {"status": "failed", "error": _clean(error)[:120]}
         if self.grounded is not None:
             extra = self.grounded.search(query, **kwargs)
             stats.update(extra.get("provider_stats") or {})

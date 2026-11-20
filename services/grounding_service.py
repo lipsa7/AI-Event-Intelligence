@@ -90,7 +90,7 @@ from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Seque
 
 
 SERVICE_VERSION = "grounding-service-v1.2-insight-aggregate-contract"
-GROUNDING_PROMPT_VERSION = "grounding-v1.3-context-first"
+GROUNDING_PROMPT_VERSION = "grounding-v1.4-forecasts-judged-on-premises"
 
 ALLOWED_GROUNDING_STATUSES = {
     "supported",
@@ -804,6 +804,10 @@ class GroundingService:
                 "partially_supported"
             )
 
+        # v10.2 (15 Nov 2026): only a FACT is downgraded for resting on one record. A judgment
+        # (conclusion, mechanism, connection, forecast) that follows from one record keeps its
+        # verdict and is labelled single-source by the caller, as the claim gate (v4.0) intends;
+        # the downgrade made a lab thesis "unverified" and deleted shown sentences.
         if (
             multi_evidence_required
             and not multi_evidence_satisfied
@@ -812,6 +816,7 @@ class GroundingService:
                 "supported",
                 "inference_supported",
             }
+            and epistemic_type == "fact"
         ):
             status = (
                 "partially_supported"
@@ -1728,7 +1733,19 @@ Validation rules:
    use partially_supported and name it in unsupported_parts as the company's
    own claim. If the claim attributes it ("Ascerta says ..."), it can be
    supported.
-12. Do not add commentary outside the JSON object.
+12. Forecasts and predicted moves (v10.2, 15 Nov 2026): a claim about what will, is likely to,
+   or is expected to happen, or what an actor will do next, cannot be stated by evidence about
+   the past, so "the evidence does not state this will happen" is never by itself a reason to
+   reject it. Judge it on its premises and its reasoning:
+   - inference_supported: the evidence supports the premises it rests on and the expectation
+     follows reasonably from them;
+   - partially_supported: some premises are backed but one is missing, or the expectation is
+     stated more strongly or more certainly than the premises allow;
+   - unsupported: its premises are not in the evidence, or the expectation does not follow
+     from them;
+   - contradicted: the evidence shows it will not happen, or has already gone the other way.
+   A forecast is never "supported"; that word is for facts the evidence states.
+13. Do not add commentary outside the JSON object.
 
 Evidence records:
 {json.dumps(list(evidence_records), ensure_ascii=False, indent=2, default=str)}

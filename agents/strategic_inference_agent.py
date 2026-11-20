@@ -162,6 +162,8 @@ from pathlib import Path
 from copy import deepcopy
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence
 
+from services import reader_standard
+
 
 logger = logging.getLogger(__name__)
 
@@ -257,7 +259,7 @@ _load_project_root_dotenv()
 
 
 AGENT_VERSION = "strategic-inference-agent-v7.9.0-tiered-strategic-findings-primary-35"
-PROMPT_VERSION = "strategic-inference-v7.9.0-tiered-findings-primary-35"
+PROMPT_VERSION = "strategic-inference-v7.12.0-computed-gap-route-reader-standard"
 OUTPUT_SCHEMA_VERSION = "strategic-inference-schema-v2.4-tiered-findings"
 BUILD_ID = "SA-V790-20260826-1212-TIERED-STRATEGIC-FINDINGS"
 
@@ -402,7 +404,12 @@ STRATEGIC_QUALITY_MODEL_ROTATION_MAX_ATTEMPTS = max(
 )
 # 8 Nov 2026: analysis packet and cluster diversity (25 Oct run: every cluster was a pair of funding
 # rounds linked by one generic tag; four of ten were the same two companies).
-DEVELOPMENT_PACKET_TOP = 4
+DEVELOPMENT_PACKET_TOP = 3
+# v12.2 (18 Nov 2026): depth, not breadth. The top developments get up to this many records each
+# (different sources first, then different events), up to two thirds of the packet. With two
+# records per development the generator saw fragments of ten stories and, in a simulated run,
+# found nothing it could back (24 of 458 records reached it).
+DEVELOPMENT_PACKET_DEPTH = 8
 CLUSTER_MAX_PER_ACTOR_PAIR = 1
 CLUSTER_MAX_SHARE_PER_REASON = 0.4      # one coherence reason fills at most 40% of the clusters
 CLUSTER_COMMON_TERM_SHARE = 0.2         # a term in more than 20% of records says nothing about a pair
@@ -913,6 +920,31 @@ def _contains_prohibited_field(
 # Agent
 # ---------------------------------------------------------------------------
 
+
+
+def _near_duplicate_key(text: str) -> str:
+    """v13: the same sentence from different copies of an article maps to one key (case, spacing,
+    punctuation and a split word such as "T he" ignored)."""
+    words = re.findall(r"[a-z0-9]+", _clean(text).casefold().replace("t he ", "the "))
+    return " ".join(words[:24]) if len(words) >= 6 else ""
+
+
+def _prompt_event_ids(digest: Any, event_ids: Any, cap: int = 60) -> list[str]:
+    """Event IDs listed in the generator prompt: every event the shown evidence cites, then others."""
+    cited = []
+    for item in digest or []:
+        if isinstance(item, Mapping):
+            for value in (item.get("event_id"), *(item.get("event_ids") or [])):
+                value = _clean(value)
+                if value and value not in cited:
+                    cited.append(value)
+    rest = [e for e in (_clean(x) for x in (event_ids or [])) if e and e not in cited]
+    # v13 (19 Nov 2026, simulated run): an ID pattern also matched version labels such as
+    # "EVENT-DATES-V1" and "EVENT-EXTRACTION-SCHEMA-V5-SPAN-POINTER"; only real event IDs are listed.
+    real = re.compile(r"EVENT-[0-9A-F]{8,}", re.I)
+    cited = [e for e in cited if real.fullmatch(e)]
+    rest = [e for e in rest if real.fullmatch(e)]
+    return cited + rest[: max(0, cap - len(cited))]
 
 class StrategicInferenceAgent:
     """
@@ -3425,6 +3457,19 @@ class StrategicInferenceAgent:
             ranked.append((score, evidence_id, record))
 
         ranked.sort(key=lambda item: (-item[0], item[1]))
+        # v13 (18 Nov 2026): merge near-duplicates (syndicated copies of one sentence) before the
+        # packet is filled; in a simulated run 4 of one story's 5 records were the same sentence, so
+        # "depth" was repetition. The best-scored copy is kept.
+        seen_claims: set[str] = set()
+        unique_ranked = []
+        for item in ranked:
+            key = _near_duplicate_key(self._evidence_claim_text(item[2]))
+            if key and key in seen_claims and not item[2].get("analytical_context_only"):
+                continue
+            if key:
+                seen_claims.add(key)
+            unique_ranked.append(item)
+        ranked = unique_ranked
         maximum = max(1, int(maximum))
 
         selected: list[Dict[str, Any]] = []
@@ -3470,16 +3515,18 @@ class StrategicInferenceAgent:
             rank = dev_rank_of.get(_clean(record.get("event_id")).upper())
             if rank and rank <= DEVELOPMENT_PACKET_TOP and not record.get("analytical_context_only"):
                 by_development.setdefault(rank, []).append((score, evidence_id, record))
-        for per_development in (1, 2):
+        for per_development in range(1, DEVELOPMENT_PACKET_DEPTH + 1):
             for rank in sorted(by_development):
-                if len(selected) >= max(1, maximum // 2):
+                if len(selected) >= max(1, (maximum * 2) // 3):
                     break
                 taken = [r for r in by_development[rank] if r[1] in selected_ids]
                 if len(taken) >= per_development:
                     continue
                 used_sources = {identities(eid, rec)[1] for _, eid, rec in taken}
+                used_events = {identities(eid, rec)[0] for _, eid, rec in taken}
                 pool = [r for r in by_development[rank] if r[1] not in selected_ids]
-                pool.sort(key=lambda r: (identities(r[1], r[2])[1] in used_sources, -r[0], r[1]))
+                pool.sort(key=lambda r: (identities(r[1], r[2])[1] in used_sources,
+                                         identities(r[1], r[2])[0] in used_events, -r[0], r[1]))
                 if pool:
                     add(*pool[0])
 
@@ -3529,6 +3576,11 @@ class StrategicInferenceAgent:
         claim = self._evidence_claim_text(record)
         if not claim:
             claim = self._bounded_json(record, 800)
+        # v13 (19 Nov 2026): a number record shows its source sentence too ("fine percentage 3%"
+        # alone does not say 3% of what, or who may fine whom).
+        excerpt = _clean(record.get("source_excerpt"))
+        if excerpt and excerpt not in claim and _clean(record.get("evidence_type")).startswith("quantitative"):
+            claim = f"{claim} - source: {excerpt}"
 
         compact: Dict[str, Any] = {
             "evidence_id": evidence_id,
@@ -4672,7 +4724,7 @@ class StrategicInferenceAgent:
     ) -> Dict[str, Any]:
         """Generate evidence-disciplined, scope-calibrated strategic synthesis."""
         desired_depth = _enum(reasoning_guidance.get("desired_depth") or "standard")
-        evidence_packet_maximum = 24 if desired_depth in {"deep", "very_deep"} else 16
+        evidence_packet_maximum = 36 if desired_depth in {"deep", "very_deep"} else 16
 
         digest = self._synthesis_digest(
             research_question=research_question,
@@ -4680,6 +4732,37 @@ class StrategicInferenceAgent:
             evidence_review=evidence_review,
             maximum=evidence_packet_maximum,
         )
+        # v12 (16 Nov 2026): gaps computed by code (dates and amounts) as the leads to explain.
+        computed_gaps_text = ""
+        try:
+            from services import delta_extractor
+
+            # v12.1 (18 Nov 2026, simulated run): computed from the wording the model sees (the digest
+            # claim; the raw record often holds only a short excerpt), grouped by underlying incident so
+            # two reports of one incident are compared; dates come from the raw record.
+            raw_by_id = {_clean(r.get("evidence_id") or r.get("id")).upper(): r
+                         for r in evidence_records if isinstance(r, Mapping)}
+            gap_rows = []
+            for item in digest:
+                if not isinstance(item, Mapping):
+                    continue
+                eid = _clean(item.get("evidence_id")).upper()
+                raw = raw_by_id.get(eid) or {}
+                if raw.get("analytical_context_only"):
+                    continue
+                gap_rows.append({
+                    "evidence_id": eid,
+                    "text": " ".join(dict.fromkeys(t for t in (_clean(item.get("claim")), _clean(raw.get("text")),
+                                                                _clean(raw.get("claim"))) if t)),
+                    "date": _clean(raw.get("published_at") or raw.get("source_published_at") or raw.get("date")
+                                   or item.get("published_at")),
+                    "group": _clean(item.get("underlying_event_id") or raw.get("underlying_event_id")
+                                    or item.get("event_id") or raw.get("event_id")) or eid,
+                })
+            self._computed_gaps = delta_extractor.compute(gap_rows, id_key="evidence_id", group_key="group")
+            computed_gaps_text = delta_extractor.prompt_block(self._computed_gaps, cite="evidence IDs")
+        except Exception:  # never fatal
+            computed_gaps_text = ""
 
         selected_evidence_ids = [
             item["evidence_id"]
@@ -4694,11 +4777,11 @@ class StrategicInferenceAgent:
             require_cross_source=False,
         )
 
-        max_candidates = (
-            1
-            if reasoning_guidance.get("desired_depth") in {"deep", "very_deep"}
-            else min(2, int(reasoning_guidance["max_candidate_insights"]))
-        )
+        # v10.3 (15 Nov 2026): deep runs ask for two candidates, each anchored to a DIFFERENT
+        # concrete fact. One candidate per call left the run with nothing to choose between
+        # (Si, Yang & Hashimoto 2024: generate several, then rank).
+        max_candidates = min(2, max(1, int(reasoning_guidance.get("max_candidate_insights") or 2))) \
+            if reasoning_guidance.get("desired_depth") not in {"deep", "very_deep"} else 2
 
         compact_control = {
             "desired_depth": reasoning_guidance.get("desired_depth"),
@@ -4717,6 +4800,10 @@ class StrategicInferenceAgent:
             "relationship, transaction term, financing covenant, accounting treatment, motive, market share, customer commitment, "
             "causal link, quantitative fact or historical outcome. Typical industry practice may support a hypothesis; it may never "
             "be converted into a claim about what this specific actor actually did.\n\n"
+
+            # v10 (15 Nov 2026): the owner's own standard, placed before every lens, mode and
+            # exemplar so it wins when they pull another way (services/reader_standard.py).
+            + reader_standard.READER_STANDARD + "\n"
 
             # v6.15: state the release rules up front, so candidates are
             # written to survive the claim-support gate instead of failing it.
@@ -4902,13 +4989,15 @@ class StrategicInferenceAgent:
             "contradicts it. So commit to a specific, falsifiable predicted move with a named actor, a likelihood and a forecast_contract "
             "(yes/no question, deadline, resolution rule), give the strongest alternative explanation, and say what would prove it wrong.\n"
             "THE ANALYSIS THE READER PAYS FOR (v6.26) - LEVERAGE PLUS INCENTIVES. Every hidden insight is a leverage-and-incentive "
-            "judgment, filled in leverage_analysis: (1) a named HOLDER controls something - a resource, access, information, a rule position, "
+            "judgment, filled in leverage_analysis (v10: the leverage goes in leverage_analysis; the insight TEXT still follows "
+            "WHAT THE READER VALUES - concrete consequence first, leverage in plain words after it): "
+            "(1) a named HOLDER controls something - a resource, access, information, a rule position, "
             "a contract, a deadline - that a named DEPENDENT needs (cite the records that state both; holder and dependent are named "
             "organisations, agencies or people from the facts, never a category such as 'investors', 'AI firms' or 'regulators'); (2) the HOLDER'S INCENTIVE: a cited rule, "
             "penalty, cost, revenue or obligation that decides what the holder gains or loses (and the dependent's, if it differs); (3) the "
-            "PREDICTED MOVE: what the holder or dependent will therefore rationally do, which the headlines do not say. The insight sentence "
-            "states the predicted move and why. Two facts side by side, a theme, or 'X while Y' is not an insight. Strong wording does not "
-            "make a thin point deep: the insight is judged on its plain meaning.\n"
+            "PREDICTED MOVE: what the holder or dependent will therefore rationally do, which the headlines do not say. Even then the "
+            "insight text leads with the concrete consequence, not with the leverage. Two facts side by side, a theme, or 'X while Y' is not "
+            "an insight. Strong wording does not make a thin point deep: the insight is judged on its plain meaning.\n"
             "THE EXPERT FRONTIER (v6.22): evidence with gap_type \"commentary\" is PUBLISHED EXPERT ANALYSIS of these developments. It is "
             "already known to informed readers, so a candidate that it states or implies is rejected. Never cite it as a premise or as proof of "
             "a fact. Use it as the starting line: derive what follows from it that the experts have not said, or show with cited facts where "
@@ -5011,7 +5100,7 @@ class StrategicInferenceAgent:
             "Before drafting a thesis, inspect SUPPORTABLE EVIDENCE CLUSTERS below. These clusters are deterministic candidate pairs of already-admitted evidence records that share concrete signals; they are NOT conclusions. "
             "For Deep analysis, support_cluster_id is MANDATORY. Choose exactly one listed support_cluster_id only when BOTH required_evidence_ids genuinely support the same proposition AND the intended insight_mode appears in that cluster's eligible_insight_modes. Copy the support_cluster_id exactly and include BOTH required_evidence_ids in supporting_evidence_ids plus premise/derivation citations. "
             "Cross-actor/general structural modes require independent acting institutions plus source diversity. A same-source cluster is eligible only for sequence_transition when it contains distinct underlying events, explicit temporal progression, and a shared mechanism/dependency. forensic_contradiction requires independent sources plus a specific observable inconsistency. "
-            "Do not choose a cluster merely because two records share vocabulary. In Deep mode you MUST NOT bypass cluster eligibility with an arbitrary pair of Allowed evidence IDs: if no listed cluster supports the intended non-obvious event-dependent thesis, abstain.\n\n"
+            "Do not choose a cluster merely because two records share vocabulary. In Deep mode you MUST NOT bypass cluster eligibility with an arbitrary pair of Allowed evidence IDs: if no listed cluster supports the intended non-obvious event-dependent thesis, abstain. EXCEPTION (computed gaps): an insight that explains one of the COMPUTED GAPS listed below may leave support_cluster_id empty, provided it cites EVERY evidence ID shown for that gap plus at least one more admitted record about the same incident or its consequence; it is then labelled single-source where its records share a source.\n\n"
 
             "EVIDENCE-SPECIFIC ANCHORS\n"
             "Return 2-4 short concrete phrases copied exactly from admitted evidence. They must identify actor/action/transaction/number details, not generic terms.\n\n"
@@ -5059,17 +5148,21 @@ class StrategicInferenceAgent:
                "context, not events of this run: use them to explain incentives, leverage, constraints and "
                "precedents that connect the events."
                if any(item.get("gap_type") for item in digest) else "")
+            + ("\n\n" + computed_gaps_text if computed_gaps_text else "")
             + "\n\nAllowed evidence IDs: "
             + json.dumps(selected_evidence_ids, ensure_ascii=False)
             + "\nAllowed event IDs: "
-            + json.dumps(list(event_ids)[:60], ensure_ascii=False)
+            # v12.1 (18 Nov 2026, simulated run): the cap of 60 cut off events that the shown
+            # evidence itself cites; those come first now, and are never cut.
+            + json.dumps(_prompt_event_ids(digest, event_ids), ensure_ascii=False)
             + "\nAllowed constraint IDs: "
             + json.dumps(list(constraint_ids)[:40], ensure_ascii=False)
             + "\n\nRefinement context (NOT evidence):\n"
             + json.dumps(normalized_refinement, ensure_ascii=False, default=str)
             + "\n\nPrior report context (NOT evidence):\n"
             + self._bounded_json(previous_report, 1800)
-            + f"\n\nReturn at most {max_candidates} candidate insight. JSON only.\n\n"
+            + f"\n\nReturn at most {max_candidates} candidate insight(s). When you return more than one, each must "
+              "rest on a DIFFERENT concrete fact and make a different point; never two wordings of one idea. JSON only.\n\n"
 
             "Return exactly this top-level structure:\n"
             "{\n"
@@ -5078,11 +5171,11 @@ class StrategicInferenceAgent:
             '  "candidate_insights":[{\n'
             '    "insight_type":"descriptive|prospective",\n'
             '    "suggested_finding_tier":"hidden_insight|underlying_dynamic|strategic_connection|early_signal",\n'
-            '    "support_cluster_id":"Deep: REQUIRED exact SUPPORTCLUSTER-* ID selected from SUPPORTABLE EVIDENCE CLUSTERS. Fast: may be empty only for a direct deterministically verified evidence pair.",\n'
+            '    "support_cluster_id":"Deep: REQUIRED exact SUPPORTCLUSTER-* ID selected from SUPPORTABLE EVIDENCE CLUSTERS, or empty when the insight explains a COMPUTED GAP and cites all its evidence IDs. Fast: may be empty only for a direct deterministically verified evidence pair.",\n'
             '    "insight_mode":"structural_pattern|forensic_contradiction|sequence_transition|hidden_constraint|incentive_asymmetry|risk_asymmetry|bottleneck_migration|partial_automation_paradox|economic_substance_vs_form|value_migration|distributional_shift|measurement_blind_spot|historical_mechanism_transfer|cross_domain_transfer|prospective_scenario|other",\n'
             '    "claim_scope":"entity_specific|cross_entity_pattern|sector_structural_pattern|prospective_hypothesis|background_explainer",\n'
             '    "pattern_status":"established|emerging|insufficient|not_applicable",\n'
-            '    "insight":"State the non-obvious proposition with calibrated language.",\n'
+            '    "insight":"Three plain sentences: (1) the consequence with the concrete fact (date, delay, number, amount or named document) in it; (2) the mechanism; (3) what it means next, starting with Watch for or Forecast:. No theory labels.",\n'
             '    "novel_proposition":"What is newly inferred rather than merely explained?",\n'
             '    "triggering_anomaly":"What contradiction, asymmetry, hidden constraint, sequence, missing expected fact or unresolved question triggered the insight?",\n'
             '    "insight_quality_check":{"is_merely_explanatory":false,"why_not_obvious":"Why an informed reader would not get this from headlines alone.","new_information_created":"What becomes visible only after combining evidence and mechanism."},\n'
@@ -5130,7 +5223,10 @@ class StrategicInferenceAgent:
             '"deadline":"ISO 8601 deadline with UTC offset, or empty when not defensible",'
             '"resolution_criteria":"Observable yes/no rule and suitable resolution source; no vague success claims"},\n' 
             '    "leverage_analysis":{"holder":"ONE organisation, agency or person by its proper name as written in the evidence (Microsoft, EU regulators) - never a category such as investors, AI firms, enterprise customers","controls":"the resource, access, '
-            'information, rule position or contract it controls","dependent":"ONE organisation, agency or person by proper name that depends on it - never a category",'
+            'information, rule position or contract it controls, as a short phrase (under 20 words) naming a concrete position a source documents: who can BLOCK access '
+            '(a licence, export control, API term, contract clause), who KNOWS FIRST (which party detected or received the information, and on what date), '
+            'or who SETS the rule (the clause or authority) - never abstract power","dependent":"ONLY the name of ONE organisation, agency or person that depends on it - never a category, never a sentence; '
+            'leave empty when the sources name none","alternatives":"the other options the dependent has according to the sources, or none named",'
             '"leverage_evidence_ids":["EVID ids stating the control and the dependence"],'
             '"holder_incentive":"the sourced rule, cost, revenue or penalty that shapes what the holder gains or loses",'
             '"holder_incentive_evidence_ids":[],"dependent_incentive":"the same for the dependent party, or empty",'
@@ -6045,6 +6141,11 @@ class StrategicInferenceAgent:
         if any(phrase in lowered for phrase in forbidden_generic_phrases):
             return "forbidden_generic_analyst_language"
 
+        # v10 reader standard: the sentence the reader reads must carry a concrete, checkable fact
+        # (date, delay, number, amount or named document). Matches the owner's five verdicts.
+        if not reader_standard.assess(text)["passes"]:
+            return "reader_standard_no_concrete_fact"
+
         supporting = _stable_unique_strings(
             candidate.get("supporting_evidence_ids") or [],
             uppercase=True,
@@ -6496,7 +6597,8 @@ class StrategicInferenceAgent:
                 return "forensic_contradiction_requires_independent_sources"
             if not _clean(linkage.get("cluster_forensic_contradiction_reason")):
                 return "forensic_contradiction_missing_specific_inconsistency"
-        elif known_sources and len(known_sources) < 2:
+        elif (known_sources and len(known_sources) < 2
+              and not _clean(linkage.get("cluster_coherence_reason")).startswith("computed_gap:")):
             return "support_not_cross_source_for_selected_insight_mode"
 
         claim_scope = _enum(scope.get("claim_scope"))
@@ -7638,14 +7740,26 @@ class StrategicInferenceAgent:
             uppercase=True,
         )
 
+        computed_gap = None
+        if not cluster_resolved_evidence_ids:
+            # v12.1: the computed-gap route (see the prompt's EXCEPTION). A gap is found by code, so
+            # citing all of its records is a deterministic link, not a topic-similarity pair.
+            cited = set(_stable_unique_strings(supporting_ids, uppercase=True))
+            for gap in getattr(self, "_computed_gaps", None) or []:
+                gap_ids = set(_stable_unique_strings(gap.get("fact_ids") or [], uppercase=True))
+                if gap_ids and gap_ids <= cited and len(cited) >= 2:
+                    computed_gap = gap
+                    break
         evidence_linkage_diagnostics = {
             "raw_support_cluster_id": raw_support_cluster_id,
             "cluster_reference_candidates": _stable_unique_strings(cluster_reference_candidates, uppercase=True)[:20],
             "cluster_resolution_mode": cluster_resolution_mode,
             "support_cluster_manifest_count": len(support_cluster_by_id),
-            "support_cluster_resolved": bool(cluster_resolved_evidence_ids),
+            "support_cluster_resolved": bool(cluster_resolved_evidence_ids) or bool(computed_gap),
+            "computed_gap": (computed_gap or {}).get("text", ""),
             "cluster_resolved_evidence_ids": cluster_resolved_evidence_ids[:8],
-            "cluster_coherence_reason": _clean(selected_support_cluster.get("coherence_reason")),
+            "cluster_coherence_reason": (_clean(selected_support_cluster.get("coherence_reason"))
+                                         or (f"computed_gap:{computed_gap.get('kind')}" if computed_gap else "")),
             "cluster_acting_institutions": _stable_unique_strings(
                 selected_support_cluster.get("acting_institutions") or []
             )[:8],

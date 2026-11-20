@@ -102,6 +102,8 @@ MAX_KEY_ASSUMPTIONS = 3
 ASSUMPTION_LABEL = "analysis, not stated by any source"
 # v3.0 typed leverage claims (claim-id suffixes built by the orchestrator's _leverage_claims).
 DEPENDENCY_SUFFIX = "-DEPENDENCY"
+# v10.1: every claim the app writes from the leverage fields (not from the insight text itself).
+LEVERAGE_CLAIM_SUFFIXES = ("-CONTROL", "-DEPENDENCY", "-HOLDER-INCENTIVE", "-DEPENDENT-INCENTIVE", "-LEVERAGE")
 INCENTIVE_SUFFIXES = ("-HOLDER-INCENTIVE", "-DEPENDENT-INCENTIVE")
 REASONED_PASSING = frozenset({"supported", "inference_supported"})
 ASSUMPTION_KIND_LABEL = {
@@ -1018,14 +1020,38 @@ LEVERAGE_BRIEF = (
     "holder controls something (resource, access, information, rule position, contract, deadline) that a named dependent "
     "needs, with the records that state it; the holder's incentive from a cited rule, penalty, cost or revenue (and the "
     "dependent's if different); and the predicted move those incentives make rational, which the headlines do not say. "
-    "The insight sentence states that move. Holder and dependent are NAMED organisations, agencies or people from "
+    "The insight text leads with the concrete consequence (a date, delay, number, amount or named document) and states "
+    "that move after it, in plain words. Holder and dependent are NAMED organisations, agencies or people from "
     "the facts (e.g. 'OpenAI', 'the EU AI Office'), never a category ('investors', 'AI firms', 'regulators').")
+
+
+def without_unbacked_leverage(grounding: Any, verdict: Mapping[str, Any]) -> dict[str, Any] | None:
+    """v10.1 (15 Nov 2026): when the ONLY failed claims are the lines the app wrote from the
+    leverage fields, the grounding without those lines (to be checked again); otherwise None.
+    In the 14 Nov run three of four candidates failed on one such line alone ("Donald Trump
+    controls or holds a voluntary accord") with 92-93% of their other claims backed, and the
+    report released nothing original. Verify the premises strictly; drop the unbacked add-on."""
+    failed = [f for f in verdict.get("failed_claims") or [] if isinstance(f, Mapping)]
+    if not failed or verdict.get("passed") or not isinstance(grounding, Mapping):
+        return None
+    if not all(_clean(f.get("claim_id")).upper().endswith(LEVERAGE_CLAIM_SUFFIXES) for f in failed):
+        return None
+    claims = grounding.get("claims")
+    if not isinstance(claims, list):
+        return None
+    kept = [c for c in claims if not (isinstance(c, Mapping)
+                                      and _clean(c.get("claim_id")).upper().endswith(LEVERAGE_CLAIM_SUFFIXES))]
+    return {**grounding, "claims": kept}
 
 
 def leverage_reasons(candidate: Mapping[str, Any]) -> list[str]:
     """v6.26: the product's bar (user, 2026-10-10): 'see the leverage for a thing and add incentives'.
     A hidden insight needs holder, what it controls, who depends on it, the holder's
-    incentive and a predicted move. (Whether the sources state them is checked as claims.)"""
+    incentive and a predicted move. (Whether the sources state them is checked as claims.)
+    v10.1: once the leverage lines were checked and the sources did not back them, the insight may
+    be shown without leverage, labelled (metadata leverage_withheld); it is not asked again."""
+    if _metadata(candidate).get("leverage_withheld"):
+        return []
     lev = candidate.get("leverage_analysis") or _metadata(candidate).get("leverage_analysis")
     lev = lev if isinstance(lev, Mapping) else {}
     missing = [k for k in ("holder", "controls", "dependent", "holder_incentive", "predicted_move") if not _clean(lev.get(k))]

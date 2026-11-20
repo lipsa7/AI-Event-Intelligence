@@ -76,6 +76,18 @@ EVENT_TYPE_MECHANISM = {
 }
 
 
+
+def _sentence_cut(value, limit: int) -> str:
+    """v13: shorten at a sentence end (else a word), never mid-word or mid-date."""
+    text = _clean(value)
+    if len(text) <= limit:
+        return text
+    head = text[:limit]
+    end = max(head.rfind(". "), head.rfind("? "), head.rfind("! "))
+    if end >= limit * 0.5:
+        return head[:end + 1]
+    return head[:max(head.rfind(" "), 1)].rstrip(",;:") + "..."
+
 def enabled() -> bool:
     return os.getenv(ENV, "1") != "0"
 
@@ -344,7 +356,7 @@ def retrieve(developments: Sequence[Mapping[str, Any]], state: Mapping[str, Any]
 def as_facts(records: Iterable[Mapping[str, Any]], start: int = 1) -> list[dict[str, Any]]:
     """Earlier-coverage records as lab facts M1, M2, ... (rendered in their own dated block)."""
     return [{"fact_id": f"M{n}", "development": f"Earlier coverage: {_clean(r.get('earlier_event_title'))[:120]}",
-             "text": _clean(r.get("text"))[:600], "date": _clean(r.get("published_at"))[:10],
+             "text": _sentence_cut(r.get("text"), 600), "date": _clean(r.get("published_at"))[:10],
              "occurred_on": _clean(r.get("occurred_on"))[:10], "evidence_id": _clean(r.get("evidence_id")),
              "source_id": _clean(r.get("source_id")), "gap_type": "earlier"}
             for n, r in enumerate(records, start=start)]

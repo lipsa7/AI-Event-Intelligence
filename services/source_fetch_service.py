@@ -284,6 +284,8 @@ class SourceFetchService(
             direct_error = (
                 "Direct source returned unusable article text "
                 f"({len(direct_text)} characters)."
+                # 20 Nov 2026: what came back, so the log shows a bot wall vs a redirect page
+                + (f" Text: {_clean(direct_text)[:80]!r}." if _clean(direct_text) else "")
             )
 
         except SourceFetchError as exc:
@@ -292,6 +294,24 @@ class SourceFetchService(
                 f"{type(exc).__name__}: "
                 f"{_clean(exc)}"
             )
+
+        # -------------------------------------------------------------
+        # EXA CONTENTS FALLBACK (v13.3, 20 Nov 2026): the same page read
+        # through Exa when the publisher blocks the direct fetch (403/429/
+        # bot wall). Only with EXA_API_KEY set, capped per run
+        # (services/exa_contents.py). Never fatal: on failure, GDELT next.
+        # -------------------------------------------------------------
+
+        exa_page = None
+        try:
+            from services import exa_contents
+            exa_page = exa_contents.fetch_text(requested_url)
+        except Exception as exc:
+            direct_error = f"{direct_error} {type(exc).__name__}: {_clean(exc)}".strip()
+        if exa_page and len(exa_page["text"]) >= MIN_USABLE_DIRECT_TEXT_CHARS \
+                and not _looks_like_interstitial(exa_page["text"]):
+            return self._build_exa_source(requested_url=requested_url, page=exa_page,
+                                          direct_error=direct_error)
 
         # -------------------------------------------------------------
         # GDELT CONTEXT FALLBACK
@@ -323,6 +343,36 @@ class SourceFetchService(
             )
             + " No GDELT Context fallback was available."
         )
+
+    @staticmethod
+    def _build_exa_source(*, requested_url: str, page: Mapping[str, Any], direct_error: str) -> Dict[str, Any]:
+        """The publisher's own page text, read through Exa's contents endpoint. Full source, not
+        limited context: it is the article itself, and it still has to pass evidence admission."""
+        text = _clean(page.get("text"))
+        final_url = canonicalize_url(_clean(page.get("url")) or requested_url) or requested_url
+        body = text.encode("utf-8")
+        digest = hashlib.sha256(body).hexdigest()
+        return {
+            "source_fetch_id": _stable_fallback_fetch_id(final_url, digest),
+            "requested_url": requested_url, "final_url": final_url, "canonical_url": final_url,
+            "status_code": 200, "content_type": "text/plain", "charset": "utf-8",
+            "content_length_bytes": len(body), "content_bytes": body, "raw_sha256": digest,
+            "raw_text": text, "text_content": text, "text_sha256": digest, "redirect_history": [],
+            "metadata": {
+                "service_version": SERVICE_VERSION, "title": _clean(page.get("title")),
+                "source_name": "", "published_at": _clean(page.get("published_at")),
+                "author": _clean(page.get("author")), "description": "",
+                "declared_canonical_url": final_url, "content_extraction_scope": "exa_contents",
+                "content_page_type": "article_or_content", "listing_page_score": 0.0,
+                "anchor_text_count": 0, "distinct_anchor_text_count": 0,
+                "retrieval_mode": "exa_contents_fallback", "fallback_provider": "exa",
+                "publisher_fetch_failed": True, "publisher_fetch_error": _clean(direct_error),
+                "limited_context": False, "support_ceiling": "normal",
+                "content_was_truncated": False, "document_text_extractor_used": False,
+                "paid_external_service_required": True, "free_only": False,
+            },
+            "is_grounding_evidence": False,
+        }
 
     @staticmethod
     def _build_context_fallback(

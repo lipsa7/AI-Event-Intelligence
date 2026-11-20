@@ -173,7 +173,7 @@ def test_commentary_search_always_runs_within_60_days(monkeypatch):
                                        search=search)
     auto = [q for q in receipt["queries"] if q["gap"] == "commentary"]
     assert auto == [{"gap": "commentary", "query": (base.DEVELOPMENTS[0]["title"] + " analysis implications").casefold()}]
-    assert HypothesisEvidenceService.COMMENTARY_WINDOW_DAYS == 60 and HypothesisEvidenceService.GAP_MAX_QUERIES == 6
+    assert HypothesisEvidenceService.COMMENTARY_WINDOW_DAYS == 60 and HypothesisEvidenceService.GAP_MAX_QUERIES == 7  # v11: + primary document
 
 
 # 3 briefing, report and prompt -----------------------------------------

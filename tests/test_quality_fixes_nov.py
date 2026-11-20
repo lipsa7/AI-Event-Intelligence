@@ -45,7 +45,7 @@ def test_grounding_prompt_puts_the_claim_after_the_evidence():
                                            multi_evidence_required=True)
     shared = prompt.split("Based only on the evidence records above")[0]
     assert other.startswith(shared)                          # the same evidence gives the same prompt start
-    assert g.GROUNDING_PROMPT_VERSION == "grounding-v1.3-context-first"
+    assert g.GROUNDING_PROMPT_VERSION == "grounding-v1.4-forecasts-judged-on-premises"
 
 
 def test_narrowed_version_does_not_call_the_original_overstated():

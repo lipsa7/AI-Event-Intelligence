@@ -139,5 +139,5 @@ def test_dashboard_shows_the_method_and_hidden_insight_loops_stay_on():
     for label in ("**The crux:**", "**Leverage (", "**Best move (analysis):**", "Trade-off:",
                   "**What would have to be true:**", "**Actions that carry it out:**", "is likely to:**"):
         assert label in dash, label
-    assert ros.DEEP_CLAIM_GATE_EXTRA_SYNTHESES == 2 and ros.INSIGHT_EXPLORATION_COMBINATIONS == 3
+    assert ros.DEEP_CLAIM_GATE_EXTRA_SYNTHESES == 2 and ros.INSIGHT_EXPLORATION_COMBINATIONS == 5  # v13: was 3
     assert "def _claim_supported_release" in inspect.getsource(ros.ResearchOrchestratorService)

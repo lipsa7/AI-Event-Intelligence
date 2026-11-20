@@ -63,6 +63,21 @@ ALREADY_PREFIX = "The facts report that this has already been done or announced:
 SWAP_PREFIX = "This move would be just as advantageous for "
 
 
+
+def _cut(value: Any, limit: int) -> str:
+    """v12.1 (18 Nov 2026, simulated run): shorten at a sentence or word boundary, never mid-word
+    (a crux read "cannot show the m")."""
+    text = _clean(value)
+    if len(text) <= limit:
+        return text
+    head = text[:limit]
+    sentence_end = max(head.rfind(". "), head.rfind("; "))
+    if sentence_end >= limit * 0.6:
+        return head[: sentence_end + 1]
+    space = head.rfind(" ")
+    return (head[:space] if space > 0 else head).rstrip(",;:") + "..."
+
+
 def _clean(value: Any) -> str:
     return " ".join(str(value or "").split()).strip()
 
@@ -177,7 +192,7 @@ def parse(raw: Any, facts: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
         out = []
         for value in values or []:
             if isinstance(value, Mapping) and _clean(value.get("text")) and ids(value):
-                out.append({"text": _clean(value["text"])[:500], "fact_ids": ids(value)})
+                out.append({"text": _cut(value["text"], 500), "fact_ids": ids(value)})
         return out[:limit]
 
     def basis(value: Any) -> str:
@@ -194,53 +209,53 @@ def parse(raw: Any, facts: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
             if isinstance(p, Mapping) and _clean(p.get("benefit")) and ids(p):
                 kind = _clean(p.get("power")).casefold().replace(" ", "_").replace("-", "_")
                 powers.append({"power": kind if kind in POWERS else "asymmetry",
-                               "holder": _clean(p.get("holder"))[:120] or _clean(raw_actor["actor"])[:120],
-                               "counterparty": _clean(p.get("counterparty"))[:120],
-                               "dependency": _clean(p.get("dependency"))[:400],
-                               "control_point": _clean(p.get("control_point"))[:400],
-                               "benefit": _clean(p.get("benefit"))[:400],
-                               "barrier": _clean(p.get("barrier"))[:400],
-                               "outside_option": _clean(p.get("outside_option"))[:400],
-                               "holder_dependence": _clean(p.get("holder_dependence"))[:400],
+                               "holder": _cut(p.get("holder"), 120) or _cut(raw_actor["actor"], 120),
+                               "counterparty": _cut(p.get("counterparty"), 120),
+                               "dependency": _cut(p.get("dependency"), 400),
+                               "control_point": _cut(p.get("control_point"), 400),
+                               "benefit": _cut(p.get("benefit"), 400),
+                               "barrier": _cut(p.get("barrier"), 400),
+                               "outside_option": _cut(p.get("outside_option"), 400),
+                               "holder_dependence": _cut(p.get("holder_dependence"), 400),
                                "fact_ids": ids(p)})
         legacy = raw_actor.get("leverage") if isinstance(raw_actor.get("leverage"), Mapping) else {}
         if not powers and _clean(legacy.get("text")) and ids(legacy):  # v6.27 shape
-            powers.append({"power": "asymmetry", "holder": _clean(raw_actor["actor"])[:120],
-                           "counterparty": _clean(legacy.get("counterparty"))[:120],
-                           "dependency": _clean(legacy.get("dependency"))[:400],
-                           "control_point": _clean(legacy.get("control_point"))[:400],
-                           "benefit": _clean(legacy["text"])[:400], "barrier": _clean(legacy.get("barrier"))[:400],
-                           "outside_option": _clean(legacy.get("outside_option"))[:400], "fact_ids": ids(legacy)})
+            powers.append({"power": "asymmetry", "holder": _cut(raw_actor["actor"], 120),
+                           "counterparty": _cut(legacy.get("counterparty"), 120),
+                           "dependency": _cut(legacy.get("dependency"), 400),
+                           "control_point": _cut(legacy.get("control_point"), 400),
+                           "benefit": _cut(legacy["text"], 400), "barrier": _cut(legacy.get("barrier"), 400),
+                           "outside_option": _cut(legacy.get("outside_option"), 400), "fact_ids": ids(legacy)})
         others = []
         for o in raw_actor.get("others") or []:
             if isinstance(o, Mapping) and _clean(o.get("actor")) and _clean(o.get("likely_move")) and ids(o):
-                others.append({"actor": _clean(o["actor"])[:120], "likely_move": _clean(o["likely_move"])[:400],
-                               "track_record": _clean(o.get("track_record"))[:400], "fact_ids": ids(o)})
+                others.append({"actor": _cut(o["actor"], 120), "likely_move": _cut(o["likely_move"], 400),
+                               "track_record": _cut(o.get("track_record"), 400), "fact_ids": ids(o)})
         choice_raw = raw_actor.get("choice") if isinstance(raw_actor.get("choice"), Mapping) else {}
         choice = {}
         if _clean(choice_raw.get("move")) and _clean(choice_raw.get("trade_off")) and ids(choice_raw):
-            choice = {"move": _clean(choice_raw["move"])[:400], "basis": basis(choice_raw.get("basis")),
-                      "trade_off": _clean(choice_raw["trade_off"])[:400],
-                      "why_now": _clean(choice_raw.get("why_now"))[:400], "fact_ids": ids(choice_raw)}
+            choice = {"move": _cut(choice_raw["move"], 400), "basis": basis(choice_raw.get("basis")),
+                      "trade_off": _cut(choice_raw["trade_off"], 400),
+                      "why_now": _cut(choice_raw.get("why_now"), 400), "fact_ids": ids(choice_raw)}
         conditions = []
         for c in raw_actor.get("must_be_true") or []:
             if isinstance(c, Mapping) and _clean(c.get("condition")):
                 status = "true_now" if _clean(c.get("status")).casefold() == "true_now" and ids(c) else "not_yet"
-                conditions.append({"condition": _clean(c["condition"])[:400], "status": status, "fact_ids": ids(c)})
+                conditions.append({"condition": _cut(c["condition"], 400), "status": status, "fact_ids": ids(c)})
         actions = []
         for move in raw_actor.get("actions") or raw_actor.get("moves") or []:
             if isinstance(move, Mapping) and _clean(move.get("move")) and _clean(move.get("why_it_benefits")) and ids(move):
-                actions.append({key: _clean(move.get(key))[:500] for key in ("move", "why_it_benefits", "risk", "watch_for")}
+                actions.append({key: _cut(move.get(key), 500) for key in ("move", "why_it_benefits", "risk", "watch_for")}
                                | {"fact_ids": ids(move), "basis": basis(move.get("basis"))})
         candidates = []
         for c in raw_actor.get("candidates") or []:
             if isinstance(c, Mapping) and _clean(c.get("move")) and ids(c):
-                candidates.append({"move": _clean(c["move"])[:400], "basis": basis(c.get("basis")),
-                                   "trade_off": _clean(c.get("trade_off"))[:400], "fact_ids": ids(c)})
+                candidates.append({"move": _cut(c["move"], 400), "basis": basis(c.get("basis")),
+                                   "trade_off": _cut(c.get("trade_off"), 400), "fact_ids": ids(c)})
         actors.append({
             "candidates": candidates[:MAX_CANDIDATES],
-            "actor": _clean(raw_actor["actor"])[:120],
-            "crux": ({"text": _clean(crux.get("text"))[:500], "fact_ids": ids(crux)}
+            "actor": _cut(raw_actor["actor"], 120),
+            "crux": ({"text": _cut(crux.get("text"), 500), "fact_ids": ids(crux)}
                      if _clean(crux.get("text")) and ids(crux) else {}),
             "powers": powers[:3],
             "rules_and_incentives": text_items(raw_actor.get("rules_and_incentives")),
@@ -314,7 +329,7 @@ def parse_rival(raw: Any, facts: Sequence[Mapping[str, Any]]) -> list[dict[str, 
         if not ids:
             continue
         likelihood = _clean(m.get("likelihood")).casefold()
-        out.append({"move": _clean(m["move"])[:300], "why": _clean(m.get("why"))[:300],
+        out.append({"move": _cut(m["move"], 300), "why": _cut(m.get("why"), 300),
                     "likelihood": likelihood if likelihood in LIKELIHOOD else "", "fact_ids": ids})
     return out[:3]
 
@@ -420,15 +435,28 @@ def apply_choice(actor: dict[str, Any], raw: Any, facts: Sequence[Mapping[str, A
     confidence = _clean(raw_choice.get("confidence")).casefold()
     choice.update({"likelihood": likelihood if likelihood in LIKELIHOOD else "",
                    "confidence": confidence if confidence in {"low", "moderate", "high"} else "",
-                   "confidence_basis": _clean(raw_choice.get("confidence_basis"))[:300]})
+                   "confidence_basis": _cut(raw_choice.get("confidence_basis"), 300)})
     actor["choice"] = choice
     actor["must_be_true"] = parsed[0]["must_be_true"] or actor.get("must_be_true") or []
     actor["moves"] = parsed[0]["moves"] or actor.get("moves") or []
-    actor["unfashionable_case"] = _clean(data.get("unfashionable_case"))[:600]
-    actor["rejected"] = [{"move": _clean(r.get("move"))[:300], "why_not": _clean(r.get("why_not"))[:300]}
+    actor["unfashionable_case"] = _cut(data.get("unfashionable_case"), 600)
+    actor["rejected"] = [{"move": _cut(r.get("move"), 300), "why_not": _cut(r.get("why_not"), 300)}
                          for r in data.get("rejected") or [] if isinstance(r, Mapping) and _clean(r.get("move"))][:4]
     return True
 
+
+def _join_because(move: str, why: str) -> str:
+    """v12.1 (18 Nov 2026, simulated run): "...programme rules., because Appears advantageous
+    because ..." - join the move and its reason as one sentence."""
+    move = _clean(move).rstrip(" .;:")
+    why = re.sub(r"^(because|since|as)\s+", "", _clean(why), flags=re.I).rstrip(" .")
+    why = re.sub(r"^(it )?appears advantageous because\s+", "", why, flags=re.I)
+    if not why:
+        return move + "."
+    first, _, rest = why.partition(" ")
+    if first.casefold() in {"it", "the", "this", "that", "these", "those", "a", "an", "they", "its", "there", "their"}:
+        why = first.casefold() + (" " + rest if rest else "")
+    return f"{move}, because {why}."
 
 def claims(actors: Sequence[Mapping[str, Any]], facts: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
     evidence_of = {f["fact_id"]: f["evidence_id"] for f in facts}
@@ -493,8 +521,8 @@ def claims(actors: Sequence[Mapping[str, Any]], facts: Sequence[Mapping[str, Any
             if cond["status"] == "true_now":
                 add((a, "must_be_true", c), cond["condition"], cond["fact_ids"], "fact", FACT_BAR, pool=all_ids)
         for m, move in enumerate(actor["moves"]):
-            add((a, "moves", m), f"Given the cited facts, this next step would benefit {name}: {move['move']}, because "
-                f"{move['why_it_benefits']}", move["fact_ids"], "connection", JUDGMENT_BAR)
+            add((a, "moves", m), f"Given the cited facts, this next step would benefit {name}: "
+                f"{_join_because(move['move'], move['why_it_benefits'])}", move["fact_ids"], "connection", JUDGMENT_BAR)
             add((a, "already", m), f"{ALREADY_PREFIX}{name}: {move['move']}", move["fact_ids"], "fact", FACT_BAR)
     return out
 

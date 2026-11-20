@@ -92,7 +92,7 @@ class RedTeamAgent:
     """
 
     AGENT_ROLE = "research_report_red_team"
-    PROMPT_VERSION = "red-team-v4.0"
+    PROMPT_VERSION = "red-team-v4.1-targeted-questions"
     OUTPUT_SCHEMA_VERSION = "red-team-schema-v4"
 
     ALLOWED_REVIEW_STATUSES = {
@@ -1741,6 +1741,17 @@ Look for:
 - unsupported structural-change or second-order-effect claims;
 - unsupported what-to-watch items;
 - topic drift, duplicate claims, example leakage or incomplete report structure.
+
+THREE TARGETED QUESTIONS FOR EACH HIDDEN INSIGHT (v4.1, 16 Nov 2026)
+Answer these before the general list; they are where released insights have failed:
+1. LEAD FACT: is the first sentence's concrete fact (a date, gap, amount, named document
+   or party) actually stated by a cited EVID-*, with the right dates and parties?
+2. STITCHING: do the premises come from different developments with no cited fact that
+   connects them (the same named party, a stated cause, one report referring to the
+   other)? Joining unconnected news into one story is causal overreach.
+3. WEAKEST ASSUMPTION: name the weakest reasoning step. If it were false, would the
+   conclusion still hold? If not, and the step is presented as fact, that is
+   fact/inference confusion.
 
 SEVERITY
 

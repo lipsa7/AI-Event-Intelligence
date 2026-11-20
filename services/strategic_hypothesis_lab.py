@@ -28,7 +28,9 @@ import re
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
-VERSION = "strategic-hypothesis-lab-v1.6-blind-user-hypotheses"
+from services import delta_extractor, reader_standard
+
+VERSION = "strategic-hypothesis-lab-v1.10-no-self-filter"
 GENERATION_TARGET_PER_BATCH = 10
 MAX_RAW = 24
 MAX_EVOLVED = 8
@@ -382,8 +384,79 @@ MECHANISM_RULE = ("Start the chain with an observation that a cited fact states 
                   "knowledge or judgment in a later step, never in the first. Each step is checked on its own.")
 
 
+CONCRETE_FACTS_MAX = 8
+STRENGTHS = ("stated", "follows", "plausible", "speculative")
+
+
+def concrete_facts_prompt(topic: str, facts: Sequence[Mapping[str, Any]]) -> str:
+    """v1.8 (15 Nov 2026): one cheap call BEFORE generation that lists the concrete facts an
+    informed reader would find surprising. The owner's only kept insight rested on one such
+    fact (a three-month delay); AutoDS (Allen AI 2025) steers discovery by surprise."""
+    return f"""Research question: {topic}
+
+From the FACTS below, list up to {CONCRETE_FACTS_MAX} concrete facts that an informed reader would find surprising
+or that need explaining. Look for: a gap or delay between two dates, a number or amount, a reversal of an earlier
+statement, a party missing from the coverage, a clause in a named document, or an action that contradicts a stated
+rule. Use only these facts; never invent a date, number or name.
+
+{delta_extractor.prompt_block(delta_extractor.compute(facts))}
+FACTS (cite their IDs):
+{_facts_text(facts)}
+
+Return JSON {{"concrete_facts":[{{"fact_ids":["F1"],"finding":"the concrete fact in plain words",
+"expected":"what an informed reader would have assumed instead","surprise":1}}]}}
+surprise: 1 (mildly unexpected) to 3 (overturns a common assumption). Leave out anything not concrete."""
+
+
+def parse_concrete_facts(reply: Any, facts: Sequence[Mapping[str, Any]],
+                         stats: dict[str, int] | None = None) -> list[dict[str, Any]]:
+    data = _json(reply)
+    valid = {r["fact_id"].casefold(): r["fact_id"] for r in fact_rows(facts, limit=250)}
+    out: list[dict[str, Any]] = []
+    for row in data.get("concrete_facts") or []:
+        if not isinstance(row, Mapping):
+            continue
+        ids = [valid[f.casefold()] for f in _unique(row.get("fact_ids") or []) if f.casefold() in valid]
+        finding = _clean(row.get("finding"))
+        if not ids or not finding or not reader_standard.assess(finding)["passes"]:
+            _count(stats, "concrete_facts_dropped")
+            continue
+        try:
+            surprise = max(1, min(3, int(row.get("surprise") or 1)))
+        except (TypeError, ValueError):
+            surprise = 1
+        out.append({"fact_ids": ids[:4], "finding": finding[:400], "expected": _clean(row.get("expected"))[:300],
+                    "surprise": surprise})
+    out.sort(key=lambda r: -r["surprise"])
+    return out[:CONCRETE_FACTS_MAX]
+
+
+def _concrete_facts_text(found: Sequence[Mapping[str, Any]]) -> str:
+    if not found:
+        return ""
+    lines = [f"- [{', '.join(r['fact_ids'])}] {r['finding']}" + (f" (a reader would expect: {r['expected']})"
+                                                                   if r.get("expected") else "")
+             for r in found]
+    return ("START FROM THESE CONCRETE FACTS (found in a separate pass; most surprising first). Each hypothesis "
+            "should explain one of them and say what follows from it:\n" + "\n".join(lines) + "\n")
+
+
+def _developments_linked(developments: set[str], actors_of: Mapping[str, set[str]], link: str,
+                         cited: set[str], text_of_fact: Mapping[str, str]) -> bool:
+    """v12 (16 Nov 2026), decided by code: developments are linked when they share a named actor,
+    or when the cited link fact names an actor of EVERY development it joins. The model's own
+    link claim is no longer trusted on its own."""
+    sets = [actors_of.get(d) or set() for d in developments]
+    if all(sets) and set.intersection(*sets):
+        return True
+    if not link or link == "none" or link not in cited:
+        return False
+    text = text_of_fact.get(link, "")
+    return bool(text) and all(any(a and a in text for a in group) for group in sets)
+
+
 def generation_prompt(topic: str, facts: Sequence[Mapping[str, Any]], lenses: Sequence[str], *, batch: int,
-                      profile: str = "") -> str:
+                      profile: str = "", concrete_facts: Sequence[Mapping[str, Any]] = ()) -> str:
     lens_text = "\n".join(f"- {lens}" for lens in lenses)
     return f"""Research question: {topic}
 
@@ -391,7 +464,13 @@ You are the divergent hypothesis-generation stage of a strategic intelligence sy
 Do NOT write a briefing and do NOT begin with recommendations. The ordinary facts are already known.
 Your task is to discover propositions that would CHANGE a knowledgeable reader's mental model.
 
-Generate {GENERATION_TARGET_PER_BATCH} materially different hypotheses using these lenses (cover every lens at least once):
+{reader_standard.READER_STANDARD}
+Start from the concrete facts: look first for delays and gaps between dates, numbers, amounts, reversals of
+earlier statements, parties missing from the coverage, and clauses in named documents. Use the lenses below to
+explain such a fact, not to produce a label.
+{delta_extractor.prompt_block(delta_extractor.compute(facts))}{_concrete_facts_text(concrete_facts)}
+Generate up to {GENERATION_TARGET_PER_BATCH} materially different hypotheses using these lenses (use every lens the facts
+support; skip a lens rather than force it - v1.10: "cover every lens" contradicted "do not pad" on thin evidence):
 {lens_text}
 
 A strong hypothesis should usually explain something surprising: a contradiction, a hidden dependency, a shifted bottleneck,
@@ -407,7 +486,9 @@ FACTS (use only these facts; cite their IDs):
 Return one JSON object with key "hypotheses". Each item must contain:
 - id: B{batch}H1 etc.
 - lens
-- thesis: one precise proposition, 1-3 sentences
+- thesis: 1-3 plain sentences: (1) the consequence with the concrete fact (date, delay, number, amount or named
+  document) in it; (2) the mechanism; (3) optionally, what it means next, starting with "Watch for" or "Forecast:".
+  No theory labels.
 - novel_proposition: the part a knowledgeable reader probably would not infer from one source
 - why_not_obvious
 - anomaly_or_trigger: what observation needs explaining
@@ -447,7 +528,7 @@ def _candidate(row: Mapping[str, Any], valid_facts: set[str], *, fallback_id: st
         return None
     if not alt or not falsifier or not watch or not fact_ids:
         return None
-    if any(re.fullmatch(pattern, thesis, flags=re.I) for pattern in _GENERIC_PATTERNS):
+    if any(re.search(pattern, thesis, flags=re.I) for pattern in _GENERIC_PATTERNS):
         return None
     leverage = row.get("leverage") if isinstance(row.get("leverage"), Mapping) else {}
     lev = {k: _clean(leverage.get(k)) for k in LEVERAGE_KEYS}
@@ -471,6 +552,9 @@ def _candidate(row: Mapping[str, Any], valid_facts: set[str], *, fallback_id: st
         "falsifier": falsifier[:700],
         "watch_signal": watch[:700],
         "research_question": _clean(row.get("research_question"))[:700],
+        "inference_strength": _clean(row.get("inference_strength")).casefold(),
+        "rival_fits_as_well": _clean(row.get("rival_fits_as_well")).casefold(),
+        "link_fact_id": _clean(row.get("link_fact_id")),
     }
 
 
@@ -536,6 +620,10 @@ def evolution_prompt(topic: str, items: Sequence[Mapping[str, Any]], facts: Sequ
 You are the adversarial evolution stage. Below are divergent hypotheses generated from the same evidence.
 Do not reward eloquence. Your job is to produce at most {MAX_EVOLVED} mature hypotheses that could plausibly be 9/10 strategic analysis.
 
+{reader_standard.READER_STANDARD}
+Rewrite every thesis you keep in that form. Drop any hypothesis that has no concrete fact with a consequence,
+however clever it sounds. Score a theory label or coined phrase in the thesis as a defect, not as depth.
+
 For each candidate:
 1. Attack the mechanism and its weakest causal bridge.
 2. Compare it with its alternative explanation.
@@ -565,12 +653,20 @@ Return JSON {{"hypotheses":[...]}} using the same schema as the input, plus:
 - source_ids: IDs of raw hypotheses used
 - evolution_note: what was strengthened/merged/narrowed
 - critic_scores: integers 0-2 for mental_model_change, mechanism_depth, surprise_nonobviousness, strategic_consequence, falsifiability
+- inference_strength: one of "stated" (a single fact already says it), "follows" (it follows from the cited facts
+  with no extra assumption), "plausible" (it rests on one assumption, which the mechanism names), "speculative"
+  (it needs more than one unstated assumption or a motive no fact gives). Be strict; this is checked.
+- rival_fits_as_well: "yes" if the alternative_explanation fits the cited facts as well as the thesis, else "no".
+- link_fact_id: when the thesis cites facts about DIFFERENT developments, the ID of the fact that shows they are
+  connected (the same actor, a stated cause, a reference from one to the other); "none" if no fact connects them.
 
-Only return candidates with total critic score >= 7/10. Do not fabricate facts."""
+Return EVERY candidate that is neither "stated" nor "speculative", with honest critic_scores, even low ones: the app
+ranks them by comparison and checks each against the sources, so do not drop a candidate for its score (v1.10,
+18 Nov 2026). Drop any "stated" or "speculative" one. Do not fabricate facts."""
 
 
 def critic_rank(item: Mapping[str, Any]) -> int:
-    """Critic total for ordering; an unscored item ranks at the pass mark (7)."""
+    """Critic total for ordering; an unscored item ranks at the middle (7 of 10)."""
     total = item.get("critic_total")
     return total if isinstance(total, int) and not isinstance(total, bool) else 7
 
@@ -617,7 +713,65 @@ def parse_evolution(reply: Any, facts: Sequence[Mapping[str, Any]],
         out.append(item)
     unique = dedupe(out)
     _count(stats, "evolution_duplicates", len(out) - len(unique))
-    unique.sort(key=lambda x: (-critic_rank(x), -len(x.get("fact_ids") or [])))
+    # v1.7 (15 Nov 2026): the owner's reader standard (services/reader_standard.py), applied before
+    # any research or grounding call is spent. A thesis with no concrete fact in it is dropped; a
+    # theory label in its first sentence lowers its place in the order, so plain, anchored theses
+    # are checked first.
+    fact_text = {str(f.get("fact_id")): str(f.get("text") or "") for f in facts if hasattr(f, "get")}
+    development_of = {str(f.get("fact_id")).casefold(): _clean(f.get("development"))
+                      for f in facts if hasattr(f, "get") and _clean(f.get("development"))}
+    actors_of: dict[str, set[str]] = {}
+    for f in facts:
+        if hasattr(f, "get") and _clean(f.get("development")):
+            actors_of.setdefault(_clean(f.get("development")), set()).update(
+                _clean(a).casefold() for a in f.get("actors") or [] if _clean(a))
+    text_of_fact = {str(f.get("fact_id")).casefold(): _clean(f.get("text")).casefold()
+                    for f in facts if hasattr(f, "get")}
+    graded: list[dict[str, Any]] = []
+    for item in unique:
+        # v1.8 (15 Nov 2026): inference strength, competing explanation and stitching.
+        strength = item.get("inference_strength") or ""
+        if strength == "stated":
+            _count(stats, "evolution_restates_a_fact")      # one fact already says it: not an insight
+            continue
+        if strength == "speculative":
+            _count(stats, "evolution_speculative")          # more than one unstated assumption
+            continue
+        developments = {development_of[f.casefold()] for f in item.get("fact_ids") or []
+                        if f.casefold() in development_of}
+        link = (item.get("link_fact_id") or "").casefold()
+        cited = {f.casefold() for f in item.get("fact_ids") or []}
+        if len(developments) > 1 and not _developments_linked(developments, actors_of, link, cited, text_of_fact):
+            _count(stats, "evolution_stitched_without_link")  # joins developments no fact connects
+            continue
+        item["strength_label"] = ("possible - another explanation fits the facts as well"
+                                  if item.get("rival_fits_as_well") == "yes"
+                                  else {"follows": "follows from the cited facts",
+                                        "plausible": "plausible - rests on one stated assumption"}.get(strength, ""))
+        graded.append(item)
+    unique = graded
+    kept: list[dict[str, Any]] = []
+    for item in unique:
+        assessment = reader_standard.assess(item.get("thesis"))
+        # v1.7.1: overstating words or numbers that none of the thesis's own facts contain push it
+        # down the order (the claim check failed most "good" candidates on exactly these).
+        overreach = reader_standard.overreach(
+            item.get("thesis"), [fact_text.get(str(fid), "") for fid in item.get("fact_ids") or []])
+        overreach = {key: value for key, value in overreach.items() if value}
+        if overreach:
+            item["overreach"] = overreach
+            assessment = {**assessment, "score": int(assessment.get("score") or 0) - 1}
+            _count(stats, "reader_standard_overreach")
+        if item.get("rival_fits_as_well") == "yes" or item.get("inference_strength") == "plausible":
+            assessment = {**assessment, "score": int(assessment.get("score") or 0) - 1}
+        item["reader_standard"] = assessment
+        if assessment["passes"]:
+            kept.append(item)
+        else:
+            _count(stats, "reader_standard_no_concrete_fact")
+    unique = kept
+    unique.sort(key=lambda x: (-reader_standard.rank_key(x["reader_standard"]), -critic_rank(x),
+                               -len(x.get("fact_ids") or [])))
     _count(stats, "evolution_over_cap", max(0, len(unique) - MAX_EVOLVED))
     return unique[:MAX_EVOLVED]
 

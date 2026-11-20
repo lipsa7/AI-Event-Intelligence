@@ -92,22 +92,28 @@ DEEP_CLUSTER_EXPANSION_MIN_RESEARCH_SCORE = 55.0
 # the structural template is only the fallback. Set to 0 to disable.
 DEEP_CLUSTER_LLM_QUERIES = _env_int("EVENT_INTELLIGENCE_LLM_EXPANSION_QUERIES", 1, 0, 1)
 DEEP_CLUSTER_LLM_QUERY_TIMEOUT_SECONDS = 25.0
+# v13.1 (19 Nov 2026): the angles target what hidden insights and next moves are built from, for ANY
+# topic: the original document, the dates (who knew what, when), the official response, how other
+# actors compare, and what happened last time (research report "Fixing AI Event Intelligence":
+# question-driven, primary-source follow-up searches). They were generic business angles
+# ("customers", "competitors", "newest reports"), which mostly returned more coverage of the same news.
 CLUSTER_QUERY_ANGLES = {
     1: (
-        "other companies or reports on the same specific subject",
-        "earlier history or background of that subject",
-        "problems, criticism, delays or regulation affecting it",
+        "the original document or official statement itself: the filing, notice, ruling, bill, contract "
+        "or company announcement, by its name and issuer",
+        "the dates: when it happened, when it was disclosed or reported, and any deadline",
+        "the official, legal or regulatory response or investigation",
     ),
     2: (
-        "customers, results or numbers for that subject",
-        "competitors or alternatives",
-        "official, legal or regulatory response",
+        "other companies, governments or countries facing the same rule, problem or opportunity",
+        "the earlier case most like it (a precedent) and how that turned out",
+        "criticism, delays, reversals or disputed numbers about it",
     ),
 }
 CLUSTER_QUERY_LATER_ANGLES = (
+    "what the main actor said it will do next, or a plan, deadline or vote still to come",
+    "the numbers: amounts, shares, counts or dates reported about it",
     "the newest reports on that subject",
-    "other countries or sectors doing the same",
-    "failures, reversals or cancellations",
 )
 GENERIC_QUERY_WORDS = frozenset(
     "latest developments outcomes milestones news update updates report reports trends "
@@ -126,7 +132,7 @@ DEEP_CLAIM_GATE_EXTRA_SYNTHESES = _env_int("EVENT_INTELLIGENCE_DEEP_RELEASE_RETR
 DEEP_CLAIM_GATE_MIN_SECONDS = 180  # discretionary seconds needed to start one more synthesis
 # v6.21.4: when no candidate passes, explore up to this many combinations of
 # different developments, one candidate each (0 disables).
-INSIGHT_EXPLORATION_COMBINATIONS = _env_int("EVENT_INTELLIGENCE_INSIGHT_EXPLORATION", 3, 0, 6)
+INSIGHT_EXPLORATION_COMBINATIONS = _env_int("EVENT_INTELLIGENCE_INSIGHT_EXPLORATION", 5, 0, 8)  # v13: was 3
 # The exact wording about to be released gets its own challenge search unless
 # that wording already has a COMPLETE search. v6.14: fail closed - without a
 # complete challenge search of the final wording, nothing is released.
@@ -280,7 +286,9 @@ DEEP_PROFILE = ResearchExecutionProfile(
     name="deep",
     max_runtime_seconds=_env_int("EVENT_INTELLIGENCE_DEEP_MAX_RUNTIME_SECONDS", 2400, 600, 7200),
     max_discovered_sources=_env_int("EVENT_INTELLIGENCE_DEEP_MAX_SOURCES", 20, 3, 60),
-    max_selected_insights=1,
+    # v13 (18 Nov 2026): up to 4 insights per deep run (was 1, an "MVP" cap that made multiple
+    # insights impossible however good the run). Each still passes every check.
+    max_selected_insights=_env_int("EVENT_INTELLIGENCE_DEEP_MAX_INSIGHTS", 4, 1, 8),
     # MVP: one refinement round is enough to reach and inspect the real
     # strategic-inference path quickly. Restore to 2 after the insight layer
     # is producing useful outputs reliably.
@@ -377,6 +385,78 @@ def _with_inline_evidence_ids(base_ids: Any, sentence: Any) -> list[str]:
     sent, and the checker reported the inline records as "not supplied"
     (replay RUN-E8B8791954BF422AAD5837FD)."""
     return _unique_strings(list(base_ids or []) + _INLINE_EVIDENCE_ID.findall(str(sentence or "")))
+
+
+_BOILERPLATE_START = re.compile(
+    r"^\s*(read more\b|read also\b|also read\b|related:|click here\b|subscribe\b|sign up\b|"
+    r"follow us\b|watch:|listen:|advertisement\b|test your\b|take the quiz\b|my story\b)", re.I)
+_BOILERPLATE_ANY = re.compile(r"\b(read more (here )?about|read more:|read more \||click here to|"
+                              r"subscribe to our|sign up for our)", re.I)
+
+
+def _is_page_boilerplate(event: Mapping[str, Any]) -> bool:
+    """v12.1: an event whose title or summary is website navigation text, not a report of
+    something that happened."""
+    title = _clean(event.get("title"))
+    summary = _clean(event.get("summary"))
+    for text in (title, summary):
+        if text and (_BOILERPLATE_START.search(text) or _BOILERPLATE_ANY.search(text[:60])):
+            return True
+    return False
+
+
+_STATES_ABSENCE = re.compile(
+    r"\b(no (record|source|party|user|customer|regulator|evidence)s? (states?|names?|is named|shows?|reports?)|"
+    r"(sources?|records?) (name|state|show|report) (no|none)|none (is )?(named|stated)|not (named|stated) in|"
+    r"no (named )?(party|dependent|incentive)|the only cited cost is)", re.I)
+
+
+def _names_a_party(text: str) -> bool:
+    """v12.1: a leverage 'dependent' must be a name (an organisation, agency or person), not a
+    sentence saying none is named."""
+    text = _clean(text)
+    if not text or len(text) > 90 or _STATES_ABSENCE.search(text):
+        return False
+    return not re.search(r"[.;]\s+\w", text)
+
+
+def _attach_publication_dates(records: Sequence[Any], sources: Sequence[Any]) -> None:
+    """v13: set source_published_at on each evidence record from its source's metadata."""
+    dates: dict[str, str] = {}
+    for source in sources or []:
+        if not isinstance(source, Mapping):
+            continue
+        meta = source.get("source_metadata") if isinstance(source.get("source_metadata"), Mapping) else {}
+        date = _clean(meta.get("published_at") or source.get("published_at"))
+        if date and _clean(source.get("source_id")):
+            dates[_clean(source.get("source_id")).upper()] = date
+    for record in records or []:
+        if isinstance(record, dict) and not _clean(record.get("source_published_at")):
+            date = dates.get(_clean(record.get("source_id")).upper())
+            if date:
+                record["source_published_at"] = date
+
+
+_GENERIC_ACTORS = frozenset({"ai", "government", "governments", "company", "companies", "industry", "users",
+                             "investors", "regulators", "researchers", "experts", "the government", "startups"})
+
+
+def _event_actor_keys(event: Mapping[str, Any]) -> set[str]:
+    """v10.3: named actors of an event, normalised for matching across developments."""
+    raw = event.get("actors")
+    if isinstance(raw, str):
+        try:
+            import ast
+            raw = ast.literal_eval(raw) if raw.strip().startswith("[") else [raw]
+        except (ValueError, SyntaxError):
+            raw = [raw]
+    names = []
+    for item in raw or []:
+        name = item.get("name") if isinstance(item, Mapping) else item
+        key = _clean(name).casefold()
+        if key and key not in _GENERIC_ACTORS:
+            names.append(key)
+    return set(names)
 
 
 def _unique_evidence_records(records: Iterable[Any]) -> list[Mapping[str, Any]]:
@@ -880,7 +960,7 @@ class ResearchOrchestratorService:
                 "topic cannot be empty."
             )
 
-        self._apply_call_cap()
+        self._apply_call_cap(research_depth)
 
         profile = (
             self._resolve_profile(
@@ -1842,6 +1922,26 @@ class ResearchOrchestratorService:
                 inference_result
             )
 
+            if not candidates and profile.name == "deep" and INSIGHT_EXPLORATION_COMBINATIONS > 0:
+                # v13 (18 Nov 2026): the main generator returned nothing, and the run used to abstain
+                # right here, so the per-story exploration below (built for exactly this case) never ran.
+                # Explore the strongest stories one by one now; what passes the claim gate continues
+                # through the normal quality steps and is checked again.
+                self._tried_insight_candidates = []
+                self._tried_run_id = run_id
+                try:
+                    explored_early, evidence_records, _explored_grounding = self._claim_supported_release(
+                        topic=topic, candidates=[], grounded={}, events=event_records, evidence=evidence_records,
+                        graph_context=graph_context, constraints=constraints, blueprint=blueprint,
+                        profile=profile, state=state,
+                    )
+                except Exception as error:  # never fatal: fall through to the abstention below
+                    logger.warning("Exploration after an empty generator failed: %s", type(error).__name__)
+                    explored_early = []
+                state["exploration_after_empty_generator"] = len(explored_early)
+                state["claim_support_gate_early_exploration"] = _json_safe(state.get("claim_support_gate") or {})
+                if explored_early:
+                    candidates = [dict(item) for item in explored_early]
             if not candidates:
                 inference_map = _as_mapping(inference_result)
                 inference_metadata = _as_mapping(inference_map.get("metadata"))
@@ -2352,6 +2452,10 @@ class ResearchOrchestratorService:
                 state["grounding"] = grounded
                 state["evidence"] = list(evidence_records)
                 state["evidence_manifest"] = self._evidence_manifest(evidence_records)
+                if len(final_insights) > 1:
+                    final_insights = self._judge_rank(
+                        final_insights, lambda x: _clean(x.get("insight")), "released",
+                        state.setdefault("judge_ranking", {}))
                 if not final_insights:
                     # Even with no finding, show the connections the sources back.
                     state["verified_connections"] = self._verified_connections_for_report(
@@ -2460,6 +2564,7 @@ class ResearchOrchestratorService:
                     state.setdefault("warnings", []).append({"type": "research_receipt_save_failed", "error_type": type(error).__name__})
             if state.get("claim_support_gate"):
                 report["analysis_metadata"]["claim_support_gate"] = _json_safe(state.get("claim_support_gate"))
+                report["analysis_metadata"]["judge_ranking"] = _json_safe(state.get("judge_ranking") or {})
                 report["promising_hypotheses"] = _json_safe(
                     _as_mapping(state.get("claim_support_gate")).get("promising_rejected") or []
                 )
@@ -2541,6 +2646,16 @@ class ResearchOrchestratorService:
                     logger.warning("red_team_at_call_cap=%s; using the no-call review", cap_error)
                     red_team_result = self._fast_red_team_review(report=report, grounding=report_grounding)
                     state["stopped_at_call_cap"] = True
+                else:
+                    # v10.1: the red-team agent catches each batch's error itself, so a call refused at
+                    # the ceiling came back as review_status "failed" and blocked the whole report
+                    # (14 Nov run). When calls were refused, use the no-call review as above.
+                    from services.gemini_llm_service import call_budget as _call_budget
+                    if (_enum(_as_mapping(red_team_result).get("review_status")) == "failed"
+                            and int(_call_budget().get("refused") or 0) > 0):
+                        logger.warning("red_team_failed_after_calls_refused; using the no-call review")
+                        red_team_result = self._fast_red_team_review(report=report, grounding=report_grounding)
+                        state["stopped_at_call_cap"] = True
 
             state[
                 "red_team"
@@ -2907,6 +3022,30 @@ class ResearchOrchestratorService:
 
     BRIEFING_MIN_SECONDS = 90.0
     BRIEFING_TIMEOUT_SECONDS = 90.0
+
+    def _judge_rank(self, items: list, text_of: Any, label: str, stats: dict) -> list:
+        """v11 (15 Nov 2026): order items by a head-to-head tournament on the free open-model judge,
+        only once that judge agrees with the owner's ratings (insight_judge.is_aligned). Never blocks,
+        never drops; on any problem the incoming order is kept."""
+        from services import insight_judge as judge
+
+        if len(items) < 2 or not judge.available() or not judge.is_aligned():
+            stats[f"judge_{label}"] = "not_used" if len(items) >= 2 else "single_item"
+            return items
+        try:
+            ranked, scores = judge.tournament(items, text_of, judge.default_asker())
+        except Exception as error:
+            logger.warning("Judge ranking skipped (%s): %s", label, type(error).__name__)
+            stats[f"judge_{label}"] = "failed:" + type(error).__name__
+            return items
+        for item, score in zip(ranked, scores):
+            if isinstance(item, dict):
+                meta = item.get("metadata") if isinstance(item.get("metadata"), dict) else {}
+                meta["judge_tournament_score"] = score
+                meta["judge_model"] = judge.model_name()
+                item["metadata"] = meta
+        stats[f"judge_{label}"] = "ranked"
+        return ranked
 
     def _ask_briefing_model(self, prompt: str) -> Any:
         client = getattr(getattr(self, "extraction_agent", None), "llm", None)
@@ -3330,6 +3469,12 @@ class ResearchOrchestratorService:
                 event_id = event_of.get(_clean(fact.get("evidence_id")).upper()) if isinstance(fact, Mapping) else ""
                 if event_id and event_id not in rank_by_event:
                     rank_by_event[event_id] = rank
+            # v12.2 (18 Nov 2026): every event of the development, not only those behind its few
+            # chosen facts, so what the follow-up searches found counts as part of it.
+            for event_id in development.get("event_ids") or [] if isinstance(development, Mapping) else []:
+                event_id = _clean(event_id).upper()
+                if event_id and event_id not in rank_by_event:
+                    rank_by_event[event_id] = rank
         for event in events or []:
             if isinstance(event, dict):
                 rank = rank_by_event.get(_clean(event.get("event_id") or event.get("id")).upper())
@@ -3351,14 +3496,23 @@ class ResearchOrchestratorService:
         logger.info("gap_research remaining_seconds_at_gap_start=%s", state["remaining_seconds_at_gap_start"])
         # Keep enough of the run budget for the analysis, claim checks and
         # report; if gap research cannot fit, it runs at report time instead.
-        if self._remaining_discretionary_seconds() < self.ANALYSIS_RESERVE_SECONDS + self.PRECEDENT_MIN_SECONDS:
+        light = self._remaining_discretionary_seconds() < self.ANALYSIS_RESERVE_SECONDS + self.PRECEDENT_MIN_SECONDS
+        if light and self._remaining_discretionary_seconds() < self.ANALYSIS_RESERVE_SECONDS / 2:
             state.setdefault("warnings", []).append({"type": "gap_research_deferred_time_budget"})
             logger.info("gap_research deferred to report time: not enough run budget before analysis")
             return output
         try:
             developments = self._developments_to_watch(events, output, state)
             self._tag_development_rank(developments, events, output, state)
-            receipts = self._precedent_research(developments, state)
+            if light:
+                # v11 (15 Nov 2026): short on time - a small pass (the primary document and one
+                # past case, at most four pages, top development only) instead of skipping inputs.
+                state.setdefault("warnings", []).append({"type": "gap_research_light_time_budget"})
+                logger.info("gap_research light pass: primary document and precedent only")
+                receipts = self._precedent_research(list(developments)[:1], state,
+                                                    only_gaps=["primary", "precedent"], max_sources=4)
+            else:
+                receipts = self._precedent_research(developments, state)
             state["gap_research_done"] = True
             state["gap_research_summary"] = _json_safe([
                 {key: value for key, value in receipt.items() if key != "records"}
@@ -3560,7 +3714,7 @@ class ResearchOrchestratorService:
         ) == "deep"
         if not deep:
             return dict(base, status="deep_only")
-        if self._remaining_discretionary_seconds() < self.HYPOTHESIS_LAB_MIN_SECONDS:
+        if self._remaining_lab_seconds() < self.HYPOTHESIS_LAB_MIN_SECONDS:
             return dict(base, status="time_budget")
 
         context_records = [r for r in state.get("gap_context_records") or [] if isinstance(r, Mapping)]
@@ -3595,13 +3749,24 @@ class ResearchOrchestratorService:
         # Insight funnel: losses the lab output does not otherwise record (services/insight_funnel.py).
         funnel: dict[str, int] = {}
         base["funnel"] = funnel
+        # v10.3: concrete-facts step - one cheap call listing the surprising concrete facts,
+        # which every generation batch then starts from. Never fatal.
+        concrete: list[dict[str, Any]] = []
+        try:
+            reply = self._ask_briefing_model(lab.concrete_facts_prompt(topic, facts))
+            concrete = lab.parse_concrete_facts(reply, facts, stats=funnel)
+        except Exception as error:
+            funnel["concrete_facts_failed"] = 1
+            logger.warning("Concrete-facts step failed: %s", type(error).__name__)
+        base["concrete_facts"] = concrete
         for batch_no, lenses in enumerate(lab.LENS_GROUPS, start=1):
-            if self._remaining_discretionary_seconds() < self.HYPOTHESIS_LAB_MIN_SECONDS / 2:
+            if self._remaining_lab_seconds() < self.HYPOTHESIS_LAB_MIN_SECONDS / 2:
                 funnel["generation_batches_skipped_time"] = len(lab.LENS_GROUPS) - batch_no + 1
                 break
             try:
                 reply, model = self._ask_strong_model(
-                    lab.generation_prompt(topic, facts, lenses, batch=batch_no, profile=self._profile_block_for())
+                    lab.generation_prompt(topic, facts, lenses, batch=batch_no, profile=self._profile_block_for(),
+                                          concrete_facts=concrete)
                 )
                 models.append(model)
                 raw.extend(lab.parse_generation(reply, facts, stats=funnel))
@@ -3641,7 +3806,7 @@ class ResearchOrchestratorService:
         # supporting, contrary and analogical evidence for a candidate.
         if (
             os.getenv("EVENT_INTELLIGENCE_HYPOTHESIS_LAB_RESEARCH", "1") != "0"
-            and self._remaining_discretionary_seconds() >= self.HYPOTHESIS_LAB_RESEARCH_MIN_SECONDS
+            and self._remaining_lab_seconds() >= self.HYPOTHESIS_LAB_RESEARCH_MIN_SECONDS
         ):
             for item in evolved[: self.HYPOTHESIS_LAB_RESEARCH_MAX]:
                 try:
@@ -3758,7 +3923,7 @@ class ResearchOrchestratorService:
         retry = sorted([p for p in promising if lab.needs_narrowing(p) and p.get("evidence_ids")],
                        key=lambda x: -lab.critic_rank(x))[:lab.NARROW_MAX]
         for original in retry:
-            if self._remaining_discretionary_seconds() < self.HYPOTHESIS_LAB_NARROW_MIN_SECONDS:
+            if self._remaining_lab_seconds() < self.HYPOTHESIS_LAB_NARROW_MIN_SECONDS:
                 narrowing["stopped"] = "time_budget"
                 break
             narrowing["tried"] += 1
@@ -3787,6 +3952,7 @@ class ResearchOrchestratorService:
 
         verified = lab.sort_by_critic(verified)
         promising = lab.sort_by_critic(promising)
+        verified = self._judge_rank(verified, lambda x: _clean(x.get("thesis")), "lab_verified", funnel)
         funnel["verified_over_cap"] = max(0, len(verified) - lab.MAX_VERIFIED)
         funnel["promising_over_cap"] = max(0, len(promising) - lab.MAX_PROMISING)
         output = dict(
@@ -4080,6 +4246,39 @@ class ResearchOrchestratorService:
             if developments is None:
                 developments = self._developments_to_watch(events, evidence, state)
                 report["developments_to_watch"] = developments
+            # v12 (16 Nov 2026): fact brief - the date and amount gaps the sources show, computed by
+            # code. Every report carries it, so a run with no released insight still shows its
+            # strongest checkable finding (tiered release instead of "not released").
+            try:
+                from services import delta_extractor
+                from services import editorial_briefing as gap_brief
+
+                brief_facts = gap_brief.select_facts(developments)
+                evidence_of = {f["fact_id"]: f.get("evidence_id") for f in brief_facts}
+                report["computed_gaps"] = [
+                    {**gap, "evidence_ids": [evidence_of[f] for f in gap["fact_ids"] if evidence_of.get(f)]}
+                    for gap in delta_extractor.compute(brief_facts)
+                ]
+            except Exception as error:
+                logger.warning("Computed gaps failed: %s", type(error).__name__)
+                report.setdefault("computed_gaps", [])
+            # v13 (18 Nov 2026): output-level quality gates, saved with every report and logged when
+            # one fails (services/run_quality.py); they pin the owner's decisions so a run that
+            # "works" but produces nothing useful is visible at once.
+            try:
+                from services import run_quality
+
+                quality = run_quality.gates(state, report, events, evidence,
+                                            depth=_clean(state.get("research_depth") or state.get("depth") or "deep"))
+                report.setdefault("analysis_metadata", {})["quality_gates"] = _json_safe(quality)
+                failed = [name for name, result in quality["gates"].items() if not result["passed"]]
+                if failed:
+                    logger.warning("run_quality_gates_failed=%s funnel=%s", failed,
+                                   json.dumps(_json_safe(quality["funnel"]), default=str))
+                else:
+                    logger.info("run_quality_gates_passed funnel=%s", json.dumps(_json_safe(quality["funnel"]), default=str))
+            except Exception as error:   # never fatal
+                logger.warning("Run quality gates failed to compute: %s", type(error).__name__)
             deep = _enum(report.get("research_depth") or state.get("research_depth")) == "deep"
             if deep and isinstance(state, dict) and not state.get("gap_research_done"):
                 # Only when the pre-analysis pass did not run (e.g. an early abstention).
@@ -4140,6 +4339,12 @@ class ResearchOrchestratorService:
             report["strategic_hypotheses"] = {
                 "version": "strategic-hypothesis-lab-v1.1.1-evidence-bridge", "status": "failed",
                 "error_type": type(error).__name__, "verified": [], "promising_unverified": []}
+        # v10: the lab is done; release any calls still held for it so later stages can use them.
+        try:
+            from services.gemini_llm_service import reserve_calls
+            reserve_calls("hypothesis_lab", 0)
+        except Exception:
+            pass
         report["historical_analogies"] = _json_safe(briefing.get("analogies") or [])
         # Plan fix B: where the advised organisation was researched, and any case found too late.
         early = _as_mapping(state.get("focus_research_early"))
@@ -4365,7 +4570,13 @@ class ResearchOrchestratorService:
                     if _clean(record.get("source_id"))
                 }
                 verified = len(underlying) >= 2
-                return (0 if verified else 1, -len(underlying), -len(sources),
+                # v13 (18 Nov 2026): insight potential first; coverage only breaks ties. Ranking by
+                # coverage put startup funding rounds first in every run.
+                from services import insight_potential
+                potential = insight_potential.score(members, [r for e in members for r in
+                                                              evidence_by_event.get(_clean(e.get("event_id")).upper(), [])],
+                                                    topic=_clean(_as_mapping(state).get("topic")))
+                return (-float(potential["score"]), 0 if verified else 1, -len(underlying), -len(sources),
                         -max(materiality(e) for e in members), key)
 
             output: list[dict[str, Any]] = []
@@ -9225,6 +9436,10 @@ class ResearchOrchestratorService:
                 semantic_fail_closed=semantic_fail_closed,
             )
         )
+        # v13 (19 Nov 2026): every evidence record carries its article's publication date. Records had
+        # none, so "the breach happened in June ... notified earlier this month" could not be turned
+        # into "about three months later" - the delay behind the one insight the owner rated good.
+        _attach_publication_dates(payload.get("evidence_records") or [], sources)
         if not include_authoritative_analysis:
             return payload
 
@@ -10274,6 +10489,18 @@ class ResearchOrchestratorService:
                 exclusion_reasons["authoritative_analysis_context_not_observed_event"] = (
                     exclusion_reasons.get("authoritative_analysis_context_not_observed_event", 0) + 1
                 )
+                continue
+            if _is_page_boilerplate(event):
+                # v12.1 (18 Nov 2026, simulated run): navigation text the extractor kept as an event
+                # ("Read more here about its fundraise...", "READ MORE | MY STORY | ...") became a
+                # top development. It reports nothing that happened.
+                excluded.append({
+                    "event_id": event_id, "event_class": "page_boilerplate", "relevance_score": None,
+                    "materiality_score": None, "topic_linkage_type": "page_boilerplate", "relation_signature": {},
+                    "reasons": ["page_boilerplate_not_an_event"], "text": _clean(event.get("title"))[:600],
+                })
+                exclusion_reasons["page_boilerplate_not_an_event"] = (
+                    exclusion_reasons.get("page_boilerplate_not_an_event", 0) + 1)
                 continue
             assessment = cls._strategic_event_assessment(
                 topic=topic,
@@ -15388,7 +15615,15 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
                 and any(value in high_value_single_classes for value in event_classes)
                 and (mechanism_tags or dependency_tags)
             )
-            seed_eligible = bool(multi_event_seed or single_high_materiality_seed)
+            # v13 (18 Nov 2026): insight potential (services/insight_potential.py). A single event
+            # with an official actor AND incident or enforcement language (e.g. a breach disclosure)
+            # is worth follow-up searches even with low "materiality"; funding-only stories are not.
+            from services import insight_potential
+            potential = insight_potential.score(cluster_events, topic=topic)
+            single_high_potential_seed = bool(len(underlying_ids) == 1 and float(potential["score"]) >= 5.5)
+            seed_eligible = bool(multi_event_seed or single_high_materiality_seed or single_high_potential_seed)
+            if "funding_only" in potential["parts"]:
+                seed_eligible = False
 
             missing_dimensions: list[str] = []
             if len(source_ids) < 2:
@@ -15421,7 +15656,9 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
                 ),
                 "cluster_terms": cluster_terms,
                 "score": round(score, 2),
-                "eligible": bool(seed_eligible and score >= DEEP_CLUSTER_EXPANSION_MIN_RESEARCH_SCORE),
+                "eligible": bool(seed_eligible and (score >= DEEP_CLUSTER_EXPANSION_MIN_RESEARCH_SCORE
+                                                    or single_high_potential_seed)),
+                "insight_potential": potential,
                 "seed_basis": (
                     "verified_shared_development"
                     if multi_event_seed
@@ -15451,7 +15688,9 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
                 ),
             })
 
-        profiles.sort(key=lambda item: (-float(item.get("score") or 0.0), _clean(item.get("cluster_id"))))
+        # v13: insight potential first, the coverage score as the tie-breaker.
+        profiles.sort(key=lambda item: (-float(_as_mapping(item.get("insight_potential")).get("score") or 0.0),
+                                        -float(item.get("score") or 0.0), _clean(item.get("cluster_id"))))
         return profiles
 
     @staticmethod
@@ -15483,16 +15722,18 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
         if not subject:
             # Nothing specific beyond the names: research the names only, and
             # stop after two rounds rather than search generic words.
+            # v13.1: the same insight angles as the model-written queries (documents, dates,
+            # official response, comparisons, precedent), not "customers"/"competitors".
             if round_number == 1:
-                queries = [anchor, f"{anchor} customers", f"{anchor} problems"]
+                queries = [anchor, f"{anchor} statement filing", f"{anchor} investigation regulator"]
             elif round_number == 2:
-                queries = [f"{anchor} competitors", f"{anchor} regulation"]
+                queries = [f"{anchor} delay disclosed", f"{anchor} similar case"]
             else:
                 queries = []
         elif round_number == 1:
-            queries = [focus, subject, f"{anchor} problems"]
+            queries = [focus, f"{anchor} statement filing", f"{subject} investigation regulator"]
         elif round_number == 2:
-            queries = [f"{anchor} customers", f"{subject} competitors", f"{subject} regulation"]
+            queries = [f"{anchor} delay disclosed", f"{subject} other companies", f"{subject} precedent"]
         else:
             # Later rounds look for OTHER actors doing the same thing: the
             # development's own terms without the actors already found, so the
@@ -15617,7 +15858,7 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
         kwargs = {
             "system_prompt": "Return one JSON object only. Do not invent names that are not in the events.",
             "temperature": 0.0, "response_format": "json", "num_predict": 512,
-            "metadata": {"task": "cluster_research_queries", "prompt_version": "cluster-queries-v1"},
+            "metadata": {"task": "cluster_research_queries", "prompt_version": "cluster-queries-v2-insight-angles"},
         }
         params = inspect.signature(copied.ask).parameters
         if not any(param.kind == param.VAR_KEYWORD for param in params.values()):
@@ -16927,11 +17168,30 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
     CALL_CAP_ENV = "EVENT_INTELLIGENCE_MAX_GEMINI_CALLS"
     CALL_CAP_RESERVE = 0.15   # share of the cap kept for the briefing and hypothesis lab
 
-    def _apply_call_cap(self) -> None:
+    # v10 (15 Nov 2026): calls held for the hypothesis lab out of the cap. The lab generates about
+    # 20 candidates, evolves and ranks them, then grounds the best (2 generation + 1 evolution +
+    # about 8 grounding calls for each of up to 6 candidates + narrowing). Held at most 30% of the cap.
+    FINAL_CHECK_RESERVED_CALLS_ENV = "EVENT_INTELLIGENCE_FINAL_CHECK_RESERVED_CALLS"
+    FINAL_CHECK_RESERVED_CALLS_DEFAULT = 40
+    FINAL_CHECK_RESERVED_CALLS_MAX_SHARE = 0.20
+    LAB_RESERVED_CALLS_ENV = "EVENT_INTELLIGENCE_LAB_RESERVED_CALLS"
+    LAB_RESERVED_CALLS_DEFAULT = 60
+    LAB_RESERVED_CALLS_MAX_SHARE = 0.30
+
+    def _apply_call_cap(self, research_depth: Any = "") -> None:
         """Cost cap (26 Oct 2026): EVENT_INTELLIGENCE_MAX_GEMINI_CALLS caps every Gemini attempt and
-        grounded search in this run (services/gemini_llm_service.consume_call). Unset = no cap."""
+        grounded search in this run (services/gemini_llm_service.consume_call). Unset = no cap.
+        v10: in a deep run part of the cap is held for the hypothesis lab, which runs last and was
+        skipped when earlier stages used the whole cap (14 Nov run)."""
+        try:   # v13.3: the Exa fallback's per-run cap (services/exa_contents.py) starts again each run
+            from services import exa_contents
+            exa_contents.reset_run_budget()
+        except Exception:
+            pass
         raw = _clean(os.getenv(self.CALL_CAP_ENV))
         self._call_cap = None
+        self._lab_reserved_calls = 0
+        self._final_check_reserved_calls = 0
         if not raw:
             return
         try:
@@ -16939,10 +17199,58 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
         except ValueError:
             logger.warning("%s=%r is not a number; no call cap applied", self.CALL_CAP_ENV, raw)
             return
-        from services.gemini_llm_service import set_call_budget
+        from services.gemini_llm_service import reserve_calls, set_call_budget
         set_call_budget(cap)
         self._call_cap = cap
-        logger.info("gemini_call_cap=%s", cap)
+        # v10.1: calls held for the final checks (report grounding and red team). On 14 Nov the
+        # cap was used up before them; the red team could not run and the release policy blocked
+        # the whole report (RED_TEAM_FAILED, RED-TEAM-REQUIRED).
+        final_held = min(_env_int(self.FINAL_CHECK_RESERVED_CALLS_ENV, self.FINAL_CHECK_RESERVED_CALLS_DEFAULT, 0, 500),
+                         int(cap * self.FINAL_CHECK_RESERVED_CALLS_MAX_SHARE))
+        if final_held > 0:
+            reserve_calls("final_checks", final_held)
+        self._final_check_reserved_calls = final_held
+        lab_on = os.getenv("EVENT_INTELLIGENCE_HYPOTHESIS_LAB", "1") != "0"
+        if lab_on and _enum(research_depth) == "deep":
+            held = _env_int(self.LAB_RESERVED_CALLS_ENV, self.LAB_RESERVED_CALLS_DEFAULT, 0, 500)
+            held = min(held, int(cap * self.LAB_RESERVED_CALLS_MAX_SHARE))
+            if held > 0:
+                reserve_calls("hypothesis_lab", held)
+                self._lab_reserved_calls = held
+        logger.info("gemini_call_cap=%s lab_reserved_calls=%s final_check_reserved_calls=%s",
+                    cap, self._lab_reserved_calls, self._final_check_reserved_calls)
+
+    def _overreach_found(self, candidate: Mapping[str, Any], evidence: Sequence[Any]) -> dict[str, list[str]]:
+        """Overstating words and unsourced numbers in a candidate's insight text, checked against
+        the records it cites (all records if it cites none that are found). Empty dict: none."""
+        from services import reader_standard
+        cited_ids = {str(value).upper() for value in (candidate.get("supporting_evidence_ids") or [])}
+        for premise in candidate.get("premises") or []:
+            if isinstance(premise, Mapping):
+                cited_ids.update(str(value).upper() for value in (premise.get("evidence_ids") or []))
+        records = [record for record in evidence if isinstance(record, Mapping)]
+        cited = [record for record in records if str(record.get("evidence_id") or "").upper() in cited_ids]
+        texts = [" ".join(_clean(record.get(field)) for field in ("text", "source_excerpt", "claim", "excerpt"))
+                 for record in (cited or records)]
+        found = reader_standard.overreach(_clean(candidate.get("insight") or candidate.get("text")), texts)
+        return {key: value for key, value in found.items() if value}
+
+    def _remaining_lab_seconds(self) -> float:
+        """Budget check for the hypothesis lab. While calls held for the lab remain, the general
+        cap threshold does not stop it (only the time budget does); otherwise it is the same
+        check as every other optional stage."""
+        if getattr(self, "_call_cap", None) is not None:
+            from services.gemini_llm_service import reserved_calls
+            if reserved_calls("hypothesis_lab") > 0:
+                budget = getattr(self, "execution_budget_service", None)
+                remaining = getattr(budget, "remaining_discretionary_seconds", None)
+                if not callable(remaining):
+                    return float("inf")
+                try:
+                    return float(remaining())
+                except Exception:
+                    return float("inf")
+        return self._remaining_discretionary_seconds()
 
     def _call_cap_exhausted(self) -> bool:
         """Past (1 - reserve) of the cap, optional stages stop so the rest goes to the report."""
@@ -17340,6 +17648,7 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
         if not claims:
             return dict(candidate), [dict(c) for c in connections if isinstance(c, Mapping)], {"removed": []}
         statuses: Optional[dict[str, str]] = None
+        from services.gemini_llm_service import GeminiCallBudgetExceeded
         try:
             result = self.grounding_service.ground_claims(
                 claims=[{k: v for k, v in claim.items() if not k.startswith("_")} for claim in claims],
@@ -17349,6 +17658,23 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
                 _clean(item.get("claim_id")): _clean(item.get("grounding_status"))
                 for item in _as_mapping(result).get("claims") or [] if isinstance(item, Mapping)
             }
+        except GeminiCallBudgetExceeded:
+            # v10.3 (15 Nov 2026): at the call limit the shown material is kept and labelled as not
+            # checked, instead of all of it being removed (which then failed the insight's final
+            # quality check). The insight's own claims already passed the claim gate. Only facts
+            # the gate itself verified are presented as verified; the rest carry this label.
+            logger.warning("Claim-support gate: display check skipped at the call limit; material labelled")
+            out = copy.deepcopy(dict(candidate))
+            meta = out.get("metadata") if isinstance(out.get("metadata"), dict) else {}
+            meta["display_check"] = {
+                "status": "not_checked_call_limit",
+                "label": ("The supporting detail shown with this insight was not checked against the sources "
+                          "because the run reached its call limit; the insight's own claims were checked."),
+            }
+            out["metadata"] = meta
+            return out, [dict(c) for c in connections if isinstance(c, Mapping)], {
+                "removed": [], "grounding_ran": False, "not_checked_call_limit": True,
+                "connections_without_two_events_and_sources": dropped_connections}
         except Exception as error:
             # Fail closed: material that could not be checked is not shown.
             logger.warning("Claim-support gate: display grounding failed: %s", type(error).__name__)
@@ -17356,7 +17682,7 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
         notes["connections_without_two_events_and_sources"] = dropped_connections
         return out, kept, notes
 
-    def _development_combinations(self, events, evidence, tried_candidates=(), limit=3) -> list[dict[str, Any]]:
+    def _development_combinations(self, events, evidence, tried_candidates=(), limit=3, topic: str = "") -> list[dict[str, Any]]:
         """v6.21.4: combinations of different developments worth one candidate each.
 
         Developments are the run's strategic clusters (or underlying events).
@@ -17375,17 +17701,31 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
             if not isinstance(event, Mapping):
                 continue
             event_id = _clean(event.get("event_id")).upper()
-            key = _clean(event.get("strategic_cluster_id")) or _clean(event.get("underlying_event_id")) or event_id
+            # v13 (18 Nov 2026): a cluster groups events only when it is verified as ONE shared
+            # development; otherwise strategic_cluster_id is a theme bucket ("ai_general") that mixed
+            # unrelated stories into one "development". Same rule as _developments_to_watch.
+            if _clean(event.get("strategic_cluster_status")) == "verified" and _clean(event.get("strategic_cluster_id")):
+                key = _clean(event.get("strategic_cluster_id"))
+            else:
+                key = _clean(event.get("underlying_event_id")) or event_id
             if not key or not evidence_by_event.get(event_id):
                 continue
             group = groups.setdefault(key, {"key": key, "label": "", "event_ids": [], "underlying": set(),
-                                            "evidence_ids": []})
+                                            "evidence_ids": [], "actors": set(), "events": []})
+            group["events"].append(event)
             group["label"] = group["label"] or _clean(event.get("strategic_cluster_label") or event.get("title")
                                                       or event.get("summary"))[:120]
+            group["actors"] |= _event_actor_keys(event)
             group["event_ids"].append(event_id)
             group["underlying"].add(_clean(event.get("underlying_event_id")) or event_id)
             group["evidence_ids"] += evidence_by_event[event_id]
-        ranked = sorted(groups.values(), key=lambda g: (-len(g["underlying"]), -len(g["evidence_ids"]), g["key"]))[:5]
+        # v13: insight potential first (services/insight_potential.py), coverage as the tie-breaker.
+        from services import insight_potential
+        for group in groups.values():
+            group["potential"] = insight_potential.score(group["events"], topic=topic)
+        ranked = sorted(groups.values(), key=lambda g: (-float(g["potential"]["score"]), -len(g["underlying"]),
+                                                       -len(g["evidence_ids"]), g["key"]))[:6]
+        ranked = [g for g in ranked if "funding_only" not in g["potential"]["parts"]] or ranked
         # v6.21.6: skip only the EXACT combinations earlier candidates used.
         # (v6.21.4 skipped any combination inside the union of all used
         # developments, so after A+B and B+C the untried A+C was skipped, and
@@ -17396,14 +17736,28 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
             keys_used = frozenset(g["key"] for g in ranked if cited & set(g["evidence_ids"]))
             if keys_used:
                 tried_sets.add(keys_used)
-        combos = [list(c) for c in combinations(ranked, 2)] + ([ranked[:3]] if len(ranked) >= 3 else [])
+        # v10.3 (15 Nov 2026): developments are combined only when they share a named actor.
+        # Pairing the top developments regardless produced stitched candidates such as "the
+        # voluntary accord enables a startup's $1 billion raise", a link no source made (14 Nov).
+        def linked(combo: Sequence[Mapping[str, Any]]) -> bool:
+            shared = set(combo[0]["actors"])
+            for group in combo[1:]:
+                shared &= set(group["actors"])
+            return bool(shared)
+
+        combos = [list(c) for c in combinations(ranked, 2) if linked(c)]
+        if len(ranked) >= 3 and linked(ranked[:3]):
+            combos.append(ranked[:3])
         combos.sort(key=lambda c: -sum(len(g["underlying"]) for g in c))
         # v6.21.8: the consensus-vs-constraint route - the top development on its own,
         # read against the run's context records (rules, deadlines, dependencies,
-        # numbers, past cases). Tried second, after the top multi-development combination.
+        # numbers, past cases). Tried second, after the top LINKED combination; v10.3: also tried,
+        # first, when no developments are linked, so one well-evidenced development is read in depth.
         has_context = any(isinstance(r, Mapping) and r.get("analytical_context_only") for r in evidence or [])
-        if has_context and ranked:
+        if ranked and (has_context or not combos):
             combos.insert(1 if combos else 0, [ranked[0]])
+        if ranked and not has_context and len(ranked) >= 2 and len(combos) < limit:
+            combos.append([ranked[1]])
         out = []
         for combo in combos:
             keys = {g["key"] for g in combo}
@@ -17458,7 +17812,8 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
                     meta["exploration_combination"] = combo["labels"]
                     item["metadata"] = meta
                     found.append(item)
-                    break
+                    if len(found) >= 2:   # v13: up to two candidates per story (was one)
+                        break
                 entry["result"] = "candidate" if found else "no_candidate"
                 output += found
             except Exception as error:
@@ -17629,13 +17984,15 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
             release, propose a candidate from the next untried combination of
             developments (structured alternatives instead of one free guess).
             Combinations are tried one at a time, so a release stops the cost."""
-            if original_released() or INSIGHT_EXPLORATION_COMBINATIONS <= 0:
+            # v13 (18 Nov 2026): keep exploring other stories until the run's insight limit is
+            # reached; it used to stop at the first release, so a run never had a second insight.
+            if original_released() >= limit or INSIGHT_EXPLORATION_COMBINATIONS <= 0:
                 return False
             if not explored["done"]:
                 explored["done"] = True
                 tried_candidates = [c for c in self._tried_insight_candidates if isinstance(c, Mapping)]
                 explored["pending"] = self._development_combinations(
-                    events, evidence, tried_candidates, INSIGHT_EXPLORATION_COMBINATIONS)
+                    events, evidence, tried_candidates, INSIGHT_EXPLORATION_COMBINATIONS, topic=topic)
                 log["exploration"] = {"combinations": []}
             while explored.get("pending"):
                 if self._remaining_discretionary_seconds() < DEEP_CLAIM_GATE_MIN_SECONDS:
@@ -17672,12 +18029,25 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
             # claim check is spent on a candidate that does not even state them.
             missing_leverage = (gate.leverage_reasons(candidate)
                                 if self._finding_tier(candidate) == "hidden_insight" else [])
+            # v10.1 (15 Nov 2026): overstating words and added numbers, found without a model
+            # call and before any claim check is spent. They sank 15 of the 29 failed "good"
+            # candidates in the saved runs; the repair names the exact words to change.
+            overreach = (self._overreach_found(candidate, evidence)
+                         if not rejection and not missing_leverage
+                         and self._finding_tier(candidate) == "hidden_insight" else {})
             if rejection:
                 verdict = {"passed": False, "repairable": False, "reasons": [rejection], "failed_claims": []}
             elif missing_leverage:
                 attempt["leverage"] = missing_leverage
                 verdict = {"passed": False, "repairable": True, "reasons": missing_leverage, "failed_claims": [],
                            "brief_extra": [gate.LEVERAGE_BRIEF]}
+            elif overreach:
+                from services import reader_standard
+                attempt["overreach"] = overreach
+                reasons = ([f"overreach_unsourced_word:{w}" for w in overreach.get("absolutes", [])]
+                           + [f"overreach_unsourced_number:{n}" for n in overreach.get("specifics", [])])
+                verdict = {"passed": False, "repairable": True, "reasons": reasons, "failed_claims": [],
+                           "brief_extra": reader_standard.overreach_brief(overreach)}
             else:
                 if origin == "pipeline":
                     grounding = _as_mapping(grounded.get(key)) or None
@@ -17704,6 +18074,23 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
                     "passed": False, "repairable": False, "failed_claims": [],
                     "reasons": ["final_quality_insufficient_evidence" if attempt.get("final_quality") else "grounding_unavailable"],
                 }
+                # v10.1: only the app's own leverage lines failed - show the backed insight
+                # without them, labelled, instead of releasing nothing (no model call).
+                pruned = gate.without_unbacked_leverage(grounding, verdict) if grounding is not None else None
+                if pruned is not None:
+                    retry = gate.evaluate(pruned, sources(), *convergence_maps(),
+                                          credible_sources=_credible_source_ids(evidence))
+                    if retry.get("passed"):
+                        attempt["leverage_withheld"] = [_clean(f.get("claim_text"))[:300]
+                                                        for f in verdict.get("failed_claims") or []]
+                        meta = dict(_as_mapping(candidate.get("metadata")))
+                        meta["leverage_withheld"] = {
+                            "reason": "The sources did not back who controls what, so the leverage is not shown.",
+                            "unbacked_lines": attempt["leverage_withheld"],
+                        }
+                        meta.pop("leverage_analysis", None)
+                        candidate = {**candidate, "leverage_analysis": {}, "metadata": meta}
+                        grounding, verdict = pruned, retry
                 if verdict["passed"]:
                     candidate, grounding, verdict, evidence = self._research_final_claim(
                         candidate=candidate, grounding=grounding, verdict=verdict, evidence=evidence,
@@ -19232,6 +19619,11 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
             out.append({"claim_id": f"{revision_id}-CONTROL", "epistemic_type": "fact",
                         "claim_text": f"{holder} controls or holds {controls}.",
                         "evidence_ids": lev_ids, "multi_evidence_required": False})
+        # v12.1 (18 Nov 2026, simulated run): the model sometimes writes a sentence such as "The
+        # sources name no party that depends on ..." into a field the template expects to be a
+        # name, which produced a garbled claim that could only fail. No named dependent, no claim.
+        if not _names_a_party(dependent):
+            dependent = ""
         if holder and controls and dependent:
             out.append({"claim_id": f"{revision_id}-DEPENDENCY", "epistemic_type": "connection",
                         # Resource dependence includes being subject to a rule-maker's power
@@ -19244,7 +19636,9 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
                                          ("dependent_incentive", "dependent_incentive_evidence_ids", "DEPENDENT-INCENTIVE",
                                           dependent)):
             text = _clean(lev.get(key))
-            if text and not _PLACEHOLDER_TEXT.match(text):
+            if key == "dependent_incentive" and not dependent:
+                continue
+            if text and not _PLACEHOLDER_TEXT.match(text) and not _STATES_ABSENCE.search(text):
                 out.append({"claim_id": f"{revision_id}-{label}", "epistemic_type": "connection",
                             "claim_text": (f"Given the cited facts, {who} has this incentive: {text}" if who else text),
                             "evidence_ids": _unique_strings(lev.get(ids_key) or fallback),
@@ -22038,6 +22432,7 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
                     [],
                 )
             ),
+            "computed_gaps": _json_safe(report.get("computed_gaps", [])),
             "editorial_briefing": _json_safe(report.get("editorial_briefing", {})),
             # v6.30.1: the advice section was built but never saved, so the dashboard never showed it.
             "actor_moves": _json_safe(report.get("actor_moves", {})),
@@ -23649,6 +24044,9 @@ STAGE_PATHS = {
     "_focus_research": "focus_research",
     "_precedent_research": "precedent_research",
     "_insight_evaluation": "judge",
+    # v10.1: the report-level grounding and the red team decide whether a report can be released.
+    "_ground_report": "final_checks",
+    "_red_team": "final_checks",
 }
 
 

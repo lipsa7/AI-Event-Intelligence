@@ -274,7 +274,7 @@ def test_two_reports_of_one_underlying_development_count_once():
 
 
 def test_grounding_treats_a_company_pitch_as_the_company_claim():
-    assert grounding_service.GROUNDING_PROMPT_VERSION == "grounding-v1.3-context-first"   # Nov 2026: same rules, claim after the evidence
+    assert grounding_service.GROUNDING_PROMPT_VERSION == "grounding-v1.4-forecasts-judged-on-premises"   # v10.2: forecast rule added
     service = grounding_service.GroundingService.__new__(grounding_service.GroundingService)
     prompt = grounding_service.GroundingService._build_prompt(
         service, claim_id="C1", claim_text="Demand exists for Ascerta.", epistemic_type="fact",

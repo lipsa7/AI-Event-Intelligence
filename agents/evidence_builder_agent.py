@@ -2487,7 +2487,8 @@ class EvidenceBuilderAgent:
                 value,
             ]
 
-            if unit:
+            # v13 (19 Nov 2026): "3%" with unit "%" read "fine percentage 3% %".
+            if unit and not value.casefold().rstrip().endswith(unit.casefold().strip()):
                 statement_parts.append(
                     unit
                 )

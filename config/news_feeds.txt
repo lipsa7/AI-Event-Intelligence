@@ -21,3 +21,14 @@ https://yourstory.com/feed
 #candidate https://www.moneycontrol.com/rss/technology.xml
 #candidate https://www.thehindubusinessline.com/info-tech/feeder/default.rss
 #candidate https://feeds.arstechnica.com/arstechnica/technology-lab
+
+# v12.2 (18 Nov 2026): AI governance and policy sources. The enabled feeds above mostly cover
+# startups and funding, so runs were dominated by funding rounds. These are read like the others;
+# a feed that fails is skipped by the reader (it costs one failed request), so no manual check
+# is needed. python -m tools.check_news_feeds still reports which ones work.
+https://www.techpolicy.press/rss/
+https://www.theverge.com/rss/policy/index.xml
+https://www.euractiv.com/sections/tech/feed/
+https://www.nist.gov/news-events/news/rss.xml
+https://www.gov.uk/search/news-and-communications.atom?keywords=artificial+intelligence
+https://www.federalregister.gov/api/v1/documents.rss?conditions%5Bterm%5D=artificial+intelligence&order=newest

@@ -35,3 +35,17 @@ if (
         0,
         str(PROJECT_ROOT),
     )
+
+import pytest
+
+
+@pytest.fixture(autouse=True)
+def _no_paid_exa_calls_in_tests(monkeypatch, tmp_path):
+    """v13.4: tests never call Exa (paid) or touch the real monthly counter, even with EXA_API_KEY in
+    .env. Tests of the Exa code turn it back on with a fake transport."""
+    monkeypatch.setenv("EXA_FALLBACK", "0")
+    try:
+        from services import exa_contents
+        monkeypatch.setattr(exa_contents, "USAGE_FILE", tmp_path / "exa_usage.json")
+    except Exception:
+        pass

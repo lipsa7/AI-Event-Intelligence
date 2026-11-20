@@ -33,7 +33,7 @@ def rich_row():
     return {
         "id": "B1H1",
         "lens": "dependency and control-point shift",
-        "thesis": "B's capacity allocation has shifted bargaining power because A cannot qualify an alternative before the next contracting cycle, making allocation rather than nominal price the operative control point.",
+        "thesis": "B's capacity allocation has shifted bargaining power because A cannot qualify an alternative before the 2027 contracting cycle, making allocation rather than nominal price the operative control point.",
         "novel_proposition": "The scarce variable is qualified allocation, not component price, so bargaining power moves before posted prices do.",
         "why_not_obvious": "Each source separately describes supply, allocation and qualification time; none states that the qualification clock converts allocation into bargaining leverage.",
         "anomaly_or_trigger": "A remains exposed despite an apparent alternative supplier.",

@@ -969,7 +969,7 @@ class SupportingChangeTests(unittest.TestCase):
         prompt = service._build_prompt(claim_id="C1", claim_text="X caused Y.", epistemic_type="mechanism",
                                        evidence_records=[], multi_evidence_required=True)
         self.assertIn("cannot be its cause", prompt)
-        self.assertEqual(GROUNDING_PROMPT_VERSION, "grounding-v1.3-context-first")   # Nov 2026: same rules, claim after the evidence
+        self.assertEqual(GROUNDING_PROMPT_VERSION, "grounding-v1.4-forecasts-judged-on-premises")   # v10.2: forecast rule added
 
 
 class AbstentionReceiptTests(unittest.TestCase):

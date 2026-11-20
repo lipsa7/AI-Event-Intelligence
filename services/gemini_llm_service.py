@@ -33,7 +33,7 @@ import shlex
 import time
 from copy import deepcopy
 from pathlib import Path
-from typing import Any, Dict, Mapping, Optional
+from typing import Any, Dict, Mapping, Optional, Sequence
 
 
 # v6.20.12: under the configured "event_intelligence" logger so rate-limit
@@ -595,7 +595,7 @@ def record_usage(model: str, usage: Mapping[str, Any] | None, *, failed: bool = 
 
 # v6.36.2: an optional hard ceiling on Gemini API attempts (every attempt counts, retries included),
 # for stage tests that must not exceed a stated cost. None = no ceiling (normal runs).
-_CALL_BUDGET: Dict[str, Any] = {"limit": None, "used": 0, "refused": 0}
+_CALL_BUDGET: Dict[str, Any] = {"limit": None, "used": 0, "refused": 0, "reserved": {}, "groups": {}}
 
 
 class GeminiCallBudgetExceeded(GeminiLLMServiceError):
@@ -607,6 +607,33 @@ def set_call_budget(limit: Optional[int]) -> None:
         _CALL_BUDGET["limit"] = None if limit is None else max(0, int(limit))
         _CALL_BUDGET["used"] = 0
         _CALL_BUDGET["refused"] = 0
+        _CALL_BUDGET["reserved"] = {}
+        _CALL_BUDGET["groups"] = {}
+
+
+def reserve_calls(stage_name: str, count: int, stages: Sequence[str] = ()) -> None:
+    """v10 (15 Nov 2026): hold `count` calls of the ceiling for one stage (path name, as in
+    `stage`). Other stages are refused once only the held calls remain, so an early stage cannot
+    spend a later stage's share. In the 14 Nov run (RUN-87BF...) the main insight path and the
+    briefing used all 260 calls and the hypothesis lab, the stage that generates and ranks many
+    candidates, never ran. Calls the stage makes draw on its reserve first. count=0 releases it."""
+    # v13.4: a reserve may be shared by several stages, and a stage opened inside another path (the
+    # judge runs inside report building) may use its reserve: any stage on the stack counts.
+    with _USAGE_LOCK:
+        reserved = _CALL_BUDGET.setdefault("reserved", {})
+        groups = _CALL_BUDGET.setdefault("groups", {})
+        key = str(stage_name)
+        if count and count > 0:
+            reserved[key] = int(count)
+            groups[key] = tuple(str(name) for name in (stages or (key,)))
+        else:
+            reserved.pop(key, None)
+            groups.pop(key, None)
+
+
+def reserved_calls(stage_name: str) -> int:
+    with _USAGE_LOCK:
+        return int((_CALL_BUDGET.get("reserved") or {}).get(str(stage_name)) or 0)
 
 
 def call_budget() -> Dict[str, Any]:
@@ -620,11 +647,23 @@ def consume_call() -> None:
     """Count one Gemini API attempt; refuse it once the ceiling is reached."""
     with _USAGE_LOCK:
         limit = _CALL_BUDGET["limit"]
-        if limit is not None and _CALL_BUDGET["used"] >= limit:
+        current = _current_stage_locked()
+        stack = list(_STAGE_STACK) or ["pipeline"]
+        reserved = _CALL_BUDGET.get("reserved") or {}
+        groups = _CALL_BUDGET.get("groups") or {}
+        usable = [key for key in reserved if any(name in stack for name in groups.get(key, (key,)))]
+        held_for_others = sum(int(n) for key, n in reserved.items() if key not in usable)
+        if limit is not None and _CALL_BUDGET["used"] >= limit - held_for_others:
             _CALL_BUDGET["refused"] = int(_CALL_BUDGET.get("refused") or 0) + 1
-            raise GeminiCallBudgetExceeded(f"Gemini call ceiling of {limit} reached; call not made.")
+            raise GeminiCallBudgetExceeded(
+                f"Gemini call ceiling of {limit} reached ({held_for_others} held for later stages); call not made.")
         _CALL_BUDGET["used"] += 1
-        _BY_STAGE.setdefault(_current_stage_locked(), _stage_row())["attempts"] += 1
+        for key in sorted(usable, key=lambda k: -max((stack.index(n) for n in groups.get(k, (k,)) if n in stack),
+                                                     default=-1)):
+            if reserved.get(key, 0) > 0:     # draw on the innermost usable reserve first
+                reserved[key] -= 1
+                break
+        _BY_STAGE.setdefault(current, _stage_row())["attempts"] += 1
 
 
 PROXY_ENV = "EVENT_INTELLIGENCE_LLM_PROXY_DIR"

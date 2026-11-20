@@ -39,7 +39,8 @@ from html.parser import HTMLParser
 from typing import Any, Callable, Dict, Mapping, Optional, Protocol, Sequence
 from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qsl, urlencode, urljoin, urlsplit, urlunsplit
-from urllib.request import HTTPRedirectHandler, Request, build_opener
+from http.cookiejar import CookieJar
+from urllib.request import HTTPCookieProcessor, HTTPRedirectHandler, Request, build_opener
 
 SERVICE_VERSION = "source-fetch-direct-v2.0-free-only"
 
@@ -1592,8 +1593,12 @@ class UrllibHTTPTransport:
             )
         )
 
+        # 20 Nov 2026 (RUN-87BF: 5 fetches failed with "HTTP 301"): sites that set a session or consent
+        # cookie and redirect to the same address looked like an endless redirect without a cookie jar, so
+        # urllib gave up with the 301. A per-fetch cookie jar is ordinary client behaviour.
         opener = build_opener(
-            redirect_handler
+            redirect_handler,
+            HTTPCookieProcessor(CookieJar()),
         )
 
         request = Request(

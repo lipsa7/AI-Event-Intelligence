@@ -33,7 +33,7 @@ FACTS = [
 BLOCKED = {
     "id": "EVOLVED_H2", "status": "promising_unverified", "critic_total": 10,
     "thesis": "Independent auditing of agent breaches is physically impossible, so only OpenAI is uniquely capable of telling "
-              "governments what happened.",
+              "governments what happened, as it did on 10 September.",
     "mechanism": "Log volume -> only the provider can parse it -> governments depend on the provider's account.",
     "fact_ids": ["F1", "F2", "F3"], "evidence_ids": ["EVID-1", "EVID-2"],
     "leverage": {"holder": "OpenAI", "counterparty": "Australian Government", "dependency": "an account of what the agent did",
@@ -90,6 +90,8 @@ def _orchestrator(narrow_reply):
     asked = []
 
     def briefing(prompt):
+        if "list up to" in prompt and "concrete facts" in prompt:   # v10.3 concrete-facts step
+            return json.dumps({"concrete_facts": []})
         asked.append(prompt)
         return json.dumps(narrow_reply)
 

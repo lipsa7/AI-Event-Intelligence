@@ -3941,6 +3941,20 @@ LEVERAGE_TEST_NOTES = {   # v6.36.4: resource-dependence test (dependence + few 
 }
 
 
+def render_fact_brief(sections: Mapping[str, Any]) -> None:
+    """v12: the gaps the sources show (dates, amounts), computed by code - shown when no insight
+    was released, so the run still gives its strongest checkable finding."""
+    gaps = [g for g in as_list(sections.get("computed_gaps")) if isinstance(g, Mapping)]
+    if not gaps:
+        return
+    st.markdown("**Fact brief: gaps the sources show** (calculated from the dates and amounts in the "
+                "sources; what caused them is not analysed here)")
+    for gap in gaps[:4]:
+        ids = ", ".join(clean_text(i) for i in as_list(gap.get("evidence_ids")) if clean_text(i))
+        st.markdown(f"- {_markdown_safe(clean_text(gap.get('development')))[:90]}: "
+                    f"{_markdown_safe(clean_text(gap.get('text')))}" + (f" *({ids})*" if ids else ""))
+
+
 def hypothesis_lines(item: Mapping[str, Any], verified: bool) -> list[str]:
     """v6.34: one strategic hypothesis, verified or not yet backed, with its evidence and gaps."""
     thesis = clean_text(item.get("thesis") or item.get("insight") or item.get("text"))
@@ -3949,6 +3963,11 @@ def hypothesis_lines(item: Mapping[str, Any], verified: bool) -> list[str]:
     label = ("**Verified** · " if verified else "**Analysis** · " if item.get("status") == "analysis"
              else "**Not yet backed** · ")
     lines = [label + _markdown_safe(thesis)]
+    # v10.3: how strong the inference is (graded in the lab's evolution step), and whether
+    # another explanation fits the facts as well.
+    strength = clean_text(item.get("strength_label"))
+    if strength:
+        lines.append(f"- *Inference: {_markdown_safe(strength)}*")
     checks = item.get("field_checks") if isinstance(item.get("field_checks"), Mapping) else {}
 
     def tag(field: str) -> str:
@@ -4284,6 +4303,7 @@ def render_main_finding(
     else:
         st.markdown("**None this run.**")
         st.caption("No candidate passed every evidence check for a hidden insight. The briefing above is complete.")
+        render_fact_brief(sections)
     render_hypotheses_to_investigate(investigate)
     checked_connections = [clean_text(item.get("text") or item.get("connection")) for item in connections]
     checked_connections += [
@@ -5283,6 +5303,13 @@ def main() -> None:
                 "For example: How will AI data-centre expansion affect "
                 "power markets, semiconductors, and regulation in India?"
             ),
+            # v13.1: what makes a topic yield insights (simulated runs, 18-19 Nov 2026).
+            help=("Works best: a field with several active companies, governments or regulators, "
+                  "in a few words (e.g. 'AI governance and regulation', 'semiconductor export "
+                  "controls', 'EV battery supply chain'). Too broad ('artificial intelligence') "
+                  "fills the run with unrelated funding and product news; too narrow (one "
+                  "company's single issue) leaves too few events to compare. Use the organisation "
+                  "profile for whose point of view the insights take."),
             height=110,
         )
 

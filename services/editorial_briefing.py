@@ -126,6 +126,9 @@ def select_facts(developments: Sequence[Mapping[str, Any]], limit: int = MAX_FAC
             facts.append({
                 "fact_id": f"F{len(facts) + 1}",
                 "development": _clean(development.get("title")),
+                # v12: the development's named actors, so the lab can check links between developments.
+                "actors": [_clean(a.get("name") if isinstance(a, Mapping) else a)
+                           for a in development.get("actors") or [] if _clean(a.get("name") if isinstance(a, Mapping) else a)][:6],
                 "text": _clean(fact.get("text"))[:600],
                 "date": _clean(fact.get("date"))[:10],
                 "evidence_id": _clean(fact.get("evidence_id")),

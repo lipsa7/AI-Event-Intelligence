@@ -95,7 +95,7 @@ def test_no_followup_when_a_complete_case_exists_or_no_precedent_was_searched():
 
 
 def test_two_precedent_searches_fit_in_the_budget():
-    assert HypothesisEvidenceService.GAP_MAX_QUERIES == 6     # v6.22: + one expert-commentary search
+    assert HypothesisEvidenceService.GAP_MAX_QUERIES == 7     # v6.22: + expert commentary; v11: + primary document
     assert HypothesisEvidenceService.GAP_MAX_SOURCES >= HypothesisEvidenceService.GAP_MAX_QUERIES * 2
     assert "TWO different specific earlier cases" in inspect.getsource(HypothesisEvidenceService.investigate_gaps)
 
@@ -107,8 +107,11 @@ def _events_and_evidence():
     for cluster, count in (("dev_eu", 3), ("dev_breach", 3), ("dev_rename", 2), ("dev_small", 1)):
         for i in range(count):
             event_id = f"EVENT-{cluster}-{i}".upper()
+            # v10.3: developments are combined only when they share a named actor; these share OpenAI.
             events.append({"event_id": event_id, "underlying_event_id": f"U-{cluster}-{i}",
-                           "strategic_cluster_id": cluster, "strategic_cluster_label": cluster.replace("dev_", "")})
+                           "strategic_cluster_id": cluster, "strategic_cluster_label": cluster.replace("dev_", ""),
+                           "strategic_cluster_status": "verified",  # v13: only verified clusters group events
+                           "actors": ["OpenAI"]})
             evidence.append({"evidence_id": f"EVID-{cluster}-{i}".upper(), "event_id": event_id,
                              "source_id": f"S-{cluster}-{i}", "text": "fact"})
     evidence.append({"evidence_id": "EVID-RULE", "source_id": "S-RULE", "analytical_context_only": True, "text": "rule"})
@@ -142,7 +145,9 @@ def test_exploration_runs_when_no_candidate_passes_and_its_candidate_is_gated(mo
         topic="ai", candidates=[candidate("ONE")], grounded=grounded, events=events, evidence=evidence,
         graph_context={}, constraints={}, blueprint={}, profile=DEEP_PROFILE, state=state)
     assert [r["insight_revision_id"] for r in released] == ["INSIGHTREV-EXPLORED"]
-    assert len(obj.analyze_calls) == 1                                     # stops at the first release
+    # v13 (18 Nov 2026): exploration goes on to other stories until the run's insight limit (it used
+    # to stop at the first release); the stub returns nothing more, so only one candidate is released.
+    assert len(obj.analyze_calls) >= 1
     call = obj.analyze_calls[0]
     assert "SYSTEMATIC EXPLORATION" in call["refinement_context"]["instruction"]
     assert len(call["current_events"]) < len(events)                       # only that combination's events

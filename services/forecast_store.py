@@ -57,12 +57,28 @@ class ForecastStore:
                 or (likelihood.get("base_rate") or {}).get("evidence_ids"))
         ):
             probability = None
+        numeric_basis = likelihood.get("numeric_basis")
+        if probability is None:
+            # v12 (16 Nov 2026): the outside view as the starting probability. When the model gave
+            # the precedent counts with their sources but no number, the code computes one:
+            # (outcome cases + 1) / (comparable cases + 2), a smoothed base rate that never says
+            # 0% or 100% from a handful of cases (Laplace's rule of succession). Base rates first,
+            # then adjust, is the trained superforecaster habit (Chang et al. 2016).
+            rate = likelihood.get("base_rate") if isinstance(likelihood.get("base_rate"), Mapping) else {}
+            try:
+                n, k = int(rate.get("comparable_cases")), int(rate.get("outcome_cases"))
+            except (TypeError, ValueError):
+                n = k = -1
+            if 0 < n and 0 <= k <= n and rate.get("evidence_ids"):
+                probability = round((k + 1) / (n + 2), 3)
+                numeric_basis = (f"Base rate: {k} of {n} comparable past cases had this outcome; starting "
+                                 f"probability (k+1)/(n+2) = {probability:.0%}, computed by the app, not adjusted.")
         return {
             "question": str(raw.get("question") or "").strip(),
             "deadline": str(raw.get("deadline") or "").strip(),
             "resolution_criteria": str(raw.get("resolution_criteria") or "").strip(),
             "probability": probability, "likelihood_label": likelihood.get("label"),
-            "numeric_basis": likelihood.get("numeric_basis"),
+            "numeric_basis": numeric_basis,
             "probability_evidence_ids": likelihood.get("probability_evidence_ids") or [],
             "base_rate": likelihood.get("base_rate") or {},
         }
