@@ -19,6 +19,11 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping, Optional, Sequence
 from urllib.parse import urlparse
 
+# v13.10 (20 Nov 2026): .env settings (call cap, run-time limit, reserves) reach the run; they
+# must be loaded before the module constants below read them.
+from services import project_env as _project_env
+_project_env.load()
+
 from services.event_context_audit_service import audit_admission_decision
 
 
@@ -3056,6 +3061,40 @@ class ResearchOrchestratorService:
         stats[f"judge_{label}"] = "ranked"
         return ranked
 
+    # v13.12 (20 Nov 2026): insights earlier reports already showed (services/earlier_insights.py).
+    def _earlier_insight_pool(self, topic: str) -> list[str]:
+        cache = getattr(self, "_earlier_insights_cache", None)
+        if not isinstance(cache, dict) or cache.get("topic") != _clean(topic).casefold():
+            from services import earlier_insights
+            try:
+                texts = earlier_insights.load(topic)
+            except Exception:
+                texts = []
+            cache = {"topic": _clean(topic).casefold(), "texts": texts}
+            self._earlier_insights_cache = cache
+        return list(cache["texts"])
+
+    EARLIER_IN_PROMPT = 10
+
+    def _earlier_insights_block(self, topic: str) -> str:
+        pool = self._earlier_insight_pool(topic)[: self.EARLIER_IN_PROMPT]
+        if not pool:
+            return ""
+        return ("\nALREADY SHOWN IN EARLIER REPORTS (the reader has seen these; do NOT restate any of them in new "
+                "words. Build on one only with a new fact that changes it, and say what is new):\n"
+                + "\n".join(f"- {_clean(t)[:300]}" for t in pool) + "\n")
+
+    def _repeats_of_earlier(self, texts: Sequence[str], topic: str) -> list[str]:
+        """For each text, the earlier insight it repeats ("" if none). At most one model call."""
+        from services import earlier_insights
+        pool = self._earlier_insight_pool(topic)
+        if not pool:
+            return ["" for _ in texts]
+
+        def ask(prompt: str) -> Any:
+            return self._ask_briefing_model(prompt)
+        return earlier_insights.repeats(list(texts), pool, ask=ask)
+
     def _ask_briefing_model(self, prompt: str) -> Any:
         client = getattr(getattr(self, "extraction_agent", None), "llm", None)
         if client is None or not callable(getattr(client, "ask", None)):
@@ -3774,7 +3813,8 @@ class ResearchOrchestratorService:
                 break
             try:
                 reply, model = self._ask_strong_model(
-                    lab.generation_prompt(topic, facts, lenses, batch=batch_no, profile=self._profile_block_for(),
+                    lab.generation_prompt(topic, facts, lenses, batch=batch_no,
+                                          profile=self._profile_block_for() + self._earlier_insights_block(topic),
                                           concrete_facts=concrete)
                 )
                 models.append(model)
@@ -3786,6 +3826,16 @@ class ResearchOrchestratorService:
         funnel["generated_duplicates"] = funnel.get("generated_duplicates", 0) + len(raw) - len(unique_raw)
         funnel["generated_over_cap"] = funnel.get("generated_over_cap", 0) + max(0, len(unique_raw) - lab.MAX_RAW)
         raw = unique_raw[:lab.MAX_RAW]
+        # v13.12: theses that repeat an insight earlier reports showed are dropped before evolution.
+        if raw:
+            try:
+                same = self._repeats_of_earlier([_clean(r.get("thesis")) for r in raw], topic)
+                dropped = sum(1 for rep in same if rep)
+                if dropped:
+                    funnel["repeats_of_earlier_reports"] = dropped
+                    raw = [r for r, rep in zip(raw, same) if not rep]
+            except Exception as error:
+                logger.warning("Earlier-insight check failed: %s", type(error).__name__)
         # v6.36.5: the user's own hypotheses (replay_run.py --hypotheses) join the evolution stage
         # under the same rules and checks, as scientists do in Co-Scientist. A broken file stops the run.
         user_hypotheses = lab.active_user_hypotheses()
@@ -15969,8 +16019,18 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
             for item in existing_events if isinstance(item, Mapping) and cls._cluster_expansion_time_key(item)
         }
 
+        # v13.10 (20 Nov 2026): follow-up reports of the target story are recognised by the names
+        # they share with it. Before, a new event counted only when the clustering - re-run on the
+        # grown corpus every round - put it in the target's cluster, or when both carried the same
+        # mechanism or dependency tag. Single-event seed clusters rarely keep their id, and most
+        # events carry no tags, so on 20 Nov (RUN-FF8F59D2...) 23 of 24 on-topic events that the
+        # targeted searches found were rejected and the searches stopped after two rounds.
+        target_ids = {_clean(v).upper() for v in (target_profile.get("event_ids") or []) if _clean(v)}
+        target_names, name_freq = cls._cluster_story_names(existing_events, new_events, target_ids)
+
         admitted: list[str] = []
         rejected: list[dict[str, Any]] = []
+        context: list[str] = []
         additions: dict[str, list[str]] = {}
         for raw in new_events:
             if not isinstance(raw, Mapping):
@@ -15994,12 +16054,19 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
             shared_dependencies = sorted(target_dependencies & event_dependencies)
             same_cluster = bool(target_cluster_id and event_cluster == target_cluster_id)
             structurally_adjacent = bool(shared_mechanisms or shared_dependencies)
-            if not same_cluster and not structurally_adjacent:
+            shared_actor = bool(actor and actor in target_actors)
+            shared_names = sorted(cls._event_story_names(event) & target_names)
+            same_story_names = len(shared_names) >= 2 or (shared_actor and len(shared_names) >= 1)
+            if not same_cluster and not structurally_adjacent and not same_story_names:
                 rejected.append({
                     "event_id": event_id,
                     "reason": "not_target_cluster_or_structurally_adjacent",
                     "event_cluster_id": event_cluster,
                 })
+                # v13.10: it passed the run's topic admission and was found by a search on this
+                # run's strongest story, so it stays in the corpus as context for the analysis
+                # (comparable cases, precedents, responses); it does not count as target growth.
+                context.append(event_id)
                 continue
 
             dimensions = ["new_underlying_event"]
@@ -16023,6 +16090,8 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
                 dimensions.append("shared_mechanism_confirmation")
             if shared_dependencies:
                 dimensions.append("shared_dependency_confirmation")
+            if same_story_names and not (same_cluster or structurally_adjacent):
+                dimensions.append("same_story_names:" + ",".join(shared_names[:4]))
 
             admitted.append(event_id)
             additions[event_id] = _unique_strings(dimensions)
@@ -16038,9 +16107,40 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
             "rejected_event_count": len(rejected),
             "rejection_reasons": reason_counts,
             "rejected_events": rejected[:40],
+            "context_event_ids": context,
+            "context_event_count": len(context),
             "material_dimensions_added_by_event": additions,
             "material_information_added": bool(admitted),
         }
+
+    @staticmethod
+    def _event_story_names(event: Mapping[str, Any]) -> set[str]:
+        """Names in an event (capitalised mid-sentence words; outlets and bylines ignored)."""
+        from services import same_story
+        names = set(same_story.story_words(event)[1])
+        for key in ("description", "event_summary", "headline"):
+            if _clean(event.get(key)):
+                names |= same_story.story_words({"title": event.get(key)})[1]
+        return names
+
+    @classmethod
+    def _cluster_story_names(cls, existing_events: Sequence[Mapping[str, Any]], new_events: Sequence[Mapping[str, Any]],
+                             target_ids: set[str]) -> tuple[set[str], dict[str, int]]:
+        """(distinctive names of the target story, how many events mention each name).
+
+        A name counts when it appears in at most 3 events or 10% of the corpus, whichever is
+        larger, so "OpenAI" or "Google" in an AI run does not tie unrelated stories together."""
+        events = [e for e in list(existing_events) + list(new_events) if isinstance(e, Mapping)]
+        freq: dict[str, int] = {}
+        for event in events:
+            for name in cls._event_story_names(event):
+                freq[name] = freq.get(name, 0) + 1
+        limit = max(3, int(0.10 * len(events)))
+        names: set[str] = set()
+        for event in existing_events:
+            if isinstance(event, Mapping) and _clean(event.get("event_id") or event.get("id")).upper() in target_ids:
+                names |= {n for n in cls._event_story_names(event) if freq.get(n, 0) <= limit}
+        return names, freq
 
     @staticmethod
     def _cluster_expansion_summary_payload(result: Mapping[str, Any]) -> dict[str, Any]:
@@ -16114,6 +16214,7 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
             "attempted": bool(result.get("attempted")),
             "selected_cluster_ids": list(result.get("selected_cluster_ids") or [])[:10],
             "new_material_event_count": result.get("new_material_event_count", 0),
+            "new_context_event_count": result.get("new_context_event_count", 0),
             "initial_cluster_profiles": [
                 profile_summary(item)
                 for item in (result.get("initial_cluster_profiles") or [])[:10]
@@ -16467,6 +16568,27 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
                 admitted_ids = {
                     _clean(value).upper() for value in (material.get("admitted_event_ids") or []) if _clean(value)
                 }
+                context_ids = {
+                    _clean(value).upper() for value in (material.get("context_event_ids") or []) if _clean(value)
+                }
+                if context_ids:
+                    # v13.10: on-topic events found by the search are kept as context (they were
+                    # discarded); they do not count as growth of the target story.
+                    present = {_clean(i.get("event_id") or i.get("id")).upper() for i in current_events}
+                    present_evidence = {_clean(i.get("evidence_id") or i.get("id")).upper() for i in current_evidence}
+                    for item in prepared_events:
+                        event_id = _clean(item.get("event_id") or item.get("id")).upper()
+                        if event_id in context_ids and event_id not in present:
+                            current_events.append(dict(item))
+                            present.add(event_id)
+                    for item in prepared_evidence:
+                        evidence_id = _clean(item.get("evidence_id") or item.get("id")).upper()
+                        if _clean(item.get("event_id")).upper() in context_ids and evidence_id not in present_evidence:
+                            current_evidence.append(dict(item))
+                            present_evidence.add(evidence_id)
+                    result["new_context_event_count"] = int(result.get("new_context_event_count") or 0) + len(context_ids)
+                    state.setdefault("cluster_search_context_event_ids", []).extend(sorted(context_ids))
+                round_trace["new_context_event_count"] = len(context_ids)
                 if not admitted_ids:
                     existing_evidence_ids = {
                         _clean(item.get("evidence_id") or item.get("id")).upper()
@@ -16502,7 +16624,7 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
                     for item in current_events
                     if isinstance(item, Mapping) and _clean(item.get("event_id") or item.get("id"))
                 }
-                keep_ids = existing_ids | admitted_ids
+                keep_ids = existing_ids | admitted_ids | context_ids
                 current_events = [
                     dict(item) for item in prepared_events
                     if _clean(item.get("event_id") or item.get("id")).upper() in keep_ids
@@ -17240,6 +17362,7 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
         grounded search in this run (services/gemini_llm_service.consume_call). Unset = no cap.
         v10: in a deep run part of the cap is held for the hypothesis lab, which runs last and was
         skipped when earlier stages used the whole cap (14 Nov run)."""
+        self._run_started_monotonic = time.monotonic()   # v13.13: run time for the run metrics
         try:   # v13.3: the Exa fallback's per-run cap (services/exa_contents.py) starts again each run
             from services import exa_contents
             exa_contents.reset_run_budget()
@@ -18149,17 +18272,32 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
             verdict: dict[str, Any]
             stop_retries = False
             rejection = "" if origin == "pipeline" else self._final_release_rejection_reason(candidate)
+            # v13.12 (20 Nov 2026): an insight earlier reports already showed is not checked or shown
+            # again (owner: the breach-delay insight came back in 12 runs); the next synthesis is told
+            # which one it repeated and to use a different development or a new fact.
+            repeated = ""
+            if not rejection:
+                try:
+                    repeated = self._repeats_of_earlier([text], topic)[0]
+                except Exception:
+                    repeated = ""
+            if repeated:
+                from services import earlier_insights
+                attempt["repeats_earlier_insight"] = repeated[:300]
             # v6.26: the product's bar - leverage plus incentives - checked before any
             # claim check is spent on a candidate that does not even state them.
             missing_leverage = (gate.leverage_reasons(candidate)
-                                if self._finding_tier(candidate) == "hidden_insight" else [])
+                                if not repeated and self._finding_tier(candidate) == "hidden_insight" else [])
             # v10.1 (15 Nov 2026): overstating words and added numbers, found without a model
             # call and before any claim check is spent. They sank 15 of the 29 failed "good"
             # candidates in the saved runs; the repair names the exact words to change.
             overreach = (self._overreach_found(candidate, evidence)
-                         if not rejection and not missing_leverage
+                         if not repeated and not rejection and not missing_leverage
                          and self._finding_tier(candidate) == "hidden_insight" else {})
-            if rejection:
+            if repeated:
+                verdict = {"passed": False, "repairable": False, "reasons": ["already_shown_in_earlier_report"],
+                           "failed_claims": [], "brief_extra": earlier_insights.brief(repeated)}
+            elif rejection:
                 verdict = {"passed": False, "repairable": False, "reasons": [rejection], "failed_claims": []}
             elif missing_leverage:
                 attempt["leverage"] = missing_leverage
@@ -22561,6 +22699,27 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
         evaluation = report.get("insight_evaluation") if isinstance(report.get("insight_evaluation"), Mapping) else None
         if evaluation is None:
             evaluation = self._insight_evaluation(report, topic)
+        # v13.13 (20 Nov 2026): one measured record per run (services/run_metrics.py) - retrieval,
+        # insight funnel, grounding (claim support, citation coverage), novelty, judge, cost - saved,
+        # logged and shown on the dashboard so runs can be compared. Never fatal.
+        try:
+            from services import exa_contents, run_metrics
+            from services.gemini_llm_service import stage_snapshot
+
+            inputs = getattr(self, "_quality_gate_inputs", None) or ({}, [], [])
+            m_state, m_events, m_evidence = inputs
+            started = getattr(self, "_run_started_monotonic", None)
+            metrics = run_metrics.compute(
+                state=m_state if isinstance(m_state, Mapping) else {}, report=report, events=m_events,
+                evidence=m_evidence, released=bool(self._release_is_authorized(release_decision)),
+                exa_usage=exa_contents.usage(), calls_by_stage=stage_snapshot(),
+                elapsed_seconds=(time.monotonic() - started) if started else None, evaluation=evaluation)
+            report.setdefault("analysis_metadata", {})["run_metrics"] = _json_safe(metrics)
+            logger.info("run_metrics=%s", json.dumps(_json_safe(metrics), default=str))
+            for line in run_metrics.summary_lines(metrics):
+                logger.info("run_metrics_summary | %s", line)
+        except Exception as error:
+            logger.warning("Run metrics failed to compute: %s", type(error).__name__)
         canonical_sections = {
             "insight_evaluation": _json_safe(evaluation),
             "promising_hypotheses": _json_safe(report.get("promising_hypotheses", [])),

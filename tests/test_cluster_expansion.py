@@ -175,3 +175,37 @@ if __name__ == "__main__":
                 failures += 1
                 print(f"FAIL {name}: {type(error).__name__}: {error}")
     raise SystemExit(1 if failures else 0)
+
+
+def test_on_topic_events_found_by_a_search_are_kept_as_context():
+    """v13.10 (20 Nov 2026, RUN-FF8F59D2...): events a targeted search found that did not join the
+    target group were discarded - 23 of 24 on-topic events that run. They are now kept (as context,
+    not as growth of the group)."""
+    instance, calls = harness([[CHIPS[0]], [], []])
+    events, evidence = seed(instance, UNDERWRITING[:2])
+    result, run = expand(instance, events, evidence)
+    kept = {e["event_id"] for e in result["event_records"]}
+    assert CHIPS[0]["event_id"] in kept, "an on-topic event found by the search was thrown away"
+    assert run["rounds"][0]["new_context_event_count"] == 1
+    assert result.get("new_material_event_count", 0) == 0     # context is not counted as growth
+
+
+def test_follow_up_report_of_the_story_joins_it_by_shared_names():
+    """v13.10: a follow-up report of a single-event story counted only when the re-run clustering
+    gave it the same cluster id or both carried a mechanism tag. Shared distinctive names now count."""
+    target = {"cluster_id": "dev_forum_answers_deadline", "actors": ["Forum AI"], "mechanism_tags": [],
+              "dependency_tags": [], "event_ids": ["EVENT-T1"]}
+    existing = [{"event_id": "EVENT-T1", "underlying_event_id": "U-T1", "strategic_cluster_id": "dev_forum_answers_deadline",
+                 "title": "Forum AI found that Gemini gave Pennsylvania voters the wrong mail ballot deadline",
+                 "summary": "Forum AI tested chatbots on Pennsylvania election questions."}]
+    existing += [{"event_id": f"EVENT-X{i}", "underlying_event_id": f"U-X{i}", "strategic_cluster_id": f"c{i}",
+                  "title": f"Company {i} released a model", "summary": "A product launch."} for i in range(10)]
+    follow_up = {"event_id": "EVENT-N1", "underlying_event_id": "U-N1", "strategic_cluster_id": "dev_state_ads",
+                 "title": "Pennsylvania election officials respond to Forum AI chatbot findings",
+                 "summary": "Officials in Pennsylvania said voters should check deadlines with the state."}
+    unrelated = {"event_id": "EVENT-N2", "underlying_event_id": "U-N2", "strategic_cluster_id": "dev_other",
+                 "title": "Nvidia opened a data centre in Texas", "summary": "Nvidia expands capacity in Texas."}
+    result = R._cluster_expansion_material_information_assessment(
+        target_profile=target, existing_events=existing, new_events=[follow_up, unrelated])
+    assert result["admitted_event_ids"] == ["EVENT-N1"], result
+    assert result["context_event_ids"] == ["EVENT-N2"], result

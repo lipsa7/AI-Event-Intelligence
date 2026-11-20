@@ -542,6 +542,11 @@ class HypothesisEvidenceService:
             "if the page is about a different entity, return records=[]. A historical_case must share the "
             "MECHANISM (the same kind of commitment, rule, dependency or move), not just the sector or topic; "
             "otherwise historical_case=null. "
+            # 20 Nov 2026 (RUN-FF8F59D2: Reuters 2024 on Google restricting Gemini's election answers was kept as
+            # a record but not as a past case, and the log could not say why)
+            "Also return a top-level \"case_note\": when the page describes an earlier case but you set "
+            "historical_case=null, say in a few words why (different mechanism, different entity, no stated year, "
+            "no outcome, the case is the current development itself); otherwise empty. "
             "do not manufacture a competing explanation. review_complete=false if context is insufficient. "
             + EXPERT_VIEW_RULE + "\n"
             + json.dumps({"hypothesis": candidate, "query": context.get("query"),
@@ -637,10 +642,12 @@ class HypothesisEvidenceService:
                     "prohibited_uses": ["observed_event_count", "acting_actor_count", "sample_base_rate"],
                 },
             })
+        case_note = clean(data.get("case_note"))[:200]
         if rejected:
             # Valid records may still be retained; receipt remains incomplete.
-            return {"accepted_evidence": records, "rejected_candidates": rejected, "status": "incomplete"}
-        return {"accepted_evidence": records, "rejected_candidates": [], "status": "complete"}
+            return {"accepted_evidence": records, "rejected_candidates": rejected, "status": "incomplete",
+                    "case_note": case_note}
+        return {"accepted_evidence": records, "rejected_candidates": [], "status": "complete", "case_note": case_note}
 
 
     # v6.18: gap research for a development, independent of any hidden-insight
@@ -863,6 +870,9 @@ class HypothesisEvidenceService:
                 "precedents": sum(1 for r in result.get("accepted_evidence") or [] if r.get("historical_case")),
                 "rejected": sorted({clean(r.get("reason")) for r in result.get("rejected_candidates") or []
                                     if isinstance(r, Mapping)}),
+                # v13.13: why a page found by a precedent search gave no past case (from the review itself)
+                **({"case_note": clean(result.get("case_note"))[:200]}
+                   if gap == "precedent" and clean(result.get("case_note")) else {}),
             })
             return result
 

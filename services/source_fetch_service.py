@@ -107,7 +107,33 @@ INTERSTITIAL_MARKERS = (
     "service unavailable",
     "unsupported browser",
     "redirecting",
+    # v13.12 (20 Nov 2026): bot walls saved as articles in RUN-FF8F59D2... ("Federal Register ::
+    # Request Access", nature.com "Client Challenge", psychologytoday "A quick browser check").
+    "request access",
+    "client challenge",
+    "browser check",
+    "attention required",
+    "are you a robot",
+    "unusual traffic",
+    "complete the security check",
+    "access to this page has been denied",
 )
+
+# v13.12: a bot wall's TITLE is checked whatever the page length (a wall page can carry a long footer).
+INTERSTITIAL_TITLES = (
+    "request access", "client challenge", "browser check", "just a moment", "attention required",
+    "access denied", "are you a robot", "security check", "verify you are human", "captcha",
+)
+INTERSTITIAL_HOSTS = ("unblock.federalregister.gov", "validate.perfdrive.com", "geo.captcha-delivery.com")
+
+
+def _is_bot_wall(direct: Mapping[str, Any]) -> bool:
+    meta = direct.get("metadata") if isinstance(direct.get("metadata"), Mapping) else {}
+    title = _clean(meta.get("title")).casefold()
+    if title and any(marker in title for marker in INTERSTITIAL_TITLES):
+        return True
+    final = _clean(direct.get("final_url") or direct.get("canonical_url")).casefold()
+    return any(host in final for host in INTERSTITIAL_HOSTS)
 
 
 def _clean(value: Any) -> str:
@@ -231,6 +257,7 @@ class SourceFetchService(
                 and not _looks_like_interstitial(
                     direct_text
                 )
+                and not _is_bot_wall(direct)
             ):
                 original_service_version = _clean(
                     direct_metadata.get(

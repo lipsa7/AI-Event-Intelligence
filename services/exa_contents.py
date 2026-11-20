@@ -20,7 +20,8 @@ Cost control (owner's rule: free credits only, never a paid or unlimited run)
 - Spending is counted in units of $0.001 BEFORE each call (a failed call still counts), at Exa's
   list prices (usagepricing.com, checked against exa.ai/pricing, Jul 2026): contents $1 per 1,000
   pages = 1 unit; search $7 per 1,000 plus its 10 results' highlights = 17 units (rounded up).
-- Per run: at most EXA_MAX_CALLS_PER_RUN units (default 300 = $0.30; 0 turns Exa off).
+- Per run: at most EXA_MAX_CALLS_PER_RUN units (default 600 = $0.60; 0 turns Exa off). v13.13: was 300;
+  RUN-FF8F59D2 (20 Nov) used 292 of 300 by mid-run, so later blocked pages and failed searches got no Exa.
 - Per calendar month, across ALL runs: at most EXA_MAX_CALLS_PER_MONTH units (default 5,000 = $5),
   counted in data/exa_usage.json, which survives restarts. That is half of the $10 monthly free
   credit, so even a doubled price stays free.
@@ -51,14 +52,14 @@ DEFAULT_MONTH_CAP = 5000
 USAGE_FILE = Path(__file__).resolve().parent.parent / "data" / "exa_usage.json"
 STOP_CODES = (401, 402, 403, 429)
 SWITCH_ENV = "EXA_FALLBACK"
-DEFAULT_CAP = 300
+DEFAULT_CAP = 600
 CONTENTS_UNITS = 1
 SEARCH_UNITS = 17
 SEARCH_ENDPOINT = "https://api.exa.ai/search"
 TIMEOUT_SECONDS = 25.0
 
 _LOCK = threading.Lock()
-_STATE: Dict[str, int] = {"used": 0, "failed": 0, "refused": 0, "stopped": 0}
+_STATE: Dict[str, int] = {"used": 0, "failed": 0, "refused": 0, "stopped": 0, "pages": 0, "searches": 0}
 
 
 class ExaContentsError(Exception):
@@ -153,7 +154,7 @@ def enabled() -> bool:
 def reset_run_budget() -> None:
     """Called at the start of each run so the per-run cap applies per run (the monthly cap does not reset)."""
     with _LOCK:
-        _STATE.update(used=0, failed=0, refused=0, stopped=0)
+        _STATE.update(used=0, failed=0, refused=0, stopped=0, pages=0, searches=0)
 
 
 def usage() -> Dict[str, int]:
@@ -167,6 +168,9 @@ def _take_call(units: int = CONTENTS_UNITS) -> bool:
         month = _read_month_count(USAGE_FILE)
         if _STATE["used"] + units > cap() or month + units > month_cap():
             _STATE["refused"] += 1
+            if _STATE["refused"] == 1:
+                logger.warning("Exa budget reached (run %d/%d units, month %d/%d); no more Exa calls this run",
+                               _STATE["used"], cap(), month, month_cap())
             return False
         _STATE["used"] += units
         _write_month_count(USAGE_FILE, month + units)
@@ -214,8 +218,12 @@ def fetch_text(url: str, *, timeout: float = TIMEOUT_SECONDS, post=None) -> Opti
         reason = (failed[0].get("error") or failed[0].get("status")) if failed else "no text"
         if isinstance(reason, dict):
             reason = reason.get("tag") or reason.get("message") or "error"
+        logger.info("exa_contents page_failed url=%s reason=%s", url[:160], str(reason)[:80])
         raise ExaContentsError(f"Exa contents: {reason}")
     first = results[0]
+    with _LOCK:
+        _STATE["pages"] += 1
+    logger.info("exa_contents page_read url=%s chars=%d run_units=%d", url[:160], len(text), _STATE["used"])
     return {"url": str(first.get("url") or url), "text": text, "title": str(first.get("title") or ""),
             "published_at": str(first.get("publishedDate") or ""), "author": str(first.get("author") or "")}
 
@@ -252,6 +260,10 @@ def search(query: str, *, timeout: float = TIMEOUT_SECONDS, post=None) -> Option
         with _LOCK:
             _STATE["failed"] += 1
         raise ExaContentsError(f"Exa search failed: {type(error).__name__}") from None
+    with _LOCK:
+        _STATE["searches"] += 1
+    logger.info("exa_search query=%r results=%d run_units=%d", query[:120], len(data.get("results") or []),
+                _STATE["used"])
     out = []
     for rank, row in enumerate([r for r in (data.get("results") or []) if isinstance(r, dict)], start=1):
         url = str(row.get("url") or "")

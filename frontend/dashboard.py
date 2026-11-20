@@ -4725,6 +4725,34 @@ def explanatory_fallback_lines(report: Mapping[str, Any]) -> list[str]:
     return ["**" + (clean_text(fallback.get("label")) or "Explanatory - what the cited sources establish.") + "**"] + lines
 
 
+def render_run_metrics(report: Mapping[str, Any]) -> None:
+    """v13.13: this run's measured record (services/run_metrics.py), so runs can be compared."""
+    metadata = report_value(report, "analysis_metadata", {}) or report_sections(report).get("analysis_metadata")
+    metrics = metadata.get("run_metrics") if isinstance(metadata, Mapping) else None
+    if not isinstance(metrics, Mapping):
+        return
+    from services import run_metrics
+    grounding = metrics.get("grounding") if isinstance(metrics.get("grounding"), Mapping) else {}
+    funnel = metrics.get("insight_funnel") if isinstance(metrics.get("insight_funnel"), Mapping) else {}
+    retrieval = metrics.get("retrieval") if isinstance(metrics.get("retrieval"), Mapping) else {}
+    cost = metrics.get("cost") if isinstance(metrics.get("cost"), Mapping) else {}
+
+    def pct(value: Any) -> str:
+        return f"{value:.0%}" if isinstance(value, (int, float)) else "n/a"
+    with st.expander("Run metrics (how this run measured up)", expanded=False):
+        cols = st.columns(5)
+        cols[0].metric("Insights released", f"{funnel.get('insights_released', 0)} / {funnel.get('candidates_checked', 0)}")
+        cols[1].metric("Claim support", pct(grounding.get("claim_support_rate")))
+        cols[2].metric("Citation coverage", pct(grounding.get("citation_coverage")))
+        cols[3].metric("Past cases found", retrieval.get("past_cases_found", 0))
+        cols[4].metric("Gemini calls", cost.get("gemini_calls") if cost.get("gemini_calls") is not None else "n/a")
+        for line in run_metrics.summary_lines(metrics):
+            st.markdown("- " + _markdown_safe(line))
+        st.caption("Claim support: share of the released insights' claims that their cited sources support "
+                   "(RAGAS faithfulness). Citation coverage: share of claims citing at least one source (ALCE). "
+                   "Compare runs with `python -m tools.run_quality --last 5`.")
+
+
 def render_claim_support_check(
     report: Mapping[str, Any],
 ) -> None:
@@ -6106,6 +6134,7 @@ def main() -> None:
             st.markdown(line)
 
         render_claim_support_check(report)
+        render_run_metrics(report)
 
     # -----------------------------------------------------------------------
     # Optional executive synthesis
@@ -6336,6 +6365,7 @@ def main() -> None:
 
         if report_outcome != "abstained":
             render_claim_support_check(report)
+            render_run_metrics(report)
 
     with tab_effects:
         st.header(

@@ -1,4 +1,4 @@
-"""Print the quality gates and funnel of the latest saved report (v13, 18 Nov 2026).
+"""Print the quality gates, funnel and run metrics of the latest saved report (v13, 18 Nov 2026; metrics v13.13).
 
     python -m tools.run_quality            latest report
     python -m tools.run_quality --last 5   the last five, one line each
@@ -29,8 +29,22 @@ def main(argv=None) -> int:
     failed_latest = False
     for index, (created, question, payload) in enumerate(rows):
         data = json.loads(payload)
+        meta = (data.get("analysis_metadata") or {}) or ((data.get("sections") or {}).get("analysis_metadata") or {})
         quality = (data.get("analysis_metadata") or {}).get("quality_gates") \
             or ((data.get("sections") or {}).get("analysis_metadata") or {}).get("quality_gates")
+        metrics = meta.get("run_metrics") or ((data.get("sections") or {}).get("analysis_metadata") or {}).get("run_metrics")
+        if metrics:
+            # v13.13: the run's measured record (services/run_metrics.py)
+            from services import run_metrics
+            g, f = metrics.get("grounding") or {}, metrics.get("insight_funnel") or {}
+            if args.last > 1:
+                print(f"{created[:16]}  metrics: released {f.get('insights_released')}/{f.get('candidates_checked')}, "
+                      f"claim support {g.get('claim_support_rate')}, citation coverage {g.get('citation_coverage')}, "
+                      f"repeats caught {f.get('repeats_of_earlier_caught')}")
+            else:
+                print(f"{created[:16]}  {question[:40]!r}: run metrics")
+                for line in run_metrics.summary_lines(metrics):
+                    print("  " + line)
         if not quality:
             print(f"{created[:16]}  {question[:40]!r}: no quality gates (report made before v13)")
             continue

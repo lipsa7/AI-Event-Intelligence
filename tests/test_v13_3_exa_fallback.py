@@ -175,3 +175,25 @@ def test_combined_search_uses_exa_only_when_free_providers_fail(monkeypatch):
     assert out["provider_stats"]["exa_search"]["status"] == "ok"
     out = CombinedSearch(Works(), None).search("regulator fine")
     assert len(seen) == 1 and "exa_search" not in out["provider_stats"]     # not called: free results exist
+
+
+@pytest.mark.parametrize("title,final_url", [
+    ("Federal Register :: Request Access", "https://unblock.federalregister.gov/"),
+    ("Client Challenge", "https://www.nature.com/articles/x"),
+    ("A quick browser check, then you're on your way.", "https://www.psychologytoday.com/x"),
+])
+def test_bot_wall_with_a_long_page_is_not_an_article(monkeypatch, title, final_url):
+    """v13.12 (RUN-FF8F59D2, 20 Nov): three bot walls were saved as articles; their titles give them away
+    even when the page is long. They now go to the Exa fallback like any blocked page."""
+    from services import source_fetch_service as sfs
+    from services.source_fetch_service_direct import SourceFetchService as Direct
+
+    def wall(self, url, timeout_seconds=12.0):
+        return {"text_content": "Some footer text about the site and its policies. " * 60,
+                "final_url": final_url, "metadata": {"title": title}}
+    monkeypatch.setattr(Direct, "fetch", wall)
+    seen = []
+    real = exa.fetch_text
+    monkeypatch.setattr(exa, "fetch_text", lambda url, **kw: real(url, post=ok_post(seen)))
+    source = sfs.SourceFetchService().fetch("https://news.example.com/story")
+    assert source["metadata"]["retrieval_mode"] == "exa_contents_fallback" and len(seen) == 1

@@ -644,3 +644,80 @@ on v13.8); no after-insights reserve below 480 (main path 160 at 260). Full suit
 
 **Tests:** 3 new tests (24 in `tests/test_v13_quality_regression.py`); each fails on c71c735 and
 passes now. Full suite: no new failures.
+
+# v13.11: follow-up searches keep what they find (20 Nov 2026)
+Found in the log of RUN-FF8F59D21FDD4ACDB17E5B8F (20 Nov, topic "artificial intelligence"). The
+three stories chosen for follow-up searches were the right kind (a chatbot giving voters a wrong
+deadline, Meta and Google losing control of agents, an assistant launch), and the searches found
+24 on-topic events across 6 rounds - but only 1 was kept, and the searches stopped after 2 rounds
+per story.
+- **Why:** a new event counted only when the clustering, re-run on the grown corpus each round, put
+  it in the target story's cluster, or when both carried the same mechanism or dependency tag. The
+  three target stories were single-event clusters whose ids do not survive re-clustering, and most
+  events carry no tags. Every other event was discarded - not added to the corpus at all.
+- **Fix 1: follow-ups recognised by names.** A new event also belongs to the target story when it
+  shares two distinctive names with it (or the target's actor and one distinctive name). A name is
+  distinctive when it appears in at most 3 events or 10% of the corpus, so "OpenAI" or "Google" in
+  an AI run do not tie unrelated stories together.
+- **Fix 2: other on-topic finds are kept as context.** An event that passed the run's topic
+  admission but is not part of the target story (a comparable case, a regulator's response
+  elsewhere) is now kept in the corpus for the analysis, logged as `new_context_event_count`. It
+  does not count as growth of the target story, so the stop rule is unchanged.
+
+Still open, from the same log (not changed here): the precedent search reviewed relevant pages
+(Reuters, March 2024: Google restricted Gemini's answers to election questions) but the review
+model marked none as a past case; GDELT was rate-limited for all gap searches and NewsAPI only
+covers the last 30 days, so precedent searches depend on Google search.
+
+**Tests:** 2 new tests in `tests/test_cluster_expansion.py`; both fail on 368b421 and pass now.
+Full suite: no new failures.
+
+# v13.10 (included with v13.11): .env settings reach the run (20 Nov 2026)
+Found in the log of RUN-FF8F59D21FDD4ACDB17E5B8F: no "gemini_call_cap" line, so the run had no
+call ceiling although .env set EVENT_INTELLIGENCE_MAX_GEMINI_CALLS=480. The only .env loader
+(agents/strategic_inference_agent.py) read the Gemini key and stopped. New services/project_env.py
+loads every plain NAME=value line of the project .env at startup (the process environment wins;
+values are never logged; not applied while pytest runs). The orchestrator calls it before its module
+constants read the environment. **Tests:** tests/test_v13_10_project_env.py (2). Full suite: no new failures.
+
+# v13.12: no insight shown twice; bot walls never saved as articles (20 Nov 2026)
+Found in RUN-FF8F59D21FDD4ACDB17E5B8F (20 Nov) and the saved reports.
+- **Insights earlier reports showed are not shown again** (owner: the breach-delay insight came back
+  in about 12 runs). New services/earlier_insights.py reads the insights of earlier reports on the
+  same topic (reports.sqlite3: hidden insights, lab theses, briefing implications) and the rating
+  sheet (insight_review_90.csv). Word overlap does not catch these repeats: the 20 Nov candidate
+  shared at most 22% of its weighted words with earlier versions of the same thesis. So the closest
+  earlier insights by overlap are put to the model in ONE call that asks whether the new insight makes
+  the same core claim in other words; a new fact that changes the earlier conclusion is not a repeat.
+  Used (1) before any claim check in the release loop (reason `already_shown_in_earlier_report`; the
+  next synthesis is told which insight it repeated), (2) on the lab's generated theses before
+  evolution (funnel `repeats_of_earlier_reports`), and (3) in the lab prompt, which lists the 10 most
+  recent earlier insights as "already shown". If the model fails, only near-verbatim copies are caught.
+- **Bot walls are not articles.** "Federal Register :: Request Access", nature.com "Client Challenge"
+  and psychologytoday "A quick browser check" were saved as articles. Their titles (checked whatever
+  the page length) and wall hosts (unblock.federalregister.gov) now mark them as blocked, so the page
+  is read through the Exa fallback instead.
+**Tests:** tests/test_v13_12_earlier_insights.py (6) and 3 in tests/test_v13_3_exa_fallback.py.
+Full suite: no new failures. Tests never read the owner's saved reports (conftest).
+
+# v13.13: every run measured; Exa budget and logging; why a page gave no past case (20 Nov 2026)
+From RUN-FF8F59D21FDD4ACDB17E5B8F (20 Nov) and the owner's request to measure each run.
+- **Run metrics** (new services/run_metrics.py), computed where the report is saved, after the release
+  decision; saved as `analysis_metadata.run_metrics`, logged as `run_metrics=` plus readable
+  `run_metrics_summary |` lines, shown on the dashboard ("Run metrics" under the claim check) and
+  printed by `python -m tools.run_quality` (`--last 5` compares runs). Groups: retrieval (sources,
+  events kept by the topic check, research pages reviewed/kept, past cases, Exa pages/searches/units);
+  insight funnel (checked, released, release rate, rejections by reason, repeats caught, lab theses);
+  grounding (claim support rate = RAGAS faithfulness, citation coverage = ALCE, publishers per insight,
+  share with a falsifier or watch signal); judge; cost (Gemini calls by stage, per released insight,
+  run time). No model calls.
+- **Exa per-run budget 300 -> 600 units** (about $0.60; the $5 monthly cap is unchanged). The 20 Nov run
+  used 292 of 300 by mid-run. Every Exa page read, failed page and search is now logged, and a warning
+  is logged once when the budget is reached.
+- **Why a precedent page gave no past case.** The page review returns `case_note` (different mechanism,
+  different entity, no stated year, no outcome...) and it is logged with the page in
+  `gap_research_sources`. Reuters 2024 (Google restricting Gemini's election answers) was kept as a
+  record but not as a past case on 20 Nov, and nothing said why.
+- Not changed: skipping terms/policy pages before fetching. One of the four such pages on 20 Nov was
+  relevant evidence (Google Cloud's generative-AI indemnity terms, for the "who bears the risk" question).
+**Tests:** tests/test_v13_13_run_metrics.py (6). Full suite: no new failures.

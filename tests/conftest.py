@@ -49,3 +49,14 @@ def _no_paid_exa_calls_in_tests(monkeypatch, tmp_path):
         monkeypatch.setattr(exa_contents, "USAGE_FILE", tmp_path / "exa_usage.json")
     except Exception:
         pass
+
+
+@pytest.fixture(autouse=True)
+def _no_earlier_reports_in_tests(monkeypatch):
+    """v13.12: the owner's saved reports never change test results; tests of the earlier-insight
+    check supply their own."""
+    try:
+        from services import earlier_insights
+        monkeypatch.setattr(earlier_insights, "load", lambda topic="", data_dir=None: [])
+    except Exception:
+        pass
