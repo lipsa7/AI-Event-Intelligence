@@ -6219,6 +6219,10 @@ class ResearchOrchestratorService:
             candidates=raw_candidates,
             state=state,
         )
+        # v13.15 (20 Nov 2026): news-event screen and Exa top-up (services/discovery_screen.py).
+        raw_candidates = self._screen_and_top_up_discovery(
+            topic=topic, candidates=raw_candidates, state=state, max_sources=max_sources,
+            queries=discovery_queries, phase=discovery_phase)
 
         state[
             "source_discovery_search_failures"
@@ -7981,6 +7985,45 @@ class ResearchOrchestratorService:
             except Exception:
                 pass
         return self._discovery_topic_match(topic, text)
+
+    def _screen_and_top_up_discovery(self, *, topic: str, candidates: Sequence[Mapping[str, Any]],
+                                     state: dict[str, Any], max_sources: int, queries: Sequence[str],
+                                     phase: str) -> list[dict[str, Any]]:
+        """v13.15 (20 Nov 2026). RUN-FF8F59D2... ("artificial intelligence"): about a third of the 20
+        source slots went to pages that are ABOUT the topic's words but report no event - a film called
+        "Artificial", a Z80 hobby page, a dictionary's word of the year, a release-site post. Embedding
+        relevance cannot separate them (they are on topic); whether a page reports a concrete event is
+        a judgment, so ONE model call screens the headlines before any page is fetched
+        (services/discovery_screen.py). On the first search, when too few news reports remain, Exa
+        search tops the list up within its free-credit budget. Never fatal: on any failure the
+        candidates are kept as they were."""
+        from services import discovery_screen
+
+        kept = [dict(c) for c in candidates]
+
+        def ask(prompt: str) -> Any:
+            return self._ask_briefing_model(prompt)
+        try:
+            kept, screen = discovery_screen.screen(topic, kept, ask=ask)
+            log = list(state.get("source_discovery_screen") or [])
+            log.append({"phase": phase, **screen})
+            state["source_discovery_screen"] = _json_safe(log[-12:])
+            if screen.get("dropped"):
+                logger.info("discovery_screen phase=%s kept=%s dropped=%s examples=%s", phase, screen["kept"],
+                            screen["dropped"], json.dumps(screen.get("dropped_examples", [])[:6], ensure_ascii=False))
+        except Exception as error:
+            logger.warning("Discovery screen failed: %s", type(error).__name__)
+        if phase == "initial":
+            try:
+                added = discovery_screen.exa_top_up(topic, kept, queries, target=max(int(max_sources or 0), 12),
+                                                    ask=ask)
+                if added:
+                    kept.extend(added)
+                    state["source_discovery_exa_top_up"] = len(added)
+                    logger.info("discovery_exa_top_up added=%d", len(added))
+            except Exception as error:
+                logger.warning("Exa discovery top-up failed: %s", type(error).__name__)
+        return kept
 
     @classmethod
     def _filter_discovery_candidates_by_topic(

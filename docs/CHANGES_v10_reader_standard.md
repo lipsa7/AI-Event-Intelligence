@@ -756,3 +756,22 @@ The repeat check compared only with earlier reports of exactly the same topic te
 "AI governance" run were not checked in an "artificial intelligence" run. Earlier reports of every topic
 are now loaded, the same topic's first (so the prompt's "already shown" list still shows those); the
 shortlist and the model call decide as before. **Tests:** test_v13_12_earlier_insights.py updated.
+
+# v13.15: search results screened for real news before fetching; more Exa where free search is thin (20 Nov 2026)
+From RUN-FF8F59D21FDD4ACDB17E5B8F ("artificial intelligence"): about a third of the 20 source slots went to
+pages that mention the topic but report no event (the trailer for the film "Artificial", "Artificial
+Intelligence for the Z80", Cambridge Dictionary's word of the year, a release-site post).
+- **News-event screen** (new services/discovery_screen.py): after the topic filter and before any page is
+  fetched, ONE model call per discovery search reads the headlines (site, headline, description) and names
+  the results that do not report a concrete event (films, games, hobby projects, tutorials, reviews,
+  listicles, dictionary/culture pieces, satire, access pages). Embedding relevance cannot do this: those
+  pages are on topic. Fail-open (a failed call, or one that would drop everything, keeps all results);
+  "when unsure, keep it". Dropped headlines and reasons are logged (`discovery_screen`) and saved in
+  `source_discovery_screen`.
+- **Exa top-up on the first search**: when fewer than max(max_sources, 12) news results remain, two Exa
+  searches add results (new URLs only), screened the same way. Within the Exa free-credit budget.
+- **Exa also when free search is thin**: research searches (gaps, precedents, challenge) now add Exa when the
+  free providers return fewer than 3 results or one of them failed (GDELT was rate-limited on every gap
+  search on 20 Nov while NewsAPI returned a few results, so Exa never ran for them). Before, only when
+  they returned nothing.
+**Tests:** tests/test_v13_15_discovery.py (5; real headlines from the 20 Nov run). Full suite: no new failures.

@@ -168,7 +168,8 @@ def test_combined_search_uses_exa_only_when_free_providers_fail(monkeypatch):
 
     class Works:
         def search(self, query, **kw):
-            return {"results": [{"url": "https://news.example.com/a", "title": "A"}], "provider_stats": {}}
+            return {"results": [{"url": f"https://news.example.com/{n}", "title": "A"} for n in range(3)],
+                    "provider_stats": {}}
 
     out = CombinedSearch(RateLimited(), None).search("regulator fine")
     assert [r["provider"] for r in out["results"]] == ["exa_search"]

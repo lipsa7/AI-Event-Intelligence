@@ -230,6 +230,8 @@ class CombinedSearch:
     reported, so a failure of one never reads as "no evidence exists".
     """
 
+    EXA_WHEN_FEWER_THAN = 3
+
     def __init__(self, primary: Any, grounded: GeminiGroundedSearch | None) -> None:
         self.primary = primary
         self.grounded = grounded
@@ -249,14 +251,21 @@ class CombinedSearch:
             stats.update(raw.get("provider_stats") or {})
         elif isinstance(raw, list):
             results.extend(item for item in raw if isinstance(item, Mapping))
-        if not results:
+        free_failed = any(isinstance(v, Mapping) and (str(v.get("status") or "").casefold() == "failed"
+                                                       or "RATE" in str(v.get("outcome") or v.get("error") or "").upper())
+                          for v in stats.values())
+        if len(results) < self.EXA_WHEN_FEWER_THAN or free_failed:
             # v13.4 (20 Nov 2026): free providers failed or found nothing (RUN-87BF: GDELT and NewsAPI
             # rate-limited) - Exa search, within its free-credit budget (services/exa_contents.py).
+            # v13.15: also when they found fewer than EXA_WHEN_FEWER_THAN results or one of them failed
+            # (RUN-FF8F59D2: GDELT rate-limited on every gap search while NewsAPI returned a few
+            # results, so Exa never ran for them).
             try:
                 from services import exa_contents
                 found = exa_contents.search(query)
                 if found is not None:
-                    results.extend(found)
+                    known = {_clean(item.get("url")) for item in results}
+                    results.extend(item for item in found if _clean(item.get("url")) not in known)
                     stats["exa_search"] = {"status": "ok", "results": len(found)}
             except Exception as error:
                 stats["exa_search"] = {"status": "failed", "error": _clean(error)[:120]}
