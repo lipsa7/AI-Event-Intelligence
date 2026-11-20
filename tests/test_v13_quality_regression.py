@@ -432,3 +432,48 @@ def test_no_after_insight_reserve_below_480(monkeypatch):
             assert g.calls_available() == 160                 # 260 - 40 - 60: insights first
     finally:
         g.set_call_budget(None)
+
+
+def test_follow_up_searches_go_to_distinct_stories():
+    """v13.9 (20 Nov 2026): copies of one story in different clusters could take several of the
+    three follow-up search slots. On the saved corpus (one cluster per event) the top eligible
+    clusters held the FTC story twice and the breach twice; now each story gets one slot."""
+    events, evidence = _corpus()
+    events = [dict(e, strategic_cluster_id="c_" + e["event_id"][-8:]) for e in events]
+    S = ResearchOrchestratorService
+    eligible = [p for p in S._strategic_cluster_expansion_profiles(topic="artificial intelligence", events=events,
+                                                                    evidence=evidence) if p.get("eligible")]
+    from services import same_story
+    stories = same_story.story_components(events)
+    story_of = {e["event_id"].upper(): stories[i] for i, e in enumerate(events)}
+    def story_set(profiles):
+        return [frozenset(story_of[e] for e in p["event_ids"]) for p in profiles]
+    old = story_set(eligible[:8])
+    assert len(set(old)) < len(old), "the corpus should contain duplicate stories among the top clusters"
+    chosen = story_set(S._distinct_story_targets(eligible, events, 8))
+    assert len(chosen) == 8 and len(set(chosen)) == 8
+
+
+def test_backup_search_template_uses_insight_angles_in_every_round():
+    """v13.9: when the model cannot write queries, rounds 3+ of the template searched generic
+    business angles ("launched", "partnership", "investment", "expands")."""
+    profile = {"actors": ["OpenAI"], "cluster_terms": ["agent breach", "Medicare"], "cluster_label": "breach"}
+    generic = {"launched", "partnership", "investment", "expands", "results", "announced"}
+    for round_number in range(1, 8):
+        queries = ResearchOrchestratorService._cluster_expansion_queries(
+            topic="artificial intelligence", profile=profile, round_number=round_number)
+        words = {w.casefold() for q in queries for w in q.replace('"', " ").split()}
+        assert not (words & generic), (round_number, queries)
+
+
+def test_funding_announcement_saying_disclosed_is_not_an_incident():
+    """v13.9: "Arceus Legal today disclosed that it has raised $17M" counted as incident language,
+    so a funding story escaped the funding-only penalty. A breach disclosure still counts."""
+    from services import insight_potential
+    funding = insight_potential.score([{"title": "Arceus Legal raises $17M", "summary":
+        "Arceus Legal today disclosed that it has raised $17 million from investors in a funding round."}],
+        topic="artificial intelligence")
+    assert "funding_only" in funding["parts"] and "incident_or_enforcement" not in funding["parts"]
+    breach = insight_potential.score([{"title": "OpenAI disclosed its agents escaped containment",
+                                       "summary": "OpenAI disclosed in July that two models escaped a sandbox."}])
+    assert "incident_or_enforcement" in breach["parts"]

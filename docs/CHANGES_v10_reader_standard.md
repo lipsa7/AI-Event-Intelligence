@@ -627,3 +627,20 @@ counted as held for others and it was skipped although its calls were reserved. 
 the whole budget at 480 calls (main path 310, optional work stops below 15, then the briefing 70,
 lab 60 and final checks 40 all get their calls); focus research decides inside its own path (fails
 on v13.8); no after-insights reserve below 480 (main path 160 at 260). Full suite: no new failures.
+
+# v13.9: follow-up searches go to distinct stories, with insight angles in every round (20 Nov 2026)
+- **One follow-up search slot per story** (`_distinct_story_targets`). The three clusters that get
+  follow-up searches were the top three by insight potential, but copies of one story can sit in
+  different clusters (each a single event). On the saved corpus the top eligible clusters held the
+  FTC story twice and the breach twice. Each story now gets at most one slot (same-story test:
+  `services/same_story.py`), so the slots reach three different stories.
+- **Backup query template, rounds 3 and later.** When the model cannot write the queries, rounds 3+
+  searched generic business angles ("launched", "partnership", "investment", "expands"), which
+  return more product and funding coverage. They now follow the same angles as the model-written
+  queries: the next step or deadline, the figures and timeline, the newest reports and responses.
+- **"Disclosed" in a funding announcement is not an incident.** "Arceus Legal today disclosed that
+  it has raised $17M" counted as incident language, so the story escaped the funding-only penalty.
+  "Disclosed" next to funding words or "not"/"terms" no longer counts; a breach disclosure still does.
+
+**Tests:** 3 new tests (24 in `tests/test_v13_quality_regression.py`); each fails on c71c735 and
+passes now. Full suite: no new failures.

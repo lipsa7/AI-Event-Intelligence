@@ -15510,6 +15510,33 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
                 return match.group(1)
         return ""
 
+    @staticmethod
+    def _distinct_story_targets(eligible: Sequence[Mapping[str, Any]], events: Sequence[Mapping[str, Any]],
+                                limit: int) -> list[Mapping[str, Any]]:
+        """v13.9 (20 Nov 2026): the clusters that get follow-up searches, best first, at most one
+        per news story. Copies of one story from different outlets can sit in different clusters
+        (each a single event); before, two or three of the three search slots could go to the same
+        story (the same duplicate problem exploration had). Same-story test: services/same_story."""
+        try:
+            from services import same_story
+            listed = [e for e in events if isinstance(e, Mapping)]
+            story_of_index = same_story.story_components(listed)
+            story_of = {_clean(e.get("event_id")).upper(): story_of_index[i] for i, e in enumerate(listed)}
+        except Exception:
+            return list(eligible)[:limit]
+        chosen: list[Mapping[str, Any]] = []
+        used: set[int] = set()
+        for profile in eligible:
+            ids = {_clean(e).upper() for e in (profile.get("event_ids") or [])}
+            stories = {story_of[e] for e in ids if e in story_of}
+            if stories and stories <= used:
+                continue
+            chosen.append(profile)
+            used |= stories
+            if len(chosen) >= limit:
+                break
+        return chosen
+
     @classmethod
     def _strategic_cluster_expansion_profiles(
         cls,
@@ -15748,14 +15775,16 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
         elif round_number == 2:
             queries = [f"{anchor} delay disclosed", f"{subject} other companies", f"{subject} precedent"]
         else:
-            # Later rounds look for OTHER actors doing the same thing: the
-            # development's own terms without the actors already found, so the
-            # group can grow beyond the companies it started with.
+            # v13.9 (20 Nov 2026): later rounds follow the same insight angles as the model-written
+            # queries (CLUSTER_QUERY_LATER_ANGLES: next step or deadline, the numbers, the newest
+            # reports). They used generic business angles ("launched", "partnership", "investment",
+            # "expands"), which return more product and funding coverage.
+            # (The known actors stay out of these queries, as before v13.9, so the group can grow
+            # beyond the organisations it started with.)
             angles = [
-                (f"{subject} launched", f"{subject} partnership"),
-                (f"{subject} investment", f"{subject} results"),
-                (f"{subject} regulator", f"{subject} delayed"),
-                (f"{subject} announced", f"{subject} expands"),
+                (f"{subject} next step deadline", f"{subject} vote decision"),
+                (f"{subject} figures", f"{subject} timeline"),
+                (f"{subject} latest", f"{subject} response"),
             ]
             first, second = angles[(round_number - 3) % len(angles)]
             queries = [first, second]
@@ -16161,9 +16190,9 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
         initial_profiles = self._strategic_cluster_expansion_profiles(
             topic=topic, events=current_events, evidence=current_evidence
         )
-        targets = [item for item in initial_profiles if item.get("eligible")][
-            :DEEP_CLUSTER_EXPANSION_MAX_CLUSTERS
-        ]
+        targets = self._distinct_story_targets(
+            [item for item in initial_profiles if item.get("eligible")], current_events,
+            DEEP_CLUSTER_EXPANSION_MAX_CLUSTERS)
         result: dict[str, Any] = {
             "attempted": False,
             "selected_source_ids": current_sources,

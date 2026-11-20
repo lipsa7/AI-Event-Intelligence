@@ -78,6 +78,16 @@ TOPIC_IS_FUNDING = re.compile(r"\b(fund\w*|invest\w*|venture|vc|start-?ups?|rais
 TOPIC_IS_LAUNCHES = re.compile(r"\b(launch\w*|products?|releases?|models?|features?|devices?)\b", re.I)
 
 
+def _real_incident(text: str, match: "re.Match[str]") -> bool:
+    """v13.9 (20 Nov 2026): "disclosed" is incident language for a breach ("disclosed in September")
+    but not in "Arceus Legal today disclosed that it has raised $17M" or "terms were not disclosed",
+    which let funding stories escape the funding-only penalty."""
+    if not match.group(0).casefold().startswith("disclos"):
+        return True
+    window = text[max(0, match.start() - 25):match.end() + 60]
+    return not (FUNDING.search(window) or re.search(r"\b(not|terms|undisclosed)\b", window, re.I))
+
+
 def score(events: Sequence[Mapping[str, Any]], evidence: Sequence[Mapping[str, Any]] = (),
           topic: str = "") -> dict[str, Any]:
     """Insight potential of one story from its events and evidence records.
@@ -90,7 +100,7 @@ def score(events: Sequence[Mapping[str, Any]], evidence: Sequence[Mapping[str, A
     parts: dict[str, float] = {}
     if OFFICIAL.search(blob):
         parts["official_actor"] = WEIGHTS["official_actor"]
-    if INCIDENT.search(blob):
+    if any(_real_incident(blob, m) for m in INCIDENT.finditer(blob)):
         parts["incident_or_enforcement"] = WEIGHTS["incident_or_enforcement"]
     if CHANGE.search(blob):
         parts["change_vs_baseline"] = WEIGHTS["change_vs_baseline"]
