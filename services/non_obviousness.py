@@ -48,7 +48,7 @@ from collections import Counter
 from datetime import datetime, timezone
 from typing import Any, Callable, Mapping, Sequence
 
-VERSION = "non-obviousness-v4-plain-meaning"
+VERSION = "non-obviousness-v5-computed-gap-route"
 CONSTRAINT_GAPS = frozenset({"policy", "dependency", "numbers", "precedent", "pattern"})  # v6.23: + computed pattern
 SUFFICIENT = frozenset({"supported", "inference_supported"})
 MAX_CONCLUSIONS = 2      # inferred conclusion sentences tested per candidate
@@ -125,6 +125,29 @@ def is_constraint(record: Any) -> bool:
         return False
     return bool(record.get("historical_case") or gap in CONSTRAINT_GAPS
                 or (record.get("analytical_context_only") and not gap))
+
+
+def computed_gap(support: Sequence[str], by_id: Mapping[str, Mapping[str, Any]]) -> dict[str, Any] | None:
+    """v13.11: a date or amount gap computed (services/delta_extractor) from the claim's own
+    supporting records, or None."""
+    try:
+        from services import delta_extractor
+    except Exception:
+        return None
+    rows = []
+    for eid in support:
+        record = by_id.get(eid)
+        if not isinstance(record, Mapping):
+            continue
+        text = " ".join(_clean(record.get(k)) for k in ("text", "claim", "quote", "exact_excerpt", "source_excerpt")
+                        if _clean(record.get(k)))
+        if text:
+            rows.append({"fact_id": eid, "text": text, "development": "claim",
+                         "date": _clean(record.get("published_at") or record.get("source_published_at"))})
+    gaps = delta_extractor.compute(rows, limit=1) if rows else []
+    if not gaps:
+        return None
+    return {k: gaps[0].get(k) for k in ("kind", "days", "ratio", "fact_ids", "text") if gaps[0].get(k) is not None}
 
 
 def commentary_records(evidence: Sequence[Mapping[str, Any]]) -> list[Mapping[str, Any]]:
@@ -257,6 +280,19 @@ def check(*, grounding: Any, evidence: Sequence[Mapping[str, Any]], events: Sequ
             entry["route"] = "constraint"
             entry["constraint_evidence_ids"] = constraints
             spanning.append((claim, devs, entry))
+        elif len(devs) == 1 and (gap := computed_gap(support, by_id)):
+            # v13.11 (20 Nov 2026): the COMPUTED-GAP route. A gap code computes from one story's own
+            # records (an event in May disclosed in September; two amounts far apart) is a fact no
+            # single report states; the generator is told to build on it (computed gaps in the
+            # prompt; the v13.6 second route), but test 1 rejected every such insight as resting on
+            # one development (RUN-FF8F59D2...: "the public learned on 18 September that Google's
+            # Gemini agent breached three companies in May" - the kind of insight the owner kept).
+            # Tests P, 2 and 2b still apply: its plain meaning must not be stated by its own sources,
+            # by the headlines or by published experts. Test 3 is skipped: by construction the
+            # story's records support a gap computed from them.
+            entry["route"] = "computed_gap"
+            entry["computed_gap"] = gap
+            spanning.append((claim, devs, entry))
         else:
             entry["failed"] = "conclusion_single_development"
     if not spanning:
@@ -388,6 +424,10 @@ def check(*, grounding: Any, evidence: Sequence[Mapping[str, Any]], events: Sequ
         cited = _ids(claim.get("cited_evidence_ids")) or _ids(claim.get("evidence_ids"))
         cited = list(dict.fromkeys(cited + _ids(claim.get("supporting_evidence_ids"))))
         background = [eid for eid in cited if not dev_of.get(eid)]
+        if entry.get("route") == "computed_gap":
+            entry["single_development_status"] = "not_applicable:computed_gap"
+            passing.append(entry)
+            continue
         if entry.get("route") == "constraint":
             # Ablate the constraint: the development's records alone must NOT suffice.
             background = [eid for eid in background if not is_constraint(by_id.get(eid))]

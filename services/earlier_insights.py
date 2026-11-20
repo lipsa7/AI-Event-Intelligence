@@ -9,7 +9,7 @@ same story, so every run rebuilt the same thesis and spent its checks on it.
 
 What it does
 ------------
-* ``load(topic)``: insight texts from earlier reports on the same topic (data/reports.sqlite3: the
+* ``load(topic)``: insight texts from earlier reports, the same topic's first, then other topics (data/reports.sqlite3: the
   hidden insights, lab theses and briefing implications of each report's current revision) and the
   owner's rating sheet (data/insight_review_90.csv, column ``insight``).
 * ``repeats(texts, earlier, ask)``: for each new insight, the earlier insight it repeats, or "".
@@ -78,13 +78,16 @@ def load(topic: str = "", data_dir: Path | None = None) -> list[str]:
         finally:
             db.close()
         wanted = _clean(topic).casefold()
+        # v13.14 review: reports on OTHER topics count too ("AI governance" insights are repeats in an
+        # "artificial intelligence" run); the same topic's come first, so the prompt list shows them.
+        same, other = [], []
         for question, payload in rows:
-            if wanted and _clean(question).casefold() != wanted:
-                continue
             try:
-                texts += _texts_of_report(json.loads(payload))
+                found = _texts_of_report(json.loads(payload))
             except Exception:
                 continue
+            (same if not wanted or _clean(question).casefold() == wanted else other).extend(found)
+        texts += same + other
     except Exception:
         pass
     try:

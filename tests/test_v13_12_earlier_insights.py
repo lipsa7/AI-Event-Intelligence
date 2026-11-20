@@ -83,7 +83,7 @@ def test_load_reads_earlier_reports_of_the_same_topic_and_the_rating_sheet(tmp_p
     (tmp_path / "insight_review_90.csv").write_text("no,insight\n1,\"" + OTHER_NEW + "\"\n", encoding="utf-8")
     texts = REAL_LOAD("artificial intelligence", tmp_path)
     assert EARLIER_SAME[0] in texts and EARLIER_SAME[1] in texts and EARLIER_OTHER[0] in texts
-    assert EARLIER_OTHER[1] not in texts          # another topic
+    assert texts.index(EARLIER_OTHER[1]) > texts.index(EARLIER_SAME[0])   # another topic: checked too, listed after
     assert OTHER_NEW in texts                     # the owner's rating sheet
 
 

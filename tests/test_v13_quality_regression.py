@@ -477,3 +477,49 @@ def test_funding_announcement_saying_disclosed_is_not_an_incident():
     breach = insight_potential.score([{"title": "OpenAI disclosed its agents escaped containment",
                                        "summary": "OpenAI disclosed in July that two models escaped a sandbox."}])
     assert "incident_or_enforcement" in breach["parts"]
+
+
+def _gap_check(plain_status: str, texts=("Google's Gemini agent breached three companies in May.",
+                                         "The Wall Street Journal reported the breach on 18 September.")):
+    """One story (two reports of it), no context record; the conclusion rests on a May -> September gap."""
+    from services import non_obviousness
+    events = [{"event_id": "EVENT-G1", "underlying_event_id": "U-G", "title": "Gemini agent breached companies"},
+              {"event_id": "EVENT-G2", "underlying_event_id": "U-G", "title": "WSJ reports Gemini breach"}]
+    evidence = [{"evidence_id": "EV-G1", "event_id": "EVENT-G1", "text": texts[0], "published_at": "2026-09-18"},
+                {"evidence_id": "EV-G2", "event_id": "EVENT-G2", "text": texts[1], "published_at": "2026-09-18"}]
+    grounding = {"claims": [{"claim_id": "C1", "epistemic_type": "hidden_insight",
+                             "grounding_status": "inference_supported",
+                             "claim_text": "The companies Gemini breached learned of it about four months later, "
+                                           "so disclosure depends on the model provider, not the victims.",
+                             "cited_evidence_ids": ["EV-G1", "EV-G2"], "supporting_evidence_ids": ["EV-G1", "EV-G2"]}]}
+    def ground(claims, records):
+        ids = [r["evidence_id"] for r in records]
+        if ids == [non_obviousness.OBVIOUS_EVIDENCE_ID]:
+            return {"claims": [{"grounding_status": "unsupported"} for _ in claims]}
+        return {"claims": [{"grounding_status": plain_status} for _ in claims]}
+    def ask(prompt):
+        if "ONE plain sentence" in prompt:
+            return {"plain": "The breached companies learned of the breach about four months later."}
+        return {"takeaways": ["Google's Gemini agent breached three companies."]}
+    return non_obviousness.check(grounding=grounding, evidence=evidence, events=events, ground=ground, ask=ask)
+
+
+def test_insight_built_on_a_computed_gap_in_one_story_is_not_rejected_for_being_one_story():
+    """v13.11 (20 Nov 2026, RUN-FF8F59D2...): the generator is told to build on a computed gap (May
+    breach, September disclosure), but the non-obviousness check rejected every such insight as
+    "conclusion_single_development". The gap is now a route of its own; the plain-meaning, headline
+    and expert checks still apply."""
+    result = _gap_check("unsupported")
+    assert result["passed"], result
+    assert result["claims"][0]["route"] == "computed_gap"
+
+
+def test_computed_gap_insight_still_fails_when_a_source_states_it_plainly():
+    result = _gap_check("supported")
+    assert not result["passed"] and result["reasons"] == ["plain_meaning_restates_sources"], result
+
+
+def test_one_story_without_a_gap_or_context_is_still_rejected():
+    result = _gap_check("unsupported", texts=("Google's Gemini agent breached three companies.",
+                                              "The Wall Street Journal reported the breach."))
+    assert result["reasons"] == ["conclusion_single_development"], result

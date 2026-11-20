@@ -157,6 +157,25 @@ def test_exploration_runs_when_no_candidate_passes_and_its_candidate_is_gated(mo
     assert state["claim_support_gate"]["exploration"]["combinations"]
 
 
+def test_an_explored_candidate_gets_its_own_repair_after_the_run_wide_retries_are_used(monkeypatch):
+    """v13.14 (20 Nov 2026, RUN-FF8F59D2...): the run-wide limit of extra attempts was used up by the
+    first candidate, so the Forum AI election candidate - failed on one premise - was never repaired.
+    Each explored story's candidate now gets one repair of its own when its failure is repairable."""
+    monkeypatch.setattr(ros, "DEEP_CLAIM_GATE_EXTRA_SYNTHESES", 0)
+    events, evidence = _events_and_evidence()
+    obj = make_orchestrator(verdicts={"INSIGHTREV-ONE": FAILING, "INSIGHTREV-EXPLORED": FAILING,
+                                      "INSIGHTREV-FIXED": PASSING},
+                            new_candidates=[[candidate("EXPLORED")], [candidate("FIXED")]])
+    state = {"warnings": [], "run_id": "RUN-R"}
+    released, _, _ = obj._claim_supported_release(
+        topic="ai", candidates=[candidate("ONE")], grounded={"INSIGHTREV-ONE": FAILING()}, events=events,
+        evidence=evidence, graph_context={}, constraints={}, blueprint={}, profile=DEEP_PROFILE, state=state)
+    origins = [a["origin"] for a in state["claim_support_gate"]["attempts"]]
+    assert origins[:3] == ["pipeline", "exploration", "repair"], origins
+    assert [r["insight_revision_id"] for r in released] == ["INSIGHTREV-FIXED"]
+    assert state["claim_support_gate"]["exploration_repairs"] == 1
+
+
 def test_exploration_can_be_switched_off(monkeypatch):
     monkeypatch.setattr(ros, "DEEP_CLAIM_GATE_EXTRA_SYNTHESES", 0)
     monkeypatch.setattr(ros, "INSIGHT_EXPLORATION_COMBINATIONS", 0)

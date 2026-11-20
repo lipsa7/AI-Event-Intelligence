@@ -721,3 +721,38 @@ From RUN-FF8F59D21FDD4ACDB17E5B8F (20 Nov) and the owner's request to measure ea
 - Not changed: skipping terms/policy pages before fetching. One of the four such pages on 20 Nov was
   relevant evidence (Google Cloud's generative-AI indemnity terms, for the "who bears the risk" question).
 **Tests:** tests/test_v13_13_run_metrics.py (6). Full suite: no new failures.
+
+# v13.14: computed-gap insights accepted, each explored story gets a repair (20 Nov 2026)
+Both found in the insight stage of RUN-FF8F59D21FDD4ACDB17E5B8F (20 Nov). Exploration read four
+different stories and wrote candidates; all were rejected, two of them by the code rather than the
+evidence.
+- **Computed-gap route in the non-obviousness check** (`services/non_obviousness.py`, version
+  `non-obviousness-v5-computed-gap-route`; written as v13.11 but not part of v13.12/v13.13). The
+  generator is told to build insights on computed gaps (the prompt's COMPUTED GAPS block, the v13.6
+  second route), but test 1 accepted a one-story conclusion only when a context record (rule,
+  deadline, precedent) was cited, so every such insight was rejected as
+  `conclusion_single_development` - in this run "the public learned on 18 September that Google's
+  Gemini agent breached three companies in May". A one-story conclusion now also qualifies when a
+  date or amount gap is computed (`services/delta_extractor`) from its own supporting records. The
+  plain-meaning, headline and expert-commentary tests still apply; the single-development ablation is
+  skipped for this route (a gap computed from the story's records is supported by them by
+  construction). One-story conclusions with neither a gap nor a context record are still rejected.
+  (In this run the repeat check of v13.12 would also have stopped that candidate: it restates the
+  breach-delay thesis shown before.)
+- **One repair per explored story** (`_claim_supported_release`). The run-wide limit of extra
+  attempts (`EVENT_INTELLIGENCE_DEEP_RELEASE_RETRIES`, 2) was used up by the first candidate's repair
+  and alternative, so no explored candidate was ever repaired. The Forum AI election candidate - a
+  new insight (procedural election questions slip past chatbots' election refusals, so models invent
+  local deadlines) - failed on one premise ("Anthropic's Claude" where the source said "Claude") and
+  was dropped. Each explored candidate whose failure is repairable now gets one repair of its own
+  (logged as `exploration_repairs`), still bounded by the time and call budget.
+
+**Tests:** 4 new (3 in `tests/test_v13_quality_regression.py`, 1 in
+`tests/test_v6_21_4_search_coverage.py`); each of the passing-route tests fails on f37b1a5.
+Full suite: no new failures.
+
+# v13.14 review addition: repeats are checked across topics (20 Nov 2026)
+The repeat check compared only with earlier reports of exactly the same topic text, so insights from an
+"AI governance" run were not checked in an "artificial intelligence" run. Earlier reports of every topic
+are now loaded, the same topic's first (so the prompt's "already shown" list still shows those); the
+shortlist and the model call decide as before. **Tests:** test_v13_12_earlier_insights.py updated.

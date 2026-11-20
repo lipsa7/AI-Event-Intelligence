@@ -18582,6 +18582,26 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
                 break
             if pool:
                 continue
+            # v13.14 (20 Nov 2026): each explored story's candidate gets ONE repair of its own when its
+            # failure is repairable. The run-wide limit of extra attempts (2) was used up by the first
+            # candidate's repair and alternative, so no explored candidate was ever repaired: on 20 Nov
+            # (RUN-FF8F59D2...) the Forum AI election candidate failed on a single premise ("Anthropic's
+            # Claude" where the source said "Claude") and was dropped. Still bounded by time and calls.
+            own_repair = (origin == "exploration" and verdict.get("repairable")
+                          and log.get("exploration_repairs", 0) < max(1, INSIGHT_EXPLORATION_COMBINATIONS))
+            if own_repair and self._remaining_discretionary_seconds() >= DEEP_CLAIM_GATE_MIN_SECONDS:
+                log["exploration_repairs"] = log.get("exploration_repairs", 0) + 1
+                attempt["next"] = "repair"
+                new_candidates = self._claim_gate_synthesis(
+                    kind="repair", failed=candidate, verdict=verdict, tried=tried, topic=topic,
+                    events=events, evidence=evidence, graph_context=graph_context,
+                    constraints=constraints, blueprint=blueprint, state=state,
+                    tried_fingerprints=tried_fingerprints,
+                )
+                if not new_candidates:
+                    attempt["next_result"] = "no_candidate"
+                pool.extend((item, "repair") for item in new_candidates)
+                continue
             if log["extra_syntheses"] >= DEEP_CLAIM_GATE_EXTRA_SYNTHESES:
                 log["stopped"] = "retry_limit"
                 continue
