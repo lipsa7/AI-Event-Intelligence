@@ -643,6 +643,27 @@ def call_budget() -> Dict[str, Any]:
                 "refused": int(_CALL_BUDGET.get("refused") or 0)}
 
 
+def _held_for_others_locked() -> tuple[list, int]:
+    """(reserves the open stages may use, calls held for other stages). Caller holds the lock."""
+    stack = list(_STAGE_STACK) or ["pipeline"]
+    reserved = _CALL_BUDGET.get("reserved") or {}
+    groups = _CALL_BUDGET.get("groups") or {}
+    usable = [key for key in reserved if any(name in stack for name in groups.get(key, (key,)))]
+    return usable, sum(int(n) for key, n in reserved.items() if key not in usable)
+
+
+def calls_available() -> Optional[int]:
+    """v13.7 (20 Nov 2026): calls the CURRENT stage can still make (the ceiling minus calls used
+    and calls held for other stages). None when no ceiling is set. Optional work checks this
+    before it starts, so it does not start work whose every call would be refused."""
+    with _USAGE_LOCK:
+        limit = _CALL_BUDGET["limit"]
+        if limit is None:
+            return None
+        _, held_for_others = _held_for_others_locked()
+        return max(0, int(limit) - int(_CALL_BUDGET["used"]) - held_for_others)
+
+
 def consume_call() -> None:
     """Count one Gemini API attempt; refuse it once the ceiling is reached."""
     with _USAGE_LOCK:
@@ -651,8 +672,7 @@ def consume_call() -> None:
         stack = list(_STAGE_STACK) or ["pipeline"]
         reserved = _CALL_BUDGET.get("reserved") or {}
         groups = _CALL_BUDGET.get("groups") or {}
-        usable = [key for key in reserved if any(name in stack for name in groups.get(key, (key,)))]
-        held_for_others = sum(int(n) for key, n in reserved.items() if key not in usable)
+        usable, held_for_others = _held_for_others_locked()
         if limit is not None and _CALL_BUDGET["used"] >= limit - held_for_others:
             _CALL_BUDGET["refused"] = int(_CALL_BUDGET.get("refused") or 0) + 1
             raise GeminiCallBudgetExceeded(

@@ -128,4 +128,69 @@ def story_components(events: Sequence[Mapping[str, Any]], max_size: int | None =
             a, b = b, a
         parent[b] = a
         size[a] += size[b]
+    for i, story in _lone_reports_to_attach(events, [root(k) for k in range(count)]).items():
+        a = root(story)
+        if size[a] < limit:
+            parent[root(i)] = a
+            size[a] += 1
     return [root(i) for i in range(count)]
+
+
+ATTACH_MIN_STORY_EVENTS = 3
+ATTACH_MIN_SHARE = 0.25
+ATTACH_MIN_SHARED_WORDS = 2
+
+
+def _lone_reports_to_attach(events: Sequence[Mapping[str, Any]], story_of: Sequence[int]) -> dict[int, int]:
+    """v13.8 (20 Nov 2026): a lone report (one event, often one sentence: "Despite the breach
+    happening in June, Albanese said the tech giant only notified the government...") is too short
+    to pass the pair test, so it stayed a story of its own and took an exploration slot. It joins a
+    story of at least three events when ALL of these hold:
+    * it names one of the story's CORE names - a name in at least half of the story's events and
+      with at least 80% of all its mentions in this run inside that story ("Albanese"; not
+      "Microsoft" or "American", which are spread across many stories);
+    * exactly one story qualifies (no guessing between stories);
+    * at least 25% of its weighted words occur in the story, including at least two words that
+      are not names and appear in at most 5% of the run's events ("breach", "incident").
+    On the saved corpus this joins two breach reports and nothing else; the closest rejected cases
+    (an interview listing, a court case sharing "Gaza" with the Nobel story) scored at most 0.22."""
+    tokens = [story_words(e) for e in events]
+    total = len(tokens) or 1
+    word_freq: dict[str, int] = defaultdict(int)
+    name_freq: dict[str, int] = defaultdict(int)
+    for words, names in tokens:
+        for word in words:
+            word_freq[word] += 1
+        for name in names:
+            name_freq[name] += 1
+    idf = {w: math.log(total / c) for w, c in word_freq.items()}
+    members: dict[int, list[int]] = defaultdict(list)
+    for index, story in enumerate(story_of):
+        members[story].append(index)
+    stories = {s: m for s, m in members.items() if len(m) >= ATTACH_MIN_STORY_EVENTS}
+    cores: dict[int, set[str]] = {}
+    unions: dict[int, set[str]] = {}
+    for story, indexes in stories.items():
+        counts: dict[str, int] = defaultdict(int)
+        for index in indexes:
+            for name in tokens[index][1]:
+                counts[name] += 1
+        cores[story] = {n for n, k in counts.items() if k >= max(2, 0.5 * len(indexes)) and k >= 0.8 * name_freq[n]}
+        unions[story] = set().union(*(tokens[index][0] for index in indexes))
+    rare_limit = max(3, int(0.05 * total))
+    out: dict[int, int] = {}
+    for story, indexes in members.items():
+        if len(indexes) != 1:
+            continue
+        index = indexes[0]
+        words, names = tokens[index]
+        hits = [s for s in stories if names & cores[s]]
+        if len(hits) != 1 or not words:
+            continue
+        target = hits[0]
+        shared = words & unions[target]
+        share = sum(idf[w] for w in shared) / (sum(idf[w] for w in words) or 1.0)
+        rare_shared = [w for w in shared - names if word_freq[w] <= rare_limit]
+        if share >= ATTACH_MIN_SHARE and len(rare_shared) >= ATTACH_MIN_SHARED_WORDS:
+            out[index] = stories[target][0]
+    return out

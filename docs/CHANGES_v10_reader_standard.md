@@ -577,3 +577,53 @@ already been merged into the larger one, so its events were lost from exploratio
 joined transitively (union-find over group keys) and each merges straight into its final group.
 **Tests:** 1 new test (16 in `tests/test_v13_quality_regression.py`); it fails on v13.6 and passes now.
 Full suite: no new failures.
+
+# v13.7: call budget and run time that allow several insights (20 Nov 2026)
+Found by checking the 14 Nov run's call counts (data/run_costs.jsonl) against the budget code.
+- **Optional work stops when its calls would be refused, not at 85% of the cap.** The ceiling
+  refuses an ordinary stage once only the calls held for the hypothesis lab and the final checks
+  remain (cap 260: after 160 calls), but the insight loop believed it could start more work until
+  221 calls; every exploration story started in between failed on its first call. A stage with its
+  own reserve (the briefing) was, in turn, stopped at 85% although its calls were held for it.
+  `_call_cap_exhausted` now asks `gemini_llm_service.calls_available()` - the calls THIS stage can
+  still make - and does not start optional work with fewer than 15
+  (`EVENT_INTELLIGENCE_MIN_CALLS_OPTIONAL_WORK`).
+- **Calls held for the stages after the insights** (focus-company research, briefing, actor moves,
+  judge): 70 (`EVENT_INTELLIGENCE_AFTER_INSIGHTS_RESERVED_CALLS`, at most 20% of the cap), only
+  when the cap is at least 480. Below 480 the insights keep priority, as before. The leftover goes
+  back to the pool once those stages are done.
+- **Deep run time limit 2400 s -> 4800 s** (`EVENT_INTELLIGENCE_DEEP_MAX_RUNTIME_SECONDS` still
+  overrides it). The 14 Nov run, with one insight, already stopped actor moves and focus research on
+  "time_budget"; checking each extra story's insight takes about 3-4 minutes.
+- **Recommended cap for a deep run: 480 calls** (`EVENT_INTELLIGENCE_MAX_GEMINI_CALLS=480`). Basis,
+  14 Nov run: pipeline 74, insight checks about 18 calls per candidate (92 for 5 candidates),
+  precedent research 37, focus research 12, briefing 45, plus the lab (60) and final-check (40)
+  reserves. Several insights need about 8-10 candidates checked. A lower cap still works; the run
+  logs a warning and explores fewer stories.
+
+**Tests:** 1 new test (17 in `tests/test_v13_quality_regression.py`). Full suite: no new failures.
+
+# v13.8: a lone sentence about a story joins that story (20 Nov 2026)
+- **`same_story._lone_reports_to_attach`.** A one-sentence report ("Despite the breach happening
+  in June, Albanese said the tech giant only notified the government...") was too short to pass
+  the same-story pair test, so it stayed a story of its own and took one of the five exploration
+  slots (about 15 calls) for a story already being read. A lone report now joins a story of at
+  least three events when: it names one of that story's core names (in at least half of the
+  story's events, and with at least 80% of the name's mentions in the run inside that story - so
+  "Albanese" counts, "Microsoft" or "American" do not); exactly one story qualifies; and at least
+  25% of its weighted words occur in the story, including two uncommon non-name words ("breach",
+  "incident"). On the saved corpus this joins exactly two breach reports and nothing else; the
+  closest rejected cases scored at most 0.22. The breach is now one 12-event story and takes one
+  exploration slot.
+
+**Tests:** 1 new test (18 in `tests/test_v13_quality_regression.py`); it fails on v13.7 and passes
+now. Full suite: no new failures.
+
+# v13.8.1: focus research sees the calls held for it; call-budget tests (20 Nov 2026)
+Review fix to v13.8. The early focus-company research decides whether to run from the calls it can
+still make, but it ran outside its own path, so the calls held for it (the after-insights reserve)
+counted as held for others and it was skipped although its calls were reserved. It now runs as
+`focus_research` (`STAGE_PATHS`). **Tests:** 3 new (21 in `tests/test_v13_quality_regression.py`):
+the whole budget at 480 calls (main path 310, optional work stops below 15, then the briefing 70,
+lab 60 and final checks 40 all get their calls); focus research decides inside its own path (fails
+on v13.8); no after-insights reserve below 480 (main path 160 at 260). Full suite: no new failures.

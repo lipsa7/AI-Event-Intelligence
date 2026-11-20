@@ -289,7 +289,11 @@ FAST_PROFILE = ResearchExecutionProfile(
 
 DEEP_PROFILE = ResearchExecutionProfile(
     name="deep",
-    max_runtime_seconds=_env_int("EVENT_INTELLIGENCE_DEEP_MAX_RUNTIME_SECONDS", 2400, 600, 7200),
+    # v13.7 (20 Nov 2026): 2400 -> 4800. The 14 Nov run (one insight) already stopped the actor
+    # moves and focus research on "time_budget"; checking each extra story's insight takes about
+    # 3-4 minutes, so several insights do not fit in 40 minutes. EVENT_INTELLIGENCE_DEEP_MAX_RUNTIME_SECONDS
+    # still overrides it.
+    max_runtime_seconds=_env_int("EVENT_INTELLIGENCE_DEEP_MAX_RUNTIME_SECONDS", 4800, 600, 7200),
     max_discovered_sources=_env_int("EVENT_INTELLIGENCE_DEEP_MAX_SOURCES", 20, 3, 60),
     # v13 (18 Nov 2026): up to 4 insights per deep run (was 1, an "MVP" cap that made multiple
     # insights impossible however good the run). Each still passes every check.
@@ -4349,6 +4353,9 @@ class ResearchOrchestratorService:
         try:
             from services.gemini_llm_service import reserve_calls
             reserve_calls("hypothesis_lab", 0)
+            # v13.7: the briefing, focus research and actor moves are done too; calls still held for
+            # them go back to the pool (the report checks and the judge come next).
+            reserve_calls("after_insights", 0)
         except Exception:
             pass
         report["historical_analogies"] = _json_safe(briefing.get("analogies") or [])
@@ -17183,6 +17190,21 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
     LAB_RESERVED_CALLS_ENV = "EVENT_INTELLIGENCE_LAB_RESERVED_CALLS"
     LAB_RESERVED_CALLS_DEFAULT = 60
     LAB_RESERVED_CALLS_MAX_SHARE = 0.30
+    # v13.7 (20 Nov 2026): calls held for the stages that run AFTER the insights (focus-company
+    # research, the briefing, actor moves, the judge). They were only "kept" by the 85% rule below,
+    # but the call ceiling refuses ordinary stages much earlier (cap minus the lab and final-check
+    # reserves), so the insight loop could spend them all: 14 Nov, 45 briefing calls refused.
+    AFTER_INSIGHTS_RESERVED_CALLS_ENV = "EVENT_INTELLIGENCE_AFTER_INSIGHTS_RESERVED_CALLS"
+    AFTER_INSIGHTS_RESERVED_CALLS_DEFAULT = 70
+    AFTER_INSIGHTS_RESERVED_CALLS_MAX_SHARE = 0.20
+    AFTER_INSIGHTS_STAGES = ("focus_research", "briefing", "actor_moves", "judge")
+    # Optional work (one more exploration story, a repair) needs about this many calls to finish
+    # (generation, grounding, claim checks); it does not start with fewer.
+    MIN_CALLS_TO_START_OPTIONAL_WORK = _env_int("EVENT_INTELLIGENCE_MIN_CALLS_OPTIONAL_WORK", 15, 1, 100)
+    # A deep run that should release several insights needs roughly this many calls (14 Nov run:
+    # pipeline 74, about 18 per insight candidate checked, precedent 37, focus 12, briefing 45, plus
+    # the lab and final-check reserves). Below it the run still works but finds fewer insights.
+    RECOMMENDED_DEEP_CALL_CAP = 480
 
     def _apply_call_cap(self, research_depth: Any = "") -> None:
         """Cost cap (26 Oct 2026): EVENT_INTELLIGENCE_MAX_GEMINI_CALLS caps every Gemini attempt and
@@ -17198,6 +17220,7 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
         self._call_cap = None
         self._lab_reserved_calls = 0
         self._final_check_reserved_calls = 0
+        self._after_insights_reserved_calls = 0
         if not raw:
             return
         try:
@@ -17216,6 +17239,17 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
         if final_held > 0:
             reserve_calls("final_checks", final_held)
         self._final_check_reserved_calls = final_held
+        # Held only when the cap is large enough for several insights: below it the insights come
+        # first (a missing briefing section costs less than a missing insight).
+        after_held = min(_env_int(self.AFTER_INSIGHTS_RESERVED_CALLS_ENV, self.AFTER_INSIGHTS_RESERVED_CALLS_DEFAULT,
+                                  0, 500), int(cap * self.AFTER_INSIGHTS_RESERVED_CALLS_MAX_SHARE)) \
+            if cap >= self.RECOMMENDED_DEEP_CALL_CAP else 0
+        if after_held > 0:
+            reserve_calls("after_insights", after_held, stages=self.AFTER_INSIGHTS_STAGES)
+        self._after_insights_reserved_calls = after_held
+        if _enum(research_depth) == "deep" and cap < self.RECOMMENDED_DEEP_CALL_CAP:
+            logger.warning("gemini_call_cap=%s is below the %s a deep run needs for several insights; "
+                           "the run will stop exploring stories early", cap, self.RECOMMENDED_DEEP_CALL_CAP)
         lab_on = os.getenv("EVENT_INTELLIGENCE_HYPOTHESIS_LAB", "1") != "0"
         if lab_on and _enum(research_depth) == "deep":
             held = _env_int(self.LAB_RESERVED_CALLS_ENV, self.LAB_RESERVED_CALLS_DEFAULT, 0, 500)
@@ -17223,8 +17257,9 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
             if held > 0:
                 reserve_calls("hypothesis_lab", held)
                 self._lab_reserved_calls = held
-        logger.info("gemini_call_cap=%s lab_reserved_calls=%s final_check_reserved_calls=%s",
-                    cap, self._lab_reserved_calls, self._final_check_reserved_calls)
+        logger.info("gemini_call_cap=%s lab_reserved_calls=%s final_check_reserved_calls=%s "
+                    "after_insights_reserved_calls=%s", cap, self._lab_reserved_calls,
+                    self._final_check_reserved_calls, self._after_insights_reserved_calls)
 
     def _overreach_found(self, candidate: Mapping[str, Any], evidence: Sequence[Any]) -> dict[str, list[str]]:
         """Overstating words and unsourced numbers in a candidate's insight text, checked against
@@ -17263,8 +17298,14 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
         cap = getattr(self, "_call_cap", None)
         if cap is None:
             return False
-        from services.gemini_llm_service import calls_used
-        return calls_used() >= cap * (1 - self.CALL_CAP_RESERVE)
+        from services.gemini_llm_service import calls_available
+        # v13.7 (20 Nov 2026): was "85% of the cap used". The ceiling refuses an ordinary stage once
+        # only calls held for later stages remain, which comes well before 85%, so work started in
+        # between failed on its first call; and a stage with its own reserve (the briefing) was
+        # stopped at 85% although its calls were held for it. Now: the calls THIS stage can still
+        # make, which already leaves the later stages' reserves untouched.
+        available = calls_available()
+        return available is not None and available < self.MIN_CALLS_TO_START_OPTIONAL_WORK
 
     def _remaining_discretionary_seconds(self) -> float:
         if self._call_cap_exhausted():
@@ -24122,6 +24163,10 @@ STAGE_PATHS = {
     "_strategic_hypothesis_lab": "hypothesis_lab",
     "_actor_moves": "actor_moves",
     "_focus_research": "focus_research",
+    # v13.8 review (20 Nov 2026): the early focus research decides whether to run from the calls
+    # available; outside its own path the calls held for it ("after_insights") counted as held for
+    # others, so it was skipped although its calls were reserved.
+    "_focus_research_before_briefing": "focus_research",
     "_precedent_research": "precedent_research",
     "_insight_evaluation": "judge",
     # v10.1: the report-level grounding and the red team decide whether a report can be released.

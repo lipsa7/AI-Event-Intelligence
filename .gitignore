@@ -34,3 +34,4 @@ Thumbs.db
 tmp/
 output/
 
+backup_before_*/

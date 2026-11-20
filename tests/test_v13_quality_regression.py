@@ -287,3 +287,148 @@ def test_group_spanning_two_stories_loses_no_events(monkeypatch):
     combos = service._development_combinations(events, evidence, limit=5, topic="t")
     seen = {eid for combo in combos for eid in (combo.get("event_ids") or [])}
     assert {"E1", "E2", "E3", "E4", "E5"} <= seen, combos
+
+
+def test_call_budget_keeps_calls_for_the_briefing_and_stops_optional_work_before_refusals(monkeypatch):
+    """v13.7 (20 Nov 2026): the insight loop decided it could start more work until 85% of the cap,
+    but the ceiling refused it once only the lab and final-check reserves were left (much earlier),
+    and nothing was held for the briefing (14 Nov: 45 briefing calls refused). Now the briefing's
+    calls are held, and optional work stops when this stage cannot make enough calls to finish."""
+    from services import gemini_llm_service as g
+    from services.research_orchestrator_service import ResearchOrchestratorService as S
+    monkeypatch.setenv("EVENT_INTELLIGENCE_MAX_GEMINI_CALLS", "480")
+    service = S.__new__(S)
+    service._apply_call_cap("deep")
+    try:
+        held = service._lab_reserved_calls + service._final_check_reserved_calls + service._after_insights_reserved_calls
+        assert service._after_insights_reserved_calls == 70 and held == 170
+        assert g.calls_available() == 480 - held
+        # Spend ordinary calls until fewer than MIN_CALLS_TO_START_OPTIONAL_WORK remain for this stage.
+        for _ in range(480 - held - S.MIN_CALLS_TO_START_OPTIONAL_WORK + 1):
+            g.consume_call()
+        assert service._call_cap_exhausted(), "optional work must not start when its calls would be refused"
+        # The briefing can still make its calls: they were held for it.
+        with g.stage("briefing"):
+            assert g.calls_available() >= 70
+            for _ in range(70):
+                g.consume_call()
+        # Once the after-insight stages are done their leftover goes back to the pool.
+        g.reserve_calls("after_insights", 0)
+    finally:
+        g.set_call_budget(None)
+
+
+def test_lone_breach_sentence_joins_the_breach_story_and_nothing_unrelated_joins():
+    """v13.8 (20 Nov 2026): a one-sentence report ("Despite the breach happening in June, Albanese
+    said...") was too short to match and took an exploration slot of its own (about 15 calls).
+    It now joins the breach story; on the saved corpus nothing else is attached."""
+    from services import same_story
+    events, evidence = _corpus()
+    stories = same_story.story_components(events)
+    titles = [e["title"] or "" for e in events]
+    def story_of(prefix: str) -> int:
+        return next(stories[i] for i, t in enumerate(titles) if t.startswith(prefix))
+    breach = story_of("Australia reveals OpenAI agent")
+    assert story_of("Despite the breach happening in June, Albanese") == breach
+    original = same_story._lone_reports_to_attach
+    attached: dict[int, int] = {}
+    def spy(evs, story_of_list):
+        found = original(evs, story_of_list)
+        attached.update(found)
+        return found
+    same_story._lone_reports_to_attach = spy
+    try:
+        same_story.story_components(events)
+    finally:
+        same_story._lone_reports_to_attach = original
+    joined = [titles[i] for i in attached]
+    assert all("Albanese" in t or "Australia" in t for t in joined), joined
+    assert len(joined) <= 3, joined
+    # Exploration no longer spends a slot on the breach twice.
+    service = ResearchOrchestratorService.__new__(ResearchOrchestratorService)
+    combos = service._development_combinations(events, evidence, (), limit=5, topic="AI governance and regulation")
+    by_id = {e["event_id"]: e for e in events}
+    breach_slots = [c for c in combos if any("Albanese" in ((by_id[e]["title"] or "") + (by_id[e].get("summary") or ""))
+                                             for e in c["event_ids"])]
+    assert len(breach_slots) == 1, [c["labels"] for c in breach_slots]
+
+
+def _deep_cap(monkeypatch, cap):
+    from services.research_orchestrator_service import ResearchOrchestratorService as S
+    monkeypatch.setenv("EVENT_INTELLIGENCE_MAX_GEMINI_CALLS", str(cap))
+    for name in ("EVENT_INTELLIGENCE_FINAL_CHECK_RESERVED_CALLS", "EVENT_INTELLIGENCE_LAB_RESERVED_CALLS",
+                 "EVENT_INTELLIGENCE_AFTER_INSIGHTS_RESERVED_CALLS", "EVENT_INTELLIGENCE_MIN_CALLS_OPTIONAL_WORK"):
+        monkeypatch.delenv(name, raising=False)
+    service = S.__new__(S)
+    service.execution_budget_service = None
+    service._apply_call_cap("deep")
+    return service
+
+
+def test_call_budget_at_480_keeps_every_reserve_and_stops_optional_work_in_time(monkeypatch):
+    """v13.8 review: the whole call budget of a deep run at the recommended cap. Main path gets
+    480 - 40 (final checks) - 60 (lab) - 70 (briefing etc.) = 310; optional work stops when fewer than
+    15 of those remain; every reserved stage still gets all of its calls afterwards."""
+    import pytest
+    from services import gemini_llm_service as g
+    service = _deep_cap(monkeypatch, 480)
+    try:
+        assert (service._final_check_reserved_calls, service._lab_reserved_calls,
+                service._after_insights_reserved_calls) == (40, 60, 70)
+        with g.stage("hidden_insights"):
+            assert g.calls_available() == 310
+            for _ in range(295):
+                g.consume_call()
+            assert not service._call_cap_exhausted()          # 15 left: one more story may start
+            g.consume_call()
+            assert service._call_cap_exhausted()              # 14 left: no new story is started
+            for _ in range(14):
+                g.consume_call()
+            with pytest.raises(g.GeminiCallBudgetExceeded):
+                g.consume_call()                              # the reserves are never touched
+        for stage_name, held in (("briefing", 70), ("hypothesis_lab", 60), ("final_checks", 40)):
+            with g.stage(stage_name):
+                assert not service._call_cap_exhausted()
+                for _ in range(held):
+                    g.consume_call()
+        assert g.call_budget()["used"] == 480
+    finally:
+        g.set_call_budget(None)
+
+
+def test_focus_research_decides_inside_its_own_path(monkeypatch):
+    """v13.8 review: the early focus research is one of the after-insight stages; its go/no-go check
+    must see the calls held for it (before, it ran outside its path and was skipped)."""
+    from services import gemini_llm_service as g
+    from services.research_orchestrator_service import ResearchOrchestratorService as S
+    service = _deep_cap(monkeypatch, 480)
+    seen = {}
+    try:
+        with g.stage("hidden_insights"):
+            for _ in range(310):
+                g.consume_call()                              # main path fully used
+        original = S.__dict__["_focus_research_before_briefing"]
+        assert getattr(original, "_stage_path", "") == "focus_research"
+        monkeypatch.setattr(service, "_choose_focus", lambda *a, **k: {"name": "OpenAI"})
+
+        def decide():
+            seen["available"] = g.calls_available()
+            return 0.0                                        # stop right after the decision
+        monkeypatch.setattr(service, "_remaining_discretionary_seconds", decide)
+        state = {}
+        original(service, [], state)
+        assert state["focus_research_early"]["reason"] == "time_budget"
+        assert seen.get("available") == 70
+    finally:
+        g.set_call_budget(None)
+
+
+def test_no_after_insight_reserve_below_480(monkeypatch):
+    service = _deep_cap(monkeypatch, 260)
+    from services import gemini_llm_service as g
+    try:
+        assert service._after_insights_reserved_calls == 0
+        with g.stage("hidden_insights"):
+            assert g.calls_available() == 160                 # 260 - 40 - 60: insights first
+    finally:
+        g.set_call_budget(None)
