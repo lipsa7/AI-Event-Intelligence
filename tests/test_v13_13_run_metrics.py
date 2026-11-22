@@ -52,7 +52,8 @@ def test_metrics_from_one_run():
     assert r["exa_pages_read"] == 6 and r["exa_searches"] == 4 and r["exa_units_used"] == 120
     assert c["gemini_calls"] == 120 and c["calls_per_released_insight"] == 120 and c["run_seconds"] == 2400.4
     assert m["judge"] == {"status": "ranked", "items_scored": 2, "top_score": 9}
-    assert len(run_metrics.summary_lines(m)) == 6
+    assert len(run_metrics.summary_lines(m)) == 7          # v13.23: objective line first
+    assert "NOT MET" in run_metrics.summary_lines(m)[0]
 
 
 def test_blocked_release_counts_no_released_insight():
@@ -66,9 +67,13 @@ def test_empty_run_never_fails():
     assert m["insight_funnel"]["candidates_checked"] == 0 and run_metrics.summary_lines(m)
 
 
-def test_exa_run_budget_is_600_units(monkeypatch):
+def test_exa_has_no_cap_unless_set(monkeypatch):
+    """v13.22: no per-run or monthly Exa cap by default (Exa cannot charge without a payment method)."""
     from services import exa_contents
     monkeypatch.delenv("EXA_MAX_CALLS_PER_RUN", raising=False)
+    monkeypatch.delenv("EXA_MAX_CALLS_PER_MONTH", raising=False)
+    assert exa_contents.cap() >= 10 ** 9 and exa_contents.month_cap() >= 10 ** 9
+    monkeypatch.setenv("EXA_MAX_CALLS_PER_RUN", "600")
     assert exa_contents.cap() == 600
 
 

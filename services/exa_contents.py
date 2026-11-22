@@ -29,6 +29,10 @@ Cost control (owner's rule: free credits only, never a paid or unlimited run)
   off for the rest of that run; nothing is retried.
 - No payment method is stored with Exa, so Exa itself blocks requests when credits run out
   (exa.ai/docs/reference/billing) - it cannot charge.
+- v13.22 (22 Nov 2026): the per-run and monthly caps are OFF by default. RUN-ACC0E1ED had 33 searches
+  refused by the 600-unit run cap while only $1.42 of the free credit had been spent; because Exa cannot
+  charge without a payment method, the caps only cost research. Set EXA_MAX_CALLS_PER_RUN or
+  EXA_MAX_CALLS_PER_MONTH in .env to bring a cap back; EXA_FALLBACK=0 still turns Exa off.
 - EXA_FALLBACK=0 turns it off entirely.
 """
 from __future__ import annotations
@@ -48,11 +52,11 @@ ENDPOINT = "https://api.exa.ai/contents"
 KEY_ENV = "EXA_API_KEY"
 CAP_ENV = "EXA_MAX_CALLS_PER_RUN"
 MONTH_CAP_ENV = "EXA_MAX_CALLS_PER_MONTH"
-DEFAULT_MONTH_CAP = 5000
+DEFAULT_MONTH_CAP = 10 ** 9   # v13.22: no monthly cap (see below)
 USAGE_FILE = Path(__file__).resolve().parent.parent / "data" / "exa_usage.json"
 STOP_CODES = (401, 402, 403, 429)
 SWITCH_ENV = "EXA_FALLBACK"
-DEFAULT_CAP = 600
+DEFAULT_CAP = 10 ** 9   # v13.22: no per-run cap (see below)
 CONTENTS_UNITS = 1
 SEARCH_UNITS = 17
 SEARCH_ENDPOINT = "https://api.exa.ai/search"

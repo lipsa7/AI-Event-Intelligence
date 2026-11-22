@@ -256,14 +256,15 @@ def test_final_checks_and_lab_both_get_held_calls(monkeypatch):
     monkeypatch.setenv("EVENT_INTELLIGENCE_MAX_GEMINI_CALLS", "260")
     service = ResearchOrchestratorService.__new__(ResearchOrchestratorService)
     service._apply_call_cap("deep")
-    assert service._final_check_reserved_calls == 40 and g.reserved_calls("final_checks") == 40
+    # v13.21: the final checks are off the shared ceiling (no limit), so nothing is held for them.
+    assert service._final_check_reserved_calls == 0 and g.reserved_calls("final_checks") == 0
     assert g.reserved_calls("hypothesis_lab") == 60
     with g.stage("hidden_insights"):
-        for _ in range(160):
+        for _ in range(200):
             g.consume_call()
         try:
             g.consume_call()
-            raise AssertionError("main path used calls held for the lab and the final checks")
+            raise AssertionError("main path used calls held for the lab")
         except g.GeminiCallBudgetExceeded:
             pass
     with g.stage("final_checks"):

@@ -595,7 +595,8 @@ def record_usage(model: str, usage: Mapping[str, Any] | None, *, failed: bool = 
 
 # v6.36.2: an optional hard ceiling on Gemini API attempts (every attempt counts, retries included),
 # for stage tests that must not exceed a stated cost. None = no ceiling (normal runs).
-_CALL_BUDGET: Dict[str, Any] = {"limit": None, "used": 0, "refused": 0, "reserved": {}, "groups": {}}
+_CALL_BUDGET: Dict[str, Any] = {"limit": None, "used": 0, "refused": 0, "reserved": {}, "groups": {},
+                                "own_limits": {}, "own_used": {}}
 
 
 class GeminiCallBudgetExceeded(GeminiLLMServiceError):
@@ -609,6 +610,37 @@ def set_call_budget(limit: Optional[int]) -> None:
         _CALL_BUDGET["refused"] = 0
         _CALL_BUDGET["reserved"] = {}
         _CALL_BUDGET["groups"] = {}
+        _CALL_BUDGET["own_limits"] = {}
+        _CALL_BUDGET["own_used"] = {}
+
+
+def set_own_limit(stage_name: str, limit: Optional[int]) -> None:
+    """v13.21 (22 Nov 2026): take a stage OFF the shared ceiling. limit=None: no limit at all (the
+    stage's calls are counted, never refused); a number: its own fixed limit instead of the ceiling.
+
+    RUN-ACC0E1ED: the shared 480-call ceiling ran out after the insights were chosen and cut the stages
+    that decide whether the report can be trusted - actor moves lost 19 of 24 claim checks (never
+    checked, so possibly the best moves), the judge did not run, the red team and the report grounding
+    fell back to no-call checks. These stages check a fixed list once (the moves, the insights, the
+    report), so without a limit they still cannot loop. Earlier stages can never spend their calls."""
+    with _USAGE_LOCK:
+        limits = _CALL_BUDGET.setdefault("own_limits", {})
+        limits[str(stage_name)] = None if limit is None else max(0, int(limit))
+
+
+def clear_own_limit(stage_name: str) -> None:
+    """Put a stage back on the shared ceiling."""
+    with _USAGE_LOCK:
+        (_CALL_BUDGET.setdefault("own_limits", {})).pop(str(stage_name), None)
+
+
+def _own_stage_locked() -> Optional[str]:
+    """The innermost open stage that has its own limit, or None. Caller holds the lock."""
+    limits = _CALL_BUDGET.get("own_limits") or {}
+    for name in reversed(list(_STAGE_STACK)):
+        if name in limits:
+            return name
+    return None
 
 
 def reserve_calls(stage_name: str, count: int, stages: Sequence[str] = ()) -> None:
@@ -643,6 +675,13 @@ def call_budget() -> Dict[str, Any]:
                 "refused": int(_CALL_BUDGET.get("refused") or 0)}
 
 
+def own_stage_budget() -> Dict[str, Any]:
+    """v13.21: stages off the shared ceiling - their limits (None = no limit) and calls made."""
+    with _USAGE_LOCK:
+        return {"own_limits": dict(_CALL_BUDGET.get("own_limits") or {}),
+                "own_used": dict(_CALL_BUDGET.get("own_used") or {})}
+
+
 def _held_for_others_locked() -> tuple[list, int]:
     """(reserves the open stages may use, calls held for other stages). Caller holds the lock."""
     stack = list(_STAGE_STACK) or ["pipeline"]
@@ -658,6 +697,13 @@ def calls_available() -> Optional[int]:
     before it starts, so it does not start work whose every call would be refused."""
     with _USAGE_LOCK:
         limit = _CALL_BUDGET["limit"]
+        own = _own_stage_locked()
+        if own is not None:
+            own_limit = _CALL_BUDGET["own_limits"][own]
+            if own_limit is None:
+                return None          # no limit for this stage
+            used = int((_CALL_BUDGET.get("own_used") or {}).get(own) or 0)
+            return max(0, int(own_limit) - used)
         if limit is None:
             return None
         _, held_for_others = _held_for_others_locked()
@@ -672,6 +718,17 @@ def consume_call() -> None:
         stack = list(_STAGE_STACK) or ["pipeline"]
         reserved = _CALL_BUDGET.get("reserved") or {}
         groups = _CALL_BUDGET.get("groups") or {}
+        own = _own_stage_locked()
+        if own is not None:
+            own_used = _CALL_BUDGET.setdefault("own_used", {})
+            own_limit = _CALL_BUDGET["own_limits"][own]
+            if own_limit is not None and int(own_used.get(own) or 0) >= int(own_limit):
+                _CALL_BUDGET["refused"] = int(_CALL_BUDGET.get("refused") or 0) + 1
+                raise GeminiCallBudgetExceeded(
+                    f"Gemini call limit of {_CALL_BUDGET['own_limits'][own]} for stage {own} reached; call not made.")
+            own_used[own] = int(own_used.get(own) or 0) + 1
+            _BY_STAGE.setdefault(current, _stage_row())["attempts"] += 1
+            return
         usable, held_for_others = _held_for_others_locked()
         if limit is not None and _CALL_BUDGET["used"] >= limit - held_for_others:
             _CALL_BUDGET["refused"] = int(_CALL_BUDGET.get("refused") or 0) + 1

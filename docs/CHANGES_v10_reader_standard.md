@@ -775,3 +775,198 @@ Intelligence for the Z80", Cambridge Dictionary's word of the year, a release-si
   search on 20 Nov while NewsAPI returned a few results, so Exa never ran for them). Before, only when
   they returned nothing.
 **Tests:** tests/test_v13_15_discovery.py (5; real headlines from the 20 Nov run). Full suite: no new failures.
+
+# v13.16: past cases no longer rejected for "different entity"; blocked stories read from another site (20 Nov 2026)
+From RUN-4367E5FE6BE84506BBC92CBB (stopped when the Gemini prepaid credits ran out, 402).
+- **Past cases.** The new case notes (v13.13) showed why no run has found a past case: the "SAME ENTITY"
+  rule added on 20 Nov for name confusion (AMD Instinct vs the startup Instinct) was read as "a past case
+  must involve the same actors". The 2018 ZTE ban reversal, the 2020 Huawei licence and the 2023 FTC
+  investigation of OpenAI were all rejected as "different entity". The rule is now about name confusion
+  only; a past case is expected to involve other actors and is judged on the mechanism, and its outcome
+  may be its own resolution (ban lifted, suit settled).
+- **Blocked by the site and by Exa.** Reuters answered 401 to the app and to Exa, losing three key
+  stories (California sues OpenAI; Trump administration weighs forcing firms to disclose Chinese AI use;
+  panel meeting scrapped). When both fail, the headline words in the URL are searched in Exa and the
+  first report of the same story from another site is read (`retrieval_mode: exa_alternate_coverage`,
+  `alternate_coverage_for`). It passes the same evidence checks. Within the Exa budget.
+- Not changed: the Federal Register document over 35,000 characters is still skipped (deliberate limit on
+  local extraction).
+**Tests:** tests/test_v13_16_run_4367_fixes.py (4); test_v92 and the Exa fallback test updated. Full suite: no new failures.
+
+# v13.17: Google search as the last resort for a blocked story (20 Nov 2026)
+Owner: when a site blocks the app and Exa, and Exa cannot find the story elsewhere, use Google.
+Chain for a page that cannot be read: (1) the publisher's page directly; (2) the same page through Exa;
+(3) the same story on another site, found by Exa search on the headline words in the URL; (4) only when
+Exa found no other site (Exa off, budget used, nothing found), the same search through Google (a capped
+Gemini Google-Search helper of its own, default 8 searches a run, `EVENT_INTELLIGENCE_ALTERNATE_GOOGLE_SEARCHES`;
+separate from the 30 research searches); (5) the GDELT context fallback. Another site's page is read
+directly first, then through Exa. The source is marked `alternate_coverage_for`, `alternate_found_by`
+(exa or google) and passes the same evidence checks. Google search uses Gemini: it counts toward the
+call cap and needs Gemini credits (5,000 free Google queries a month on Gemini 3, then $14 per 1,000).
+**Tests:** 4 more in tests/test_v13_16_run_4367_fixes.py (8). Full suite: no new failures.
+
+## v13.18 (22 Nov 2026) - call budget after RUN-ACC0E1ED
+
+RUN-ACC0E1EDB8AA42C192CCA5A5 (replay of RUN-4367, 480-call cap) used 285 of its 428 Gemini calls on
+one-claim support checks (Flash-Lite, each resending the same ~1,500-token instructions). The stages
+after the insights ran short: actor moves had 19 of 24 claim checks refused, the pairwise judge did
+not run (judge_unavailable), the red team and report grounding fell back to their no-call checks.
+
+- services/grounding_service.py: ground_claims sends up to 6 claims per request
+  (EVENT_INTELLIGENCE_GROUNDING_BATCH, 1 = old behaviour). Same instructions, each claim with only
+  its own evidence, same validation. A claim the batch does not answer validly is checked alone, so
+  batching never changes what is accepted. `batched_checks()` does the same for callers that check
+  claims one at a time on purpose (briefing, actor moves: one bad check must not void the rest).
+  Only on the Gemini classifier; a supplied classifier (tests, local model) is unchanged.
+  Log line: grounding_batched claims=N batches=B answered=A.
+- research_orchestrator_service: after-insights reserve 70 -> 100 (max share 0.25); when it is
+  released after the lab, up to 15 calls stay held for the judge (it ran after the release and found
+  none left).
+- Not in this version: precedent search (0 past cases again; poor retry queries) and feeding
+  "already said by the sources" back into insight generation (5 of 7 candidates restated sources).
+- tests/test_v13_18_grounding_batch.py (10 tests); reserve numbers updated in
+  tests/test_v13_quality_regression.py. Full suite: same 55 failed / 6 errors as before (stale tests,
+  missing libraries), 10 more passed.
+
+## v13.19 (22 Nov 2026) - aimed at original insights (research report of 22 Nov)
+
+RUN-ACC0E1ED released 0 original insights: 5 of 7 candidates restated their sources or rested on one
+development, one story (California v. OpenAI) took 3 of 4 exploration slots, and 0 past cases were
+accepted although the searches found good ones (Kia/Hyundai public-nuisance suits, Bonta v. Meta,
+SEC v. SolarWinds) - the page reviewer rejected them for different actors or sector.
+
+- services/story_families.py (new): one model call per run groups developments that are one story
+  (an incident and the lawsuit about it, worded differently), joined before slots are given out, so
+  each slot reads a different story. Word overlap could not see this (measured on the RUN-4367
+  checkpoint: lawsuit vs incident 0.11, lawsuit vs an unrelated Nvidia item 0.16). Key-event discovery
+  (EMNLP 2023 Findings) uses the same split: cheap candidates, an LLM decides same event / follow-up.
+  Fail-open; log line story_families=...
+- Exploration prompt gets an EXPECTED VIEW block: the run's published-analysis records and the
+  developments' own reports, with the rule that the conclusion must not be stated by or follow
+  directly from any of them (SciMON, ACL 2024: compare with retrieved prior work, ask for something
+  significantly different).
+- Precedent page review: compare ROLES not names, with four worked examples (Kia/Hyundai ACCEPT, Meta
+  partial, FTC antitrust REJECT, SolarWinds ACCEPT); a case without its outcome on the page is still a
+  case (the follow-up search looks for the outcome). Gentner, Rattermann & Forbus 1993 (surface vs
+  relational similarity); Zheng et al. NeurIPS 2023 (few-shot raises judge consistency 65% -> 77.5%).
+- Precedent retry query: the development is first written as a role-based mechanism, then one case
+  with a known result is named and searched with a result word (settlement, ruling, ...).
+- Claim-check batch 6 -> 4 (Cheng et al. 2023: drops "often occurring at b=6").
+- Not verified offline: whether Gemini now accepts the logged precedent pages and whether the expected
+  view lowers the restating share. Both need model calls; the story-family join is verified on the
+  checkpoint (the lawsuit story gets 1 of 5 slots, was 3).
+- tests/test_v13_19_originality.py (12 tests). Full suite: same 55 failed / 6 errors, 22 more passed.
+
+## v13.20 (22 Nov 2026) - what makes the app worth reading over the news (research report of 21 Nov)
+
+Readers trust news at 37% and AI chatbot answers at about 20% (Reuters Institute DNR 2026); summaries
+are commoditised (Particle, Ground News, deep-research tools). The report's conclusion: the app's only
+defensible difference is verified originality plus a public, scored track record - and a reader must
+be able to SEE both.
+
+- services/proof_line.py + dashboard: one line under every insight - whether it is stated by any of
+  the N sources read, how many stories and publishers it combines, claim support a/b, how many steps
+  are assumptions, whether the contrary-evidence search finished, the open forecast and its deadline.
+- Dashboard: original insights first; findings their own sources already state are shown apart under
+  "Already in the coverage (background, not counted as insights)". RUN-ACC0E1ED's two shown findings
+  were of this kind and looked like insights.
+- services/reader_ratings.py + dashboard: two yes/no questions per insight, "New to me?" and "Would I
+  act on it?" (binary, Husain/Yan), saved to data/reader_ratings.jsonl.
+- services/track_record.py, pages/3_Track_record.py, tools/audit.py: runs, runs with an original
+  insight, abstention share, unique originals, forecasts made/resolved, Brier score, reader shares
+  with 95% intervals - each with its credibility threshold (100 resolved forecasts, MacKay 2025; 50
+  ratings = +/-14 points). Audit of this folder on 22 Nov: 68 runs on 1 topic, 22 with an original
+  insight, 3 forecasts made, 0 resolved, 0 ratings.
+- Note: replays never record forecasts (`if not replay`), so the track record grows only from live
+  runs; reports saved before v6.30.2 carry no "already in the coverage" label and count as original.
+- tests/test_v13_20_reader_value.py (6 tests); dashboard and track-record page rendered in Streamlit's
+  AppTest without errors on the 22 Nov report.
+
+## v13.21 (22 Nov 2026) - checking stages off the call cap
+
+- Actor moves, the pairwise judge and the final checks (report grounding, red team) no longer count
+  against the shared Gemini call ceiling and have no limit (services/gemini_llm_service.set_own_limit;
+  optional EVENT_INTELLIGENCE_ACTOR_MOVES_MAX_CALLS / _FINAL_CHECKS_MAX_CALLS / _JUDGE_MAX_CALLS set
+  one). In RUN-ACC0E1ED the ceiling cut 19 of 24 actor-move claim checks - never checked, so possibly
+  the best moves - stopped the judge and pushed the red team and report grounding to no-call checks.
+  These stages check a fixed list once, so without a limit they cannot loop. The shared ceiling still
+  bounds the exploration and repair loops; its reserves are now lab 60 + briefing/focus 70.
+- Contrary-evidence Google searches per run 24 -> 60 (both shown findings had an incomplete search;
+  Google grounding has 5,000 free prompts a month).
+- tests/test_v13_21_checks_off_the_cap.py; reserve numbers updated in two older tests.
+
+## v13.22 (22 Nov 2026) - the editor's bar; Exa caps off
+
+- services/par_check.py: before an ORIGINAL insight is released, one model call judges it against the
+  user's own labelled examples (data/insight_review_90.csv: 4 approved, 4 rejected shown as examples)
+  and a rubric from ICD 203 and the reader standard: beyond the sources, a specific mechanism, a
+  consequence for a named actor, a checkable dated signal, plain substance, every step earned. Below the
+  bar: not released, one repair with the missing element; if the judge cannot answer, the insight is
+  held back (a quality bar does not fail open). EVENT_INTELLIGENCE_PAR_CHECK=0 turns it off.
+- tools/calibrate_par.py: scores the judge on the user's held-out labels (true-positive and true-negative
+  rates separately, Husain) before it is trusted - about 40 Flash calls.
+- services/exa_contents.py: per-run and monthly Exa caps off by default. RUN-ACC0E1ED had 33 searches
+  refused by the 600-unit run cap while $1.42 of the free credit had been spent; with no payment
+  method Exa cannot charge (it stops at 402), so the caps only cost research. Env settings bring one back.
+- tests/test_v13_22_par_check.py (6). Full suite: same 55 failed / 6 errors as before.
+
+## v13.23 (22 Nov 2026) - variant view generator; the run checks itself against the objective
+
+The objective: original insights a reader rates at par with publications that sell original analysis.
+RUN-ACC0E1ED: 5 of 7 candidates restated their sources, forecasts ran 9-16 months, the briefing lines
+were what any reader would guess. The generator prompt already asked for leverage, the outside view and
+a forecast, but in one call for one candidate, with no statement of what readers already believe.
+
+- services/variant_view.py, wired into each exploration slot:
+  1. CONSENSUS (1 call): what informed readers of these reports already believe and expect next.
+  2. The generator gets that consensus and is asked for up to THREE different variant views: the claim,
+     the constraint the consensus ignores (Papic: political, economic, legal, geopolitical, time), a
+     cited number, a named actor's forced move, a yes/no call resolvable in 2-12 weeks, and what you
+     would see if the consensus is right instead (Steinhardt's variant perception; Marks's second-level
+     thinking).
+  3. Structure gate (no call): no number, no named actor, or no call within 14-84 days -> dropped.
+  4. Pairwise tournament in both orders (co-scientist style) -> the winner goes to the claim-support,
+     non-obviousness and editor's-bar gates.
+  About 4 extra calls per slot (1 consensus + up to 6 pairwise judgments).
+- services/run_metrics.py: first summary line of every run is "Objective MET / NOT MET": original
+  insights that passed the editor's bar AND carry a call checkable within 12 weeks. MET needs >= 1.
+- EVENT_INTELLIGENCE_VARIANT_VIEW=0 turns the variant stages off.
+- tests/test_v13_23_variant_view.py (8). Full suite: same 55 failed / 6 errors as before.
+- NOT verified: whether Gemini now writes insights at the bar. That needs the calibration of the
+  editor's bar (tools/calibrate_par.py) and one live run; the run log's Objective line reports it.
+
+## v13.24 (22 Nov 2026) - research report "Making AI Event Intelligence's insights match the best original-analysis publications"
+
+Built from the report's implementation spec (stages A-H inside each exploration slot):
+- A. Consensus MAP: 3-5 cited, dated claims of what coverage and analysts already believe, from the
+  slot's records plus one Google-grounded search for published analysis (CONS-n ids, up to 10 a run,
+  EVENT_INTELLIGENCE_CONSENSUS_SEARCHES). Also names search terms for primary records.
+- B. services/primary_data.py: Federal Register (rules, comment-close and effective dates), SEC EDGAR
+  full-text search (who filed which form when; SEC_USER_AGENT in .env recommended), CourtListener
+  dockets (only with COURTLISTENER_API_TOKEN). Free APIs, not Gemini. Added as citable "numbers"
+  records to the slot and the run, so the gates check what cites them. EVENT_INTELLIGENCE_PRIMARY_DATA=0 off.
+- D. The generator must name which CONSENSUS[n] each candidate contradicts or refines, use a DIFFERENT
+  lens per candidate (Papic constraints; Thompson value chain; follow the money; Green & Armstrong
+  structured analogy), prefer primary-record dates and numbers, and make a 2-12 week call with a named
+  resolution source; thesis in at most 35 plain words.
+- E. Plain-language check (no call): thesis over 35 words or coined labels from the user's own labels
+  ("structural asymmetry", "blind spot", ...) -> dropped.
+- F. Novelty against the consensus map (1 call each, SciMON idea): restates it -> dropped.
+- G. Pre-mortem (Klein; 1 call each): a likely failure reason already in the evidence -> dropped.
+- H. Tournament (unchanged). Run line renamed "Objective (estimated, not proven ...)".
+- try_variants.py: stage test of A-H on a saved run (no news retrieval), hard call ceiling.
+- Not done from the spec: replacing the strategic-inference prompt itself with short per-lens calls
+  (its output schema feeds every gate; kept, with the variant instruction appended); Green & Armstrong's
+  mechanical base-rate rule; history-embedding novelty; retiring the hypothesis lab; briefing lines
+  drawn from the winner. Tests: tests/test_v13_24_quality_stages.py (6). Full suite: same 55/6 as before.
+- v13.24 also (user's direction, 22 Nov): (1) EVIDENCE FIRST - in each exploration slot a candidate is
+  dropped before any judging unless every premise cites a record and its copied quote was found in an
+  evidence record (quote_first's exact-substring check; no model). The old failure - an insight
+  written first and found unsupported by the claim gate later - now stops at the cheapest point.
+  (2) OUTSIDE JUDGE - services/outside_judge.py: novelty, pre-mortem, the tournament and the editor's
+  bar (and tools/calibrate_par.py) are judged by a different model family: an open-source model on the
+  user's own Ollama (localhost:11434, OpenAI-compatible endpoint; OUTSIDE_JUDGE_MODEL, else the first
+  installed non-Google model - Gemma is excluded as Gemini's family). Gemini only generates. Without a
+  running Ollama the run falls back to Gemini and logs "self-judged:gemini". Huang et al. ICLR 2024
+  (self-correction without external feedback degrades), Zheng et al. NeurIPS 2023 (self-enhancement
+  bias). tests/test_v13_24_outside_judge.py (4).

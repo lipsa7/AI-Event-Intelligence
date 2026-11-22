@@ -537,11 +537,42 @@ class HypothesisEvidenceService:
             "the actor, action and qualifiers in each quote. Return records=[] when irrelevant; "
             # 20 Nov 2026 (RUN-87BF: AMD's 'Instinct' GPUs were taken for the startup Instinct; an acquisition was
             # taken as a precedent for a voluntary safety accord)
-            "SAME ENTITY: a record must be about the same organisation, product or person the hypothesis names, "
-            "not a different one with the same or a similar name (a startup vs a chip line, a fund vs a company); "
-            "if the page is about a different entity, return records=[]. A historical_case must share the "
-            "MECHANISM (the same kind of commitment, rule, dependency or move), not just the sector or topic; "
-            "otherwise historical_case=null. "
+            "SAME NAME, DIFFERENT ENTITY: do not take records about a different organisation, product or person "
+            "that merely shares or resembles a name the hypothesis uses (a startup vs a chip line, a fund vs a "
+            "company); return records=[] for such a page. This rule is ONLY about name confusion. "
+            # v13.16 (20 Nov 2026, RUN-4367E5FE): the rule above was read as "a past case must involve the same
+            # actors", so the 2018 ZTE ban reversal, the 2020 Huawei licence and the 2023 FTC investigation of
+            # OpenAI were all rejected as "different entity" and no run has found a past case.
+            "A historical_case is an EARLIER case and is EXPECTED to involve other actors (another government, "
+            "company, product or country); never reject it because its actors differ from the hypothesis. Judge it "
+            "only on the MECHANISM: it must be the same kind of commitment, rule, dependency or move (an earlier ban "
+            "reversed under pressure is a past case for a ban reversed under pressure), not just the same sector "
+            "or topic; otherwise historical_case=null. A case's outcome may be the case's own resolution "
+            "(the ban was lifted, the suit settled, the rule took effect). "
+            # v13.19 (22 Nov 2026, RUN-ACC0E1ED): the rule alone did not change what the reviewer compared.
+            # It rejected Kia/Hyundai public-nuisance suits over a theft vulnerability as "car manufacturers,
+            # whereas the current development involves an AI company", Bonta v. Meta as "different entity
+            # than OpenAI", and filings whose outcome was not on the same page. Retrieval of analogies goes
+            # by surface similarity while their soundness depends on shared relational structure (Gentner,
+            # Rattermann & Forbus 1993); few-shot examples raise judge consistency (Zheng et al., NeurIPS 2023,
+            # 65% -> 77.5%). Method: compare ROLES, not names; worked examples follow.
+            "HOW TO JUDGE A PAST CASE: first rewrite both the hypothesis and the page's case with ROLES instead of "
+            "names (for example '[state attorney general] sues [product maker] under [public nuisance / consumer "
+            "protection] over [a security weakness that let third parties cause harm]'), then compare the roles, "
+            "the legal or economic lever and the harm pathway. Sector, company and country do not matter. "
+            "EXAMPLES. Hypothesis: a state attorney general sues an AI lab for public nuisance after its agents "
+            "escaped testing and attacked another company. (a) Page: Chicago sued Kia and Hyundai in 2023 for "
+            "public nuisance over cars that were easy to steal -> ACCEPT as historical_case (government plaintiff, "
+            "public-nuisance theory, product weakness exploited to harm third parties; different sector is "
+            "irrelevant). (b) Page: a 2023 state lawsuit against Meta over youth social-media addiction -> ACCEPT "
+            "only if the hypothesis is about a state using consumer-protection law against a platform's product "
+            "design; for the escaped-agents suit it is a weaker match (harm comes from product design, not a "
+            "security failure): set similarity and difference honestly. (c) Page: an FTC antitrust suit against "
+            "Facebook over acquisitions -> REJECT (same kind of company, different mechanism: competition law, "
+            "not harm to third parties). (d) Page: SEC charges against SolarWinds in 2023 for misleading investors "
+            "about cybersecurity -> ACCEPT for a hypothesis about a company penalised for how it disclosed a "
+            "security failure. A page that describes the case but not what followed is STILL a historical_case: "
+            "give year and date_quote and leave outcome_quote empty - a follow-up search looks for the outcome. "
             # 20 Nov 2026 (RUN-FF8F59D2: Reuters 2024 on Google restricting Gemini's election answers was kept as
             # a record but not as a past case, and the log could not say why)
             "Also return a top-level \"case_note\": when the page describes an earlier case but you set "
@@ -955,6 +986,7 @@ class HypothesisEvidenceService:
             return {"status": "not_needed"}
         partial = [r for r in records if r.get("historical_case") and not complete(r)]
         reason = ""
+        mechanism = ""
         try:
             if partial:
                 query = self._outcome_query(partial[0])
@@ -963,15 +995,17 @@ class HypothesisEvidenceService:
                 data = self._ask(
                     "These searches for an earlier comparable case found nothing usable:\n"
                     + "\n".join(f"- {q}" for q in precedent_queries)
-                    + "\nName ONE DIFFERENT specific earlier case (actor, action, year): the most recent earlier case "
-                    "of the same kind of instrument or action by the same actors or institution if none of the "
-                    "searches above was for one; otherwise one with the same MECHANISM as the "
-                    "current development below - who held what, who depended on it, what rule applied, how each side "
-                    "responded - not merely the same wording or topic - and write one web search for a report of it "
-                    "and what followed, 2 to 10 "
-                    "words. Return {\"query\":\"...\"}.\nCURRENT DEVELOPMENT: " + title,
+                    + "\nFirst write the current development below as a MECHANISM with roles instead of names "
+                    "(e.g. '[state attorney general] sues [product maker] under [public nuisance] over [a security "
+                    "weakness that let third parties cause harm]'). Then name ONE DIFFERENT specific earlier case "
+                    "(actor, action, year) that fits that mechanism - any sector or country; the actors are expected "
+                    "to differ - whose result is publicly known, and write one web search, 3 to 10 words, built "
+                    "from the case's name and year plus a word for its result (settlement, ruling, dismissed, "
+                    "fined, reversed). Spell names exactly. Return {\"mechanism\":\"...\",\"case\":\"...\","
+                    "\"query\":\"...\"}.\nCURRENT DEVELOPMENT: " + title,
                     timeout=20, task="precedent_retry_plan")
                 query = clean(data.get("query"))
+                mechanism = clean(data.get("mechanism"))[:200]
                 reason = "no_case_found"
             if not query or query.casefold() in gap_of_query:
                 return {"status": "no_new_query", "reason": reason}
@@ -992,7 +1026,8 @@ class HypothesisEvidenceService:
             found = [dict(e) for e in discovery.get("discovered_evidence") or []
                      if isinstance(e, Mapping) and e.get("historical_case")]
             logger.info("precedent_followup=%s", json.dumps({"development": title[:120], "reason": reason,
-                                                            "query": query, "cases_found": len(found)}))
+                                                            "mechanism": mechanism, "query": query,
+                                                            "cases_found": len(found)}))
             return {"status": "searched", "reason": reason, "query": query, "cases_found": len(found),
                     "records": found}
         except Exception as error:

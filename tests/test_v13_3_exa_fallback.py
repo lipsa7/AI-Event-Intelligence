@@ -89,6 +89,7 @@ def test_exa_failure_falls_through_to_gdelt_path(monkeypatch):
     monkeypatch.setattr(Direct, "fetch", lambda self, url, timeout_seconds=12.0: (_ for _ in ()).throw(
         sfs.SourceFetchNetworkError("HTTP 429")))
     monkeypatch.setattr(exa, "fetch_text", lambda url, **kw: (_ for _ in ()).throw(exa.ExaContentsError("x")))
+    monkeypatch.setattr(exa, "search", lambda q, **kw: None)
     monkeypatch.setattr(sfs, "get_free_news_context", lambda url: None)
     with pytest.raises(sfs.SourceFetchError, match="HTTP 429"):
         sfs.SourceFetchService().fetch("https://news.example.com/story")

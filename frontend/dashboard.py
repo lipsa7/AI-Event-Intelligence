@@ -3448,7 +3448,74 @@ def render_key_assumptions(item: Mapping[str, Any]) -> None:
             st.markdown("- " + text)
 
 
+def _report_sources_read(report: Mapping[str, Any]) -> int:
+    payload = report.get("payload") if isinstance(report.get("payload"), Mapping) else report
+    meta = payload.get("metadata") if isinstance(payload.get("metadata"), Mapping) else {}
+    observed = meta.get("run_observability") if isinstance(meta.get("run_observability"), Mapping) else {}
+    try:
+        return int(observed.get("source_count") or meta.get("source_count") or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def render_proof_and_ratings(report: Mapping[str, Any], item: Mapping[str, Any], sections: Mapping[str, Any]) -> None:
+    """v13.20: one line of evidence under the insight, and the reader's two yes/no answers."""
+    from services import proof_line, reader_ratings
+    grounding = sections.get("grounding_by_insight") if isinstance(sections.get("grounding_by_insight"), Mapping) else {}
+    text = proof_line.line(item, sources_read=_report_sources_read(report), grounding_by_insight=grounding)
+    if text:
+        st.caption(text)
+    insight_id = clean_text(item.get("insight_id") or item.get("insight_revision_id"))
+    if not insight_id:
+        return
+    report_id = clean_text(report.get("report_id"))
+    columns = st.columns(len(reader_ratings.QUESTIONS))
+    for column, (question, label) in zip(columns, reader_ratings.QUESTIONS.items()):
+        with column:
+            current = reader_ratings.answer_for(insight_id, question)
+            choice = st.radio(label, ["-", "Yes", "No"], horizontal=True,
+                              index=0 if current is None else (1 if current else 2),
+                              key=f"reader::{report_id}::{insight_id}::{question}")
+            if choice != "-" and (current is None or (choice == "Yes") != current):
+                reader_ratings.save(report_id=report_id, insight_id=insight_id, question=question,
+                                    answer=choice == "Yes", insight_text=clean_text(item.get("text")),
+                                    original=proof_line.is_original(item))
+
+
 def render_hidden_insights(
+    *,
+    report: Mapping[
+        str,
+        Any,
+    ],
+    items: Any,
+    actor_id: str,
+    session_id_value: str,
+    feedback_service: UserFeedbackService,
+    feedback_journal: LocalFeedbackJournal,
+    telemetry: TelemetryService,
+) -> None:
+    """v13.20 (22 Nov 2026): original insights first; findings that their own sources or published
+    analysis already state are shown apart, as background, so a reader never mistakes a restated
+    headline for an insight (RUN-ACC0E1ED showed two such findings as its only insights)."""
+    from services import proof_line
+    originals, background = proof_line.split(as_list(items))
+    if not originals:
+        st.caption("No original insight this run: nothing passed the check against what the sources "
+                   "and published analysis already say." + (" Background findings are below." if background else ""))
+    else:
+        _render_insight_cards(report=report, items=originals, actor_id=actor_id,
+                              session_id_value=session_id_value, feedback_service=feedback_service,
+                              feedback_journal=feedback_journal, telemetry=telemetry)
+    if background:
+        st.markdown("#### Already in the coverage (background, not counted as insights)")
+        st.caption("Backed by their sources, but the sources or published analysis already say this.")
+        _render_insight_cards(report=report, items=background, actor_id=actor_id,
+                              session_id_value=session_id_value, feedback_service=feedback_service,
+                              feedback_journal=feedback_journal, telemetry=telemetry)
+
+
+def _render_insight_cards(
     *,
     report: Mapping[
         str,
@@ -3466,10 +3533,6 @@ def render_hidden_insights(
     )
 
     if not values:
-        st.caption(
-            "No sufficiently supported hidden "
-            "insight was produced."
-        )
         return
 
     for index, item in enumerate(
@@ -3484,6 +3547,12 @@ def render_hidden_insights(
                 numbered=True,
                 index=index,
             )
+
+            if isinstance(item, Mapping):
+                try:
+                    render_proof_and_ratings(report, item, report_sections(report))
+                except Exception as error:   # never break the report view
+                    st.caption(f"Proof line unavailable: {type(error).__name__}")
 
             if isinstance(
                 item,

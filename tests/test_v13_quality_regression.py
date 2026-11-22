@@ -301,7 +301,7 @@ def test_call_budget_keeps_calls_for_the_briefing_and_stops_optional_work_before
     service._apply_call_cap("deep")
     try:
         held = service._lab_reserved_calls + service._final_check_reserved_calls + service._after_insights_reserved_calls
-        assert service._after_insights_reserved_calls == 70 and held == 170
+        assert service._after_insights_reserved_calls == 70 and held == 130   # v13.21: final checks off the ceiling
         assert g.calls_available() == 480 - held
         # Spend ordinary calls until fewer than MIN_CALLS_TO_START_OPTIONAL_WORK remain for this stage.
         for _ in range(480 - held - S.MIN_CALLS_TO_START_OPTIONAL_WORK + 1):
@@ -367,17 +367,17 @@ def _deep_cap(monkeypatch, cap):
 
 def test_call_budget_at_480_keeps_every_reserve_and_stops_optional_work_in_time(monkeypatch):
     """v13.8 review: the whole call budget of a deep run at the recommended cap. Main path gets
-    480 - 40 (final checks) - 60 (lab) - 70 (briefing etc.) = 310; optional work stops when fewer than
+    480 - 60 (lab) - 70 (briefing, focus) = 350 (v13.21: final checks, actor moves, judge off the ceiling); optional work stops when fewer than
     15 of those remain; every reserved stage still gets all of its calls afterwards."""
     import pytest
     from services import gemini_llm_service as g
     service = _deep_cap(monkeypatch, 480)
     try:
         assert (service._final_check_reserved_calls, service._lab_reserved_calls,
-                service._after_insights_reserved_calls) == (40, 60, 70)
+                service._after_insights_reserved_calls) == (0, 60, 70)
         with g.stage("hidden_insights"):
-            assert g.calls_available() == 310
-            for _ in range(295):
+            assert g.calls_available() == 350
+            for _ in range(335):
                 g.consume_call()
             assert not service._call_cap_exhausted()          # 15 left: one more story may start
             g.consume_call()
@@ -405,7 +405,7 @@ def test_focus_research_decides_inside_its_own_path(monkeypatch):
     seen = {}
     try:
         with g.stage("hidden_insights"):
-            for _ in range(310):
+            for _ in range(350):
                 g.consume_call()                              # main path fully used
         original = S.__dict__["_focus_research_before_briefing"]
         assert getattr(original, "_stage_path", "") == "focus_research"
@@ -429,7 +429,7 @@ def test_no_after_insight_reserve_below_480(monkeypatch):
     try:
         assert service._after_insights_reserved_calls == 0
         with g.stage("hidden_insights"):
-            assert g.calls_available() == 160                 # 260 - 40 - 60: insights first
+            assert g.calls_available() == 200                 # 260 - 60 (lab): insights first
     finally:
         g.set_call_budget(None)
 

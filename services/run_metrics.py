@@ -152,9 +152,28 @@ def compute(*, state: Mapping[str, Any], report: Mapping[str, Any], events: Sequ
             "calls_per_released_insight": _ratio(calls or 0, len(insights)) if calls else None,
             "run_seconds": round(float(elapsed_seconds), 1) if elapsed_seconds is not None else None}
 
+    # v13.23 (22 Nov 2026): the run checks itself against the project objective - original insights a
+    # reader would rate at par with publications that sell original analysis. Counted: insights that are
+    # not restatements of their sources, passed the editor's bar (services/par_check.py), and carry a
+    # call checkable within 12 weeks (services/variant_view.py). The log says MET or NOT MET.
+    def _field(item: Mapping[str, Any], key: str) -> Any:
+        return item.get(key) if item.get(key) is not None else _m(item.get("metadata")).get(key)
+    originals = [i for i in insights if not _m(_field(i, "source_backed"))]
+    at_bar = [i for i in originals if _m(_field(i, "par_check")).get("passed") is True]
+    try:
+        from services import variant_view
+        checkable_soon = [i for i in at_bar if not [p for p in variant_view.structure_problems(i)
+                                                    if p.startswith(("call_horizon", "no_dated_call"))]]
+    except Exception:
+        checkable_soon = []
+    objective = {"original_insights": len(originals), "at_editors_bar": len(at_bar),
+                 "at_bar_with_call_within_12_weeks": len(checkable_soon),
+                 "background_findings": len(insights) - len(originals),
+                 "met": len(checkable_soon) >= 1}
+
     return {"version": VERSION, "released": bool(released), "retrieval": retrieval, "insight_funnel": funnel,
             "grounding": grounding_metrics, "novelty": {"repeats_caught": funnel["repeats_of_earlier_caught"]},
-            "judge": judge, "cost": cost}
+            "judge": judge, "cost": cost, "objective": objective}
 
 
 def summary_lines(metrics: Mapping[str, Any]) -> list[str]:
@@ -163,7 +182,13 @@ def summary_lines(metrics: Mapping[str, Any]) -> list[str]:
 
     def pct(value: Any) -> str:
         return f"{value:.0%}" if isinstance(value, (int, float)) else "n/a"
-    return [
+    o = _m(metrics.get("objective"))
+    objective_line = (f"Objective (estimated, not proven - blind comparison and resolved calls prove it) "
+                      f"{'MET' if o.get('met') else 'NOT MET'}: {o.get('at_bar_with_call_within_12_weeks', 0)} "
+                      f"original insight(s) at the editor's bar with a call checkable within 12 weeks "
+                      f"({o.get('original_insights', 0)} original, {o.get('at_editors_bar', 0)} at the bar, "
+                      f"{o.get('background_findings', 0)} background findings)") if o else ""
+    return ([objective_line] if objective_line else []) + [
         f"Retrieval: {r.get('sources')} sources, {r.get('events_analysed')} of {r.get('events_admitted')} events analysed; "
         f"{r.get('research_pages_kept')} of {r.get('research_pages_reviewed')} research pages kept; "
         f"{r.get('past_cases_found')} past cases; Exa {r.get('exa_pages_read') or 0} pages, "

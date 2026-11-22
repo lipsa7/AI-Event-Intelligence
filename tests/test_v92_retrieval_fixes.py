@@ -45,7 +45,8 @@ def test_page_review_requires_the_same_entity_and_mechanism():
     import inspect
     from services import hypothesis_evidence_service as H
     src = inspect.getsource(H)
-    assert "SAME ENTITY" in src and "must share the \"\n            \"MECHANISM" in src or "MECHANISM (the same kind" in src
+    assert "SAME NAME, DIFFERENT ENTITY" in src and "ONLY about name confusion" in src
+    assert "never reject it because its actors differ" in src and "MECHANISM" in src
 
 
 def test_cookie_redirect_to_same_page_is_followed():

@@ -26,7 +26,8 @@ Important:
 
 import hashlib
 import json
-from typing import Any, Dict, Mapping
+import re
+from typing import Any, Dict, Mapping, Optional
 
 
 try:
@@ -125,6 +126,59 @@ INTERSTITIAL_TITLES = (
     "access denied", "are you a robot", "security check", "verify you are human", "captcha",
 )
 INTERSTITIAL_HOSTS = ("unblock.federalregister.gov", "validate.perfdrive.com", "geo.captcha-delivery.com")
+
+
+_SLUG_STOP = {"html", "htm", "php", "aspx", "index", "article", "articles", "news", "story", "amp", "www", "com"}
+
+
+def _slug_query(url: str) -> str:
+    """Headline words from a URL path ("california-sues-openai-over-ai-models-..." -> words), or ""."""
+    from urllib.parse import urlparse
+    path = urlparse(url).path
+    best = max((part for part in path.split("/") if part), key=lambda part: part.count("-"), default="")
+    words = [w for w in re.split(r"[-_]+", re.sub(r"\.[a-z]{2,5}$", "", best.casefold()))
+             if w and not w.isdigit() and w not in _SLUG_STOP and not re.fullmatch(r"[a-z]*\d+[a-z\d]*", w)]
+    return " ".join(words) if len(words) >= 4 else ""
+
+
+# v13.17: last-resort Google search for another report of a blocked story. The orchestrator registers a
+# capped Gemini Google-Search helper at the start of each run (set_google_searcher); None = not available.
+_GOOGLE_SEARCHER: Any = None
+ALTERNATES_PER_SEARCH = 3
+
+
+def set_google_searcher(searcher: Any) -> None:
+    """searcher(query) -> list of {"url": ...}; None turns the Google step off."""
+    global _GOOGLE_SEARCHER
+    _GOOGLE_SEARCHER = searcher
+
+
+def _alternate_urls(url: str, query: str) -> list[tuple[str, str]]:
+    """[(provider, url)] of other sites' reports of the same story: Exa search first, then Google search
+    only when Exa found no other site (Exa off, budget used, or nothing found)."""
+    from urllib.parse import urlparse
+    host = urlparse(url).netloc.replace("www.", "")
+
+    def others(rows: Any) -> list[str]:
+        found = []
+        for row in rows or []:
+            other = str((row or {}).get("url") or "") if isinstance(row, Mapping) else ""
+            if other and urlparse(other).netloc.replace("www.", "") != host and other not in found:
+                found.append(other)
+        return found[:ALTERNATES_PER_SEARCH]
+    try:
+        from services import exa_contents
+        exa_urls = others(exa_contents.search(query))
+    except Exception:
+        exa_urls = []
+    if exa_urls:
+        return [("exa", u) for u in exa_urls]
+    if _GOOGLE_SEARCHER is None:
+        return []
+    try:
+        return [("google", u) for u in others(_GOOGLE_SEARCHER(query))]
+    except Exception:
+        return []
 
 
 def _is_bot_wall(direct: Mapping[str, Any]) -> bool:
@@ -340,6 +394,16 @@ class SourceFetchService(
             return self._build_exa_source(requested_url=requested_url, page=exa_page,
                                           direct_error=direct_error)
 
+        # v13.16 (20 Nov 2026, RUN-4367E5FE): Reuters answered 401 to the app AND to Exa, so three key
+        # stories were lost ("California sues OpenAI over AI models' cyberattacks..."). The same story is
+        # usually reported elsewhere: search Exa with the headline words in the URL and read the first
+        # report from another site. Marked as alternate coverage; it passes the same evidence checks.
+        # v13.17: Exa search finds the other sites first; Google search only when Exa found none. Each
+        # other site's page is read directly first (the publisher's own page), then through Exa.
+        alternate = self._alternate_source(requested_url, direct_error, timeout_seconds)
+        if alternate is not None:
+            return alternate
+
         # -------------------------------------------------------------
         # GDELT CONTEXT FALLBACK
         # -------------------------------------------------------------
@@ -370,6 +434,41 @@ class SourceFetchService(
             )
             + " No GDELT Context fallback was available."
         )
+
+    def _alternate_source(self, requested_url: str, direct_error: str,
+                          timeout_seconds: float) -> Optional[Dict[str, Any]]:
+        query = _slug_query(requested_url)
+        if not query:
+            return None
+        for provider, other in _alternate_urls(requested_url, query):
+            source: Optional[Dict[str, Any]] = None
+            try:
+                direct = _DirectSourceFetchService.fetch(self, other, timeout_seconds=timeout_seconds)
+                text = _clean(direct.get("text_content") or direct.get("raw_text"))
+                if len(text) >= MIN_USABLE_DIRECT_TEXT_CHARS and not _looks_like_interstitial(text) \
+                        and not _is_bot_wall(direct):
+                    source = dict(direct)
+                    source["metadata"] = dict(direct.get("metadata") or {})
+                    source["metadata"]["retrieval_mode"] = f"{provider}_alternate_coverage_direct"
+            except Exception:
+                source = None
+            if source is None:
+                try:
+                    from services import exa_contents
+                    page = exa_contents.fetch_text(other)
+                except Exception:
+                    page = None
+                if page and len(page.get("text") or "") >= MIN_USABLE_DIRECT_TEXT_CHARS \
+                        and not _looks_like_interstitial(page["text"]):
+                    source = self._build_exa_source(requested_url=requested_url, page=page,
+                                                    direct_error=direct_error)
+                    source["metadata"]["retrieval_mode"] = f"{provider}_alternate_coverage"
+            if source is not None:
+                source["metadata"]["alternate_coverage_for"] = requested_url
+                source["metadata"]["alternate_found_by"] = provider
+                source["metadata"]["publisher_fetch_error"] = _clean(direct_error)
+                return source
+        return None
 
     @staticmethod
     def _build_exa_source(*, requested_url: str, page: Mapping[str, Any], direct_error: str) -> Dict[str, Any]:

@@ -193,8 +193,8 @@ CONVERGENCE_GUIDANCE = (
 
 INSIGHT_EXPLORATION_INSTRUCTION = (
     "SYSTEMATIC EXPLORATION. Earlier candidates were rejected or never reached the checks. Look ONLY at these "
-    "developments together: {developments}. Using the admitted evidence about them, derive at most one hidden "
-    "insight: a conclusion that the facts of these developments jointly support but no single source states. "
+    "developments together: {developments}. Using the admitted evidence about them, derive up to three hidden "
+    "insights (different variant views when a VARIANT VIEW section follows; otherwise at most one): a conclusion that the facts of these developments jointly support but no single source states. "
     "Premises must quote their records; cite records from at least three different news events and two "
     "publishers; keep any unstated reasoning step short and mark it as an assumption; do not claim a cause no "
     "record states. Do not reuse these rejected theses: {rejected}. Return no candidate if these developments "
@@ -210,7 +210,7 @@ INSIGHT_EXPLORATION_INSTRUCTION = (
 INSIGHT_CONSTRAINT_INSTRUCTION = (
     "CONSENSUS VS CONSTRAINT. Look at this development: {developments}, together with the CONTEXT records "
     "(rules, deadlines, dependencies, numbers and past cases found by follow-up research). Derive at most one "
-    "hidden insight in this shape: (1) what a headline reader expects to happen next; (2) a cited context "
+    "hidden insight (up to three different variant views when a VARIANT VIEW section follows) in this shape: (1) what a headline reader expects to happen next; (2) a cited context "
     "record - a rule, deadline, dependency, number or past case - that this expectation ignores; (3) what "
     "that constraint therefore forces or makes likely, for a named company, agency or group; (4) a forecast "
     "question with a deadline, or a concrete watch signal. Premises must quote their records and the "
@@ -3281,6 +3281,21 @@ class ResearchOrchestratorService:
         "unsupported" (fail closed) and its error is logged.
         """
         evidence = _unique_evidence_records(records)
+        # v13.18 (22 Nov 2026): the claims are asked in batches up front (services/grounding_service
+        # batched_checks); each one-claim check below still runs and fails on its own, but uses its
+        # batched verdict instead of a separate call. RUN-ACC0E1ED made 285 one-claim calls.
+        batch = getattr(self.grounding_service, "batched_checks", None)
+        try:
+            context = batch(list(claims), evidence) if callable(batch) and len(claims) > 1 else None
+        except Exception:
+            context = None
+        if context is None:
+            import contextlib
+            context = contextlib.nullcontext()
+        with context:
+            return self._ground_claims_isolated_loop(claims, evidence, label=label)
+
+    def _ground_claims_isolated_loop(self, claims, evidence, *, label: str) -> dict[str, Any]:
         results: list[dict[str, Any]] = []
         failures: list[str] = []
         for claim in claims:
@@ -3358,6 +3373,34 @@ class ResearchOrchestratorService:
     ANALYSIS_RESERVE_SECONDS = 900.0
     PRECEDENT_DEVELOPMENTS = 3
     PRECEDENT_MIN_SECONDS = 120.0
+
+    ALTERNATE_GOOGLE_SEARCHES_ENV = "EVENT_INTELLIGENCE_ALTERNATE_GOOGLE_SEARCHES"
+
+    def _register_alternate_google_search(self) -> None:
+        """v13.17 (20 Nov 2026): last resort for a story whose page blocks the app AND Exa (RUN-4367E5FE:
+        Reuters 401 to both) when Exa search finds no other site either. A capped Gemini Google-Search
+        helper of its own (default 8 searches a run, separate from the 30 for research), registered with
+        the fetch service for this run. It uses Gemini (the 5,000 free Google queries a month on Gemini 3,
+        then $14 per 1,000) and counts toward the call cap."""
+        from services import source_fetch_service
+        source_fetch_service.set_google_searcher(None)
+        llm = getattr(getattr(self, "extraction_agent", None), "llm", None)
+        if llm is None or os.getenv("EVENT_INTELLIGENCE_GROUNDED_SEARCH", "1") == "0":
+            return
+        try:
+            from services.grounded_search import GeminiGroundedSearch
+            limit = _env_int(self.ALTERNATE_GOOGLE_SEARCHES_ENV, 8, 0, 50)
+            if limit <= 0:
+                return
+            helper = GeminiGroundedSearch(llm, max_calls=limit)
+            if not helper.available:
+                return
+
+            def search(query: str) -> list:
+                return list(helper.search(query, max_results=5).get("results") or [])
+            source_fetch_service.set_google_searcher(search)
+        except Exception as error:
+            logger.warning("Alternate Google search not available: %s", type(error).__name__)
 
     def _grounded_search(self, state: dict[str, Any]) -> Any:
         """One capped Gemini Google-Search helper per run, combined with the free providers."""
@@ -4405,7 +4448,13 @@ class ResearchOrchestratorService:
             reserve_calls("hypothesis_lab", 0)
             # v13.7: the briefing, focus research and actor moves are done too; calls still held for
             # them go back to the pool (the report checks and the judge come next).
+            # v13.18 (22 Nov 2026): except up to 15 for the judge, which runs after this point and
+            # found nothing left in RUN-ACC0E1ED ("judge_unavailable").
+            from services.gemini_llm_service import reserved_calls as _held
+            left_for_judge = min(int(_held("after_insights") or 0), self.JUDGE_RESERVED_CALLS)
             reserve_calls("after_insights", 0)
+            if left_for_judge > 0:
+                reserve_calls("judge_only", left_for_judge, stages=("judge",))
         except Exception:
             pass
         report["historical_analogies"] = _json_safe(briefing.get("analogies") or [])
@@ -17389,9 +17438,21 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
     # but the call ceiling refuses ordinary stages much earlier (cap minus the lab and final-check
     # reserves), so the insight loop could spend them all: 14 Nov, 45 briefing calls refused.
     AFTER_INSIGHTS_RESERVED_CALLS_ENV = "EVENT_INTELLIGENCE_AFTER_INSIGHTS_RESERVED_CALLS"
+    # v13.18 (22 Nov 2026): 70 -> 100. RUN-ACC0E1ED: focus research 18 + briefing 36 used the 70
+    # before actor moves (31) ran, and 19 of its 24 claim checks were refused.
+    # v13.21: actor moves and the judge have their own limits (OWN_LIMIT_STAGES), so this reserve
+    # covers focus research and the briefing only (RUN-ACC0E1ED: 18 + 36 calls).
     AFTER_INSIGHTS_RESERVED_CALLS_DEFAULT = 70
     AFTER_INSIGHTS_RESERVED_CALLS_MAX_SHARE = 0.20
-    AFTER_INSIGHTS_STAGES = ("focus_research", "briefing", "actor_moves", "judge")
+    JUDGE_RESERVED_CALLS = 0
+    AFTER_INSIGHTS_STAGES = ("focus_research", "briefing")
+    # v13.21: stages OFF the shared ceiling, with no limit unless the env setting gives one. Each checks
+    # a fixed list once (actor-move claims, the released insights, the final report), so it cannot loop.
+    OWN_LIMIT_STAGES = {
+        "actor_moves": "EVENT_INTELLIGENCE_ACTOR_MOVES_MAX_CALLS",
+        "final_checks": "EVENT_INTELLIGENCE_FINAL_CHECKS_MAX_CALLS",
+        "judge": "EVENT_INTELLIGENCE_JUDGE_MAX_CALLS",
+    }
     # Optional work (one more exploration story, a repair) needs about this many calls to finish
     # (generation, grounding, claim checks); it does not start with fewer.
     MIN_CALLS_TO_START_OPTIONAL_WORK = _env_int("EVENT_INTELLIGENCE_MIN_CALLS_OPTIONAL_WORK", 15, 1, 100)
@@ -17411,6 +17472,7 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
             exa_contents.reset_run_budget()
         except Exception:
             pass
+        self._register_alternate_google_search()
         raw = _clean(os.getenv(self.CALL_CAP_ENV))
         self._call_cap = None
         self._lab_reserved_calls = 0
@@ -17429,10 +17491,19 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
         # v10.1: calls held for the final checks (report grounding and red team). On 14 Nov the
         # cap was used up before them; the red team could not run and the release policy blocked
         # the whole report (RED_TEAM_FAILED, RED-TEAM-REQUIRED).
-        final_held = min(_env_int(self.FINAL_CHECK_RESERVED_CALLS_ENV, self.FINAL_CHECK_RESERVED_CALLS_DEFAULT, 0, 500),
-                         int(cap * self.FINAL_CHECK_RESERVED_CALLS_MAX_SHARE))
-        if final_held > 0:
-            reserve_calls("final_checks", final_held)
+        # v13.21 (22 Nov 2026): the stages that decide whether the report can be trusted are OFF the
+        # shared ceiling, with no limit (gemini_llm_service.set_own_limit). RUN-ACC0E1ED:
+        # the shared ceiling ran out after the insights and actor moves lost 19 of 24 claim checks
+        # (never checked, so possibly the best moves), the judge did not run, the red team and the
+        # report grounding fell back to no-call checks. Spend stays bounded: cap + these limits.
+        from services.gemini_llm_service import set_own_limit
+        self._own_stage_limits = {}
+        for stage_name, env_name in self.OWN_LIMIT_STAGES.items():
+            raw_limit = _clean(os.getenv(env_name))
+            limit = int(raw_limit) if raw_limit.isdigit() else None   # unset: no limit
+            set_own_limit(stage_name, limit)
+            self._own_stage_limits[stage_name] = limit if limit is not None else "no limit"
+        final_held = 0   # final checks have their own limit now
         self._final_check_reserved_calls = final_held
         # Held only when the cap is large enough for several insights: below it the insights come
         # first (a missing briefing section costs less than a missing insight).
@@ -17453,8 +17524,9 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
                 reserve_calls("hypothesis_lab", held)
                 self._lab_reserved_calls = held
         logger.info("gemini_call_cap=%s lab_reserved_calls=%s final_check_reserved_calls=%s "
-                    "after_insights_reserved_calls=%s", cap, self._lab_reserved_calls,
-                    self._final_check_reserved_calls, self._after_insights_reserved_calls)
+                    "after_insights_reserved_calls=%s own_stage_limits=%s", cap, self._lab_reserved_calls,
+                    self._final_check_reserved_calls, self._after_insights_reserved_calls,
+                    json.dumps(getattr(self, "_own_stage_limits", {}), sort_keys=True))
 
     def _overreach_found(self, candidate: Mapping[str, Any], evidence: Sequence[Any]) -> dict[str, list[str]]:
         """Overstating words and unsourced numbers in a candidate's insight text, checked against
@@ -17516,7 +17588,7 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
     # v6.24: 6 covered one candidate's challenge search; with up to three final-
     # wording searches the budget ran out and a strong candidate failed closed as
     # "final_wording_research_incomplete" (replay RUN-FB8AB22DBDD548B5BB6D4898).
-    CHALLENGE_GROUNDED_PROMPTS = _env_int("GROUNDED_SEARCH_CHALLENGE_MAX_CALLS", 24, 0, 60)
+    CHALLENGE_GROUNDED_PROMPTS = _env_int("GROUNDED_SEARCH_CHALLENGE_MAX_CALLS", 60, 0, 120)  # v13.21: 24 -> 60; RUN-ACC0E1ED ran out at 24 and both shown findings had an incomplete contrary-evidence search (Google grounding: 5,000 prompts a month free)
 
     def _challenge_search(self) -> Any:
         """v6.19: contrary-evidence / alternative research searches the free
@@ -18008,8 +18080,9 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
             target["events"] += group["events"]
         for group in merged:
             group["potential"] = insight_potential.score(group["events"], topic=topic)
-        ranked = sorted(merged, key=lambda g: (-float(g["potential"]["score"]), -len(g["underlying"]),
-                                               -len(g["evidence_ids"]), g["key"]))[:max(6, limit)]
+        order = lambda g: (-float(g["potential"]["score"]), -len(g["underlying"]), -len(g["evidence_ids"]), g["key"])
+        merged = self._join_story_families(sorted(merged, key=order), topic=topic)
+        ranked = sorted(merged, key=order)[:max(6, limit)]
         ranked = [g for g in ranked if "funding_only" not in g["potential"]["parts"]] or ranked
         # v6.21.6: skip only the EXACT combinations earlier candidates used.
         # (v6.21.4 skipped any combination inside the union of all used
@@ -18062,6 +18135,206 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
                 break
         return out
 
+    def _par_check(self, insight: Mapping[str, Any], evidence: Sequence[Any]) -> dict[str, Any]:
+        """v13.22: services/par_check.py - would the user approve this original insight? One model call.
+        EVENT_INTELLIGENCE_PAR_CHECK=0 turns it off (then every original insight passes, as before)."""
+        if os.getenv("EVENT_INTELLIGENCE_PAR_CHECK", "1").strip() in {"0", "false", "no"}:
+            return {"passed": True, "available": False, "reason": "off"}
+        from services import par_check
+        text = " ".join(_clean(insight.get(k)) for k in ("text", "insight", "title") if _clean(insight.get(k)))
+        summary = self._expected_view_block(evidence, [])
+        from services import outside_judge
+        judge, judged_by = outside_judge.judge_or(self._ask_briefing_model)   # v13.24: another model family
+        result = par_check.judge(text, ask=judge, sources_summary=summary)
+        result["judged_by"] = judged_by
+        logger.info("par_check=%s", json.dumps({"version": par_check.VERSION, "passed": result.get("passed"),
+                                                "judged_by": result.get("judged_by"),
+                                                "missing": result.get("missing"), "reason": result.get("reason"),
+                                                "insight": text[:160]}, ensure_ascii=False))
+        return result
+
+    VARIANT_MAX_CANDIDATES = 3
+    VARIANT_KEEP = 1
+
+    def _variant_on(self) -> bool:
+        return os.getenv("EVENT_INTELLIGENCE_VARIANT_VIEW", "1").strip() not in {"0", "false", "no"}
+
+    CONSENSUS_SEARCHES_ENV = "EVENT_INTELLIGENCE_CONSENSUS_SEARCHES"
+
+    def _analysis_search(self, labels: Sequence[str]) -> list[dict[str, Any]]:
+        """v13.24 (stage A): published analysis about the story, found with Google grounding (free up to
+        5,000 prompts a month). One search per story slot, at most EVENT_INTELLIGENCE_CONSENSUS_SEARCHES
+        (default 10) a run."""
+        helper = self.__dict__.get("_consensus_search_helper")
+        if helper is None:
+            helper = False
+            llm = getattr(getattr(self, "extraction_agent", None), "llm", None)
+            if llm is not None and os.getenv("EVENT_INTELLIGENCE_GROUNDED_SEARCH", "1") != "0":
+                try:
+                    from services.grounded_search import GeminiGroundedSearch
+                    limit = _env_int(self.CONSENSUS_SEARCHES_ENV, 10, 0, 50)
+                    candidate = GeminiGroundedSearch(llm, max_calls=limit)
+                    helper = candidate if limit > 0 and candidate.available else False
+                except Exception as error:
+                    logger.info("consensus search unavailable: %s", type(error).__name__)
+            self._consensus_search_helper = helper
+        if not helper:
+            return []
+        import re as _re
+        heads = [_re.split(r"\s[-\u2013\u2014]\s|#|\|", _clean(label))[0].strip() for label in list(labels)[:2]]
+        query = " ".join(h for h in heads if h)[:150] + " analysis outlook"
+        try:
+            return [dict(r) for r in helper.search(query, max_results=6).get("results") or [] if isinstance(r, Mapping)]
+        except Exception as error:
+            logger.info("consensus search failed: %s", type(error).__name__)
+            return []
+
+    def _consensus_view(self, labels: Sequence[str], records: list[Any], evidence: list[Any] | None = None) -> dict[str, Any]:
+        """v13.23/v13.24: the retrieved, cited consensus map (stage A) and the primary records - federal
+        rules, filings, dockets - that carry the numbers and dates news leaves out (stage B,
+        services/primary_data.py). Primary records are added to this slot's evidence and to the run's
+        evidence (so the gates can check what cites them)."""
+        if not self._variant_on():
+            return {}
+        from services import primary_data, variant_view
+        rows = [r for r in records or [] if isinstance(r, Mapping)]
+        analysis = self._analysis_search(labels)
+        view = variant_view.consensus(list(labels), rows, ask=self._ask_briefing_model, analysis=analysis)
+        facts, receipt = primary_data.collect(view.get("search_terms") or {})
+        new_records = primary_data.records(facts, " | ".join(labels)[:160])
+        known = {_clean(_as_mapping(r).get("evidence_id")) for r in (evidence if evidence is not None else rows)}
+        new_records = [r for r in new_records if r["evidence_id"] not in known]
+        if new_records:
+            if hasattr(records, "extend"):
+                records.extend(new_records)
+            if evidence is not None and hasattr(evidence, "extend") and evidence is not records:
+                evidence.extend(new_records)
+        view["fact_ids"] = [r["evidence_id"] for r in new_records]
+        logger.info("variant_consensus=%s", json.dumps({
+            "developments": list(labels)[:3], "claims": len(view.get("claims") or []),
+            "analysis_found": len(analysis), "enough": view.get("enough"),
+            "primary_data": receipt, "primary_records": len(new_records),
+            "consensus": view.get("consensus", "")[:240], "error": view.get("error", "")}, ensure_ascii=False))
+        return view
+
+    def _variant_instruction(self, view: Mapping[str, Any]) -> str:
+        if not self._variant_on() or not view:
+            return ""
+        from services import variant_view
+        return variant_view.instruction(view, view.get("fact_ids") or [])
+
+    def _variant_select(self, found: list[dict[str, Any]], view: Mapping[str, Any], entry: dict[str, Any],
+                        records: Sequence[Any] = ()) -> list[dict[str, Any]]:
+        """v13.23/v13.24, in order (research report of 22 Nov, stages E-H):
+        E structure (number, named actor, call in 2-12 weeks) and plain language (thesis <= 35 words,
+          no coined labels) - no calls;
+        F novelty against the consensus map - 1 call each;
+        G pre-mortem - killed if a likely failure reason is already in the evidence - 1 call each;
+        H pairwise tournament in both orders. The winner goes on to the claim-support, non-obviousness
+          and editor's-bar gates. Every drop is logged with its reason."""
+        if not self._variant_on() or not found:
+            return found
+        from services import outside_judge, variant_view
+        judge, judged_by = outside_judge.judge_or(self._ask_briefing_model)
+        entry["judged_by"] = judged_by
+        kept, dropped = [], []
+        lines = [f"[{_clean(_as_mapping(r).get('evidence_id'))}] {_clean(_as_mapping(r).get('text'))[:200]}"
+                 for r in records or [] if isinstance(r, Mapping)]
+        for item in found:
+            meta = dict(_as_mapping(item.get("metadata")))
+            # v13.24: evidence first - every premise's quote must be found in an evidence record
+            # (services/quote_first.py, exact substring, no model). An insight whose facts are not in the
+            # sources is dropped here, before any judging (the old failure: written first, unsupported later).
+            problems = (variant_view.evidence_problems(item) + variant_view.structure_problems(item)
+                        + variant_view.plain_language_problems(item))
+            meta["judged_by"] = judged_by
+            if not problems:
+                text = _clean(item.get("insight") or item.get("text"))
+                fresh = variant_view.novelty(text, view, ask=judge)
+                meta["variant_novelty"] = fresh
+                if not fresh.get("new"):
+                    problems.append("restates_consensus")
+            if not problems:
+                mortem = variant_view.premortem(item, lines, ask=judge)
+                meta["variant_premortem"] = mortem
+                if mortem.get("killed"):
+                    problems.append("premortem_failure_already_in_evidence")
+            meta["variant_structure"] = problems or ["ok"]
+            meta["variant_consensus"] = _clean(view.get("consensus"))[:500]
+            item["metadata"] = meta
+            (dropped if problems else kept).append(item)
+        entry["variant_dropped"] = [{"insight": _clean(i.get("insight") or i.get("text"))[:160],
+                                     "problems": _as_mapping(i.get("metadata")).get("variant_structure")}
+                                    for i in dropped]
+        if len(kept) > 1:
+            kept = variant_view.tournament(kept, view, ask=judge)
+        entry["variant_kept"] = len(kept[: self.VARIANT_KEEP])
+        return [dict(k) for k in kept[: self.VARIANT_KEEP]]
+
+    EXPECTED_VIEW_MAX_ITEMS = 6
+
+    def _expected_view_block(self, evidence: Sequence[Any], sub_evidence: Sequence[Any]) -> str:
+        """v13.19 (22 Nov 2026): the generator is shown what coverage ALREADY says before it writes.
+        RUN-ACC0E1ED: 5 of 7 candidates restated their sources; earlier runs published points already in
+        mainstream analysis (BIS Bulletin no. 120 on debt-financed AI infrastructure). SciMON (Wang et al.,
+        ACL 2024) compares each generated idea with retrieved prior work and asks for something
+        significantly different; here the comparison set is the run's expert-commentary and analysis
+        records plus the headlines of the developments being read. Empty string when there are none."""
+        items: list[str] = []
+        seen: set[str] = set()
+
+        def add(text: str, label: str) -> None:
+            text = _clean(text)[:260]
+            key = text.casefold()[:120]
+            if text and key not in seen and len(items) < self.EXPECTED_VIEW_MAX_ITEMS:
+                seen.add(key)
+                items.append(f"- [{label}] {text}")
+
+        for record in evidence or []:
+            if isinstance(record, Mapping) and _clean(record.get("gap_type")).startswith("commentary"):
+                add(record.get("text") or record.get("source_excerpt"), "published analysis")
+        for record in sub_evidence or []:
+            if isinstance(record, Mapping) and not record.get("analytical_context_only"):
+                add(record.get("title") or record.get("text") or record.get("source_excerpt"), "report")
+        if not items:
+            return ""
+        return ("\n\nEXPECTED VIEW - what published coverage of these developments already says:\n"
+                + "\n".join(items)
+                + "\nYour conclusion must NOT be stated by, or follow directly from, any item above (rewording one "
+                  "of them is rejected). Start from what they say and derive what they have not said: a consequence "
+                  "that needs at least two different developments, or a cited rule, deadline, dependency, number "
+                  "or past case applied to the development, with a dated watch signal.")
+
+    def _join_story_families(self, groups: list[dict[str, Any]], *, topic: str) -> list[dict[str, Any]]:
+        """v13.19 (22 Nov 2026): developments that are one story (an incident and the lawsuit about
+        it, reported in different words) are joined, so each exploration slot reads a different story
+        (services/story_families.py). One model call per run, cached; fail-open."""
+        from services import insight_potential, story_families
+        top = groups[:story_families.MAX_ITEMS]
+        if len(top) < 2:
+            return groups
+        cache_key = tuple(sorted(g["key"] for g in top))
+        cache = self.__dict__.setdefault("_story_family_cache", {})
+        found = cache.get(cache_key)
+        if found is None:
+            try:
+                found = story_families.families(top, ask=self._ask_briefing_model)
+            except Exception as error:
+                logger.info("story_families failed: %s", type(error).__name__)
+                found = []
+            cache[cache_key] = found
+        if not found:
+            return groups
+        joined, joins = story_families.join(top, found)
+        for group in joined:
+            if any(j["kept"] == _clean(group.get("label") or group.get("key"))[:120] for j in joins):
+                group["potential"] = insight_potential.score(group["events"], topic=topic)
+        if joins and not self.__dict__.get("_story_family_logged"):
+            self._story_family_logged = True
+            logger.info("story_families=%s", json.dumps({"version": story_families.VERSION, "joined": joins},
+                                                        ensure_ascii=False))
+        return joined + groups[story_families.MAX_ITEMS:]
+
     def _exploration_candidates(self, *, combo, topic, events, evidence, graph_context, constraints, blueprint,
                                 state, tried, tried_fingerprints, log) -> list[dict[str, Any]]:
         """One candidate (at most) from one combination of developments (v6.21.4)."""
@@ -18080,6 +18353,11 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
             sub_evidence = [r for r in evidence if isinstance(r, Mapping)
                             and _clean(r.get("evidence_id")) in wanted_evidence]
             entry = {"developments": combo["labels"], "events": len(sub_events), "records": len(sub_evidence)}
+            # v13.23 (22 Nov 2026): consensus first, then competing variant views (services/variant_view.py).
+            view = self._consensus_view(combo["labels"], sub_evidence, evidence)
+            entry["consensus"] = _clean(view.get("consensus"))[:200]
+            entry["consensus_claims"] = len(view.get("claims") or [])
+            entry["primary_records"] = len(view.get("fact_ids") or [])
             try:
                 result = self.strategic_inference_agent.analyze(
                     research_question=topic, current_events=sub_events, evidence=sub_evidence,
@@ -18089,7 +18367,9 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
                         "quality_weaknesses": [],
                         "instruction": (INSIGHT_CONSTRAINT_INSTRUCTION if len(combo["keys"]) == 1
                                         else INSIGHT_EXPLORATION_INSTRUCTION).format(
-                            developments=" | ".join(combo["labels"]), rejected=rejected),
+                            developments=" | ".join(combo["labels"]), rejected=rejected)
+                        + self._expected_view_block(evidence, sub_evidence)
+                        + self._variant_instruction(view),
                     },
                     budget_service=self.execution_budget_service, execution_stage="refinement",
                 )
@@ -18102,8 +18382,9 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
                     meta["exploration_combination"] = combo["labels"]
                     item["metadata"] = meta
                     found.append(item)
-                    if len(found) >= 2:   # v13: up to two candidates per story (was one)
+                    if len(found) >= self.VARIANT_MAX_CANDIDATES:   # v13.23: up to three competing (was two)
                         break
+                found = self._variant_select(found, view, entry, sub_evidence)
                 entry["result"] = "candidate" if found else "no_candidate"
                 output += found
             except Exception as error:
@@ -18557,7 +18838,29 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
                     backed = _as_mapping(_as_mapping(out.get("metadata")).get("source_backed"))
                     shown_backed = sum(1 for r in released
                                        if _as_mapping(_as_mapping(r.get("metadata")).get("source_backed")))
-                    if not backed or shown_backed < self.SOURCE_BACKED_MAX_SHOWN:
+                    # v13.22 (22 Nov 2026): the editor's bar. An original insight is released only if a
+                    # judge shown the user's own approved and rejected examples would publish it
+                    # (services/par_check.py); otherwise it gets one repair with the missing element.
+                    par = self._par_check(out, evidence) if not backed else None
+                    if par is not None and not par.get("passed"):
+                        meta = dict(_as_mapping(out.get("metadata")))
+                        meta["par_check"] = par
+                        out["metadata"] = meta
+                        from services import par_check as _par
+                        reason = ("below_par:" + _clean(par.get("missing"))) if par.get("available") else \
+                            _clean(par.get("reason")) or "par_check_unavailable"
+                        attempt["released_as"] = "not_shown:below_par"
+                        verdict = {**verdict, "passed": False, "repairable": bool(par.get("available")),
+                                   "reasons": [reason], "brief_extra": [_par.brief(par)]}
+                        attempt.update({"passed": False, "reasons": [reason], "release_notes": notes})
+                        backed = {"_below_par": True}
+                    elif par is not None:
+                        meta = dict(_as_mapping(out.get("metadata")))
+                        meta["par_check"] = par
+                        out["metadata"] = meta
+                    if backed.get("_below_par"):
+                        pass
+                    elif not backed or shown_backed < self.SOURCE_BACKED_MAX_SHOWN:
                         state["strategic_connections"] = kept_connections
                         released.append(out)
                         released_grounding[key] = out_grounding
@@ -18565,19 +18868,20 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
                         attempt["release_notes"] = notes
                     if not backed:
                         continue
-                    # v6.30.2: shown (backed by its sources), but sources or experts already say
-                    # it - keep looking for an original insight (hidden-insight loops stay on).
-                    from services import non_obviousness
-                    reasons = list(backed.get("reasons") or [])
-                    attempt["released_as"] = ("source_backed" if not shown_backed >= self.SOURCE_BACKED_MAX_SHOWN
-                                              else "not_shown:source_backed_limit")
-                    verdict = {**verdict, "passed": False, "repairable": False,
-                               "reasons": ["source_backed_not_original:" + r for r in reasons],
-                               "brief_extra": non_obviousness.brief([r.split(":", 1)[-1] for r in reasons]) or [
-                                   "[non-obvious] The conclusion only restates what the sources already say. "
-                                   "Derive a conclusion that follows from combining at least two sources "
-                                   "but is stated by none of them, and keep every step backed."]}
-                    attempt.update({"passed": False, "reasons": list(verdict["reasons"])})
+                    if not backed.get("_below_par"):
+                        # v6.30.2: shown (backed by its sources), but sources or experts already say
+                        # it - keep looking for an original insight (hidden-insight loops stay on).
+                        from services import non_obviousness
+                        reasons = list(backed.get("reasons") or [])
+                        attempt["released_as"] = ("source_backed" if not shown_backed >= self.SOURCE_BACKED_MAX_SHOWN
+                                                  else "not_shown:source_backed_limit")
+                        verdict = {**verdict, "passed": False, "repairable": False,
+                                   "reasons": ["source_backed_not_original:" + r for r in reasons],
+                                   "brief_extra": non_obviousness.brief([r.split(":", 1)[-1] for r in reasons]) or [
+                                       "[non-obvious] The conclusion only restates what the sources already say. "
+                                       "Derive a conclusion that follows from combining at least two sources "
+                                       "but is stated by none of them, and keep every step backed."]}
+                        attempt.update({"passed": False, "reasons": list(verdict["reasons"])})
                 elif restatement and fallback is None:
                     fallback = {"key": key, "attempt": attempt,
                                 "released_copy": (out, out_grounding, kept_connections, notes, final_quality)}

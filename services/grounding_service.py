@@ -83,10 +83,13 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
 import re
 from dataclasses import dataclass, asdict
 from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Sequence, Set
+
+logger = logging.getLogger("event_intelligence.services.grounding_service")
 
 
 SERVICE_VERSION = "grounding-service-v1.2-insight-aggregate-contract"
@@ -750,18 +753,31 @@ class GroundingService:
             ),
         )
 
-        parsed = _parse_json_object(
-            self.support_classifier(
-                prompt
+        # v13.18 (22 Nov 2026): the verdict may already be here from a batched call (ground_claims
+        # sends several claims in one request). A batched verdict that does not validate is
+        # re-checked on its own, so batching never changes what is accepted.
+        prefetched = self._take_prefetched(prompt)
+        if prefetched is not None:
+            try:
+                result = self._validate_classifier_output(
+                    parsed=prefetched,
+                    allowed_evidence_ids=set(valid_ids),
+                )
+            except GroundingValidationError:
+                prefetched = None
+        if prefetched is None:
+            parsed = _parse_json_object(
+                self._classify(
+                    prompt
+                )
             )
-        )
 
-        result = self._validate_classifier_output(
-            parsed=parsed,
-            allowed_evidence_ids=set(
-                valid_ids
-            ),
-        )
+            result = self._validate_classifier_output(
+                parsed=parsed,
+                allowed_evidence_ids=set(
+                    valid_ids
+                ),
+            )
 
         status = result[
             "status"
@@ -967,6 +983,150 @@ class GroundingService:
         cache[key] = result
         return result
 
+    # ------------------------------------------------------------------
+    # v13.18 (22 Nov 2026): batched claim checks
+    # ------------------------------------------------------------------
+    # RUN-ACC0E1ED (22 Nov): 285 of the run's 428 Gemini calls were one-claim support checks, each
+    # resending the same ~1,500-token instructions. With the 480-call cap that left the stages after
+    # the insights short (actor moves: 19 of 24 claim checks refused; judge and red team skipped).
+    # ground_claims now sends up to BATCH_SIZE claims per request: same instructions, same evidence
+    # per claim, same validation. Any claim the batch does not answer validly is checked alone.
+    # EVENT_INTELLIGENCE_GROUNDING_BATCH=1 restores one call per claim.
+    BATCH_ENV = "EVENT_INTELLIGENCE_GROUNDING_BATCH"
+    # v13.19: 6 -> 4. Batch prompting is mostly stable up to about 4 items with "notable drops often
+    # occurring at b=6" (Cheng et al. 2023, Batch Prompting); small models degrade first.
+    BATCH_DEFAULT = 4
+    _PROMPT_SPLIT = "\nEvidence records:\n"
+
+    class _PromptCaptured(Exception):
+        pass
+
+    def _batch_size(self) -> int:
+        raw = os.getenv(self.BATCH_ENV)
+        if raw is None and getattr(self, "classifier_provider", "") != "gemini":
+            return 1      # a supplied classifier (tests, local model) keeps one call per claim
+        try:
+            value = int(raw if raw is not None else str(self.BATCH_DEFAULT))
+        except (TypeError, ValueError):
+            value = self.BATCH_DEFAULT
+        return max(1, min(value, 12))
+
+    def _local(self):
+        import threading
+        local = self.__dict__.get("_thread_local")
+        if local is None:
+            local = self.__dict__.setdefault("_thread_local", threading.local())
+        return local
+
+    def _classify(self, prompt: str):
+        captured = getattr(self._local(), "capture", None)
+        if captured is not None:
+            captured.append(prompt)
+            raise GroundingService._PromptCaptured()
+        return self.support_classifier(prompt)
+
+    def _take_prefetched(self, prompt: str) -> Optional[Dict[str, Any]]:
+        store = getattr(self._local(), "prefetched", None)
+        if not store:
+            return None
+        item = store.pop(prompt, None)
+        return dict(item) if isinstance(item, Mapping) else None
+
+    def _batch_prompt(self, prompts: Sequence[str]) -> str:
+        header = prompts[0].split(self._PROMPT_SPLIT, 1)[0]
+        header = header.replace(
+            "Your task is to assess whether ONE atomic claim is supported by the supplied\nevidence records.",
+            "Your task is to assess, for EACH of the numbered items below, whether its ONE atomic claim\n"
+            "is supported by THAT item's own evidence records. Judge every item independently: never use\n"
+            "one item's evidence for another item's claim.")
+        header = header.replace(
+            "Return exactly one JSON object:",
+            "Return exactly one JSON object {\"results\": [...]} with one entry per item, in item order,\n"
+            "each entry having \"item\" (the item number), \"claim_id\" and these fields:")
+        parts = [header, ""]
+        for number, prompt in enumerate(prompts, start=1):
+            body = prompt.split(self._PROMPT_SPLIT, 1)[1]
+            parts.append(f"===== ITEM {number} =====\nEvidence records:\n{body}\n")
+        parts.append(f"Return {{\"results\": [...]}} with exactly {len(prompts)} entries.")
+        return "\n".join(parts)
+
+    def _prefetch_batched(self, run_claims: Callable[[], Any]) -> None:
+        """Collect the prompts the claims would send (no call made), ask them in batches, and keep
+        each valid verdict for its claim. Failures leave the claim to its own call."""
+        size = self._batch_size()
+        if size <= 1:
+            return
+        local = self._local()
+        if getattr(local, "capture", None) is not None or getattr(local, "prefetched", None):
+            return
+        captured: List[str] = []
+        stats = self.__dict__.setdefault("verdict_cache_stats", {"hits": 0, "misses": 0})
+        saved_stats = dict(stats) if isinstance(stats, dict) else None
+        local.capture = captured
+        try:
+            run_claims()
+        finally:
+            local.capture = None
+            if saved_stats is not None:
+                stats.clear()
+                stats.update(saved_stats)
+        prompts = list(dict.fromkeys(p for p in captured if self._PROMPT_SPLIT in p))
+        if len(prompts) < 2:
+            return
+        store: Dict[str, Dict[str, Any]] = {}
+        for start in range(0, len(prompts), size):
+            chunk = prompts[start:start + size]
+            if len(chunk) == 1:
+                continue
+            try:
+                raw = self.support_classifier(self._batch_prompt(chunk))
+                parsed = _parse_json_object(raw)
+            except Exception as error:
+                if type(error).__name__ == "GeminiCallBudgetExceeded":
+                    raise
+                logger.info("grounding_batch_failed size=%s error=%s", len(chunk), type(error).__name__)
+                continue
+            entries = parsed.get("results") if isinstance(parsed, Mapping) else None
+            if not isinstance(entries, list):
+                continue
+            for position, entry in enumerate(entries):
+                if not isinstance(entry, Mapping):
+                    continue
+                try:
+                    number = int(entry.get("item") or position + 1)
+                except (TypeError, ValueError):
+                    number = position + 1
+                if 1 <= number <= len(chunk) and chunk[number - 1] not in store:
+                    store[chunk[number - 1]] = {k: v for k, v in entry.items() if k not in {"item", "claim_id"}}
+        local.prefetched = store
+        logger.info("grounding_batched claims=%s batches=%s answered=%s", len(prompts),
+                    -(-len(prompts) // size), len(store))
+
+    def batched_checks(self, claims: Sequence[Mapping[str, Any]], evidence_records: Sequence[Mapping[str, Any]]):
+        """v13.18: context manager for callers that check claims one at a time on purpose (so one bad
+        check cannot void the rest): the claims are asked in batches up front, and each later
+        one-claim ground_claims call uses its batched verdict when there is a valid one."""
+        import contextlib
+
+        @contextlib.contextmanager
+        def manager():
+            local = self._local()
+            local.batch_depth = int(getattr(local, "batch_depth", 0) or 0) + 1
+            try:
+                if local.batch_depth == 1 and len(claims) > 1:
+                    try:
+                        normalized = self._normalize_evidence_records(evidence_records)
+                        self._prefetch_batched(lambda: self._ground_claim_list(claims, normalized))
+                    except Exception as error:   # each claim is then checked alone, as before
+                        logger.info("grounding_batch_skipped error=%s", type(error).__name__)
+                yield
+            finally:
+                local.batch_depth -= 1
+                if local.batch_depth <= 0:
+                    local.batch_depth = 0
+                    local.prefetched = None
+        return manager()
+
     def ground_claims(
         self,
         *,
@@ -999,6 +1159,30 @@ class GroundingService:
             )
         )
 
+        def run_claims() -> List[GroundedClaim]:
+            return self._ground_claim_list(claims, normalized_evidence)
+
+        local = self._local()
+        inside_batch = int(getattr(local, "batch_depth", 0) or 0) > 0
+        if len(claims) > 1 and not inside_batch:
+            try:
+                self._prefetch_batched(run_claims)
+            except GroundingValidationError:
+                pass
+        try:
+            results = run_claims()
+        finally:
+            if not inside_batch:
+                local.prefetched = None
+
+        if len(results) != len(claims):
+            raise GroundingServiceError(
+                "Grounding completeness invariant failed."
+            )
+        return self._aggregate_claim_results(results, normalized_evidence)
+
+    def _ground_claim_list(self, claims, normalized_evidence) -> List[GroundedClaim]:
+        capturing = getattr(self._local(), "capture", None) is not None
         results: List[
             GroundedClaim
         ] = []
@@ -1041,7 +1225,8 @@ class GroundingService:
                 claim_id
             )
 
-            results.append(
+            try:
+                grounded = (
                 self._ground_claim_cached(
                     claim_id=claim_id,
                     claim_text=(
@@ -1085,12 +1270,18 @@ class GroundingService:
                         )
                     ),
                 )
-            )
+                )
+            except GroundingService._PromptCaptured:
+                continue
+            except GroundingValidationError:
+                if capturing:
+                    continue
+                raise
+            results.append(grounded)
 
-        if len(results) != len(claims):
-            raise GroundingServiceError(
-                "Grounding completeness invariant failed."
-            )
+        return results
+
+    def _aggregate_claim_results(self, results, normalized_evidence) -> Dict[str, Any]:
 
         status_counts = {
             status: 0
