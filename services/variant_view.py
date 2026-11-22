@@ -36,7 +36,7 @@ import re
 from datetime import datetime, timezone
 from typing import Any, Callable, Mapping, Sequence
 
-VERSION = "variant-view-v3"
+VERSION = "variant-view-v4"
 MIN_HORIZON_DAYS = 14
 MAX_HORIZON_DAYS = 84
 MAX_CANDIDATES = 3
@@ -123,6 +123,14 @@ def consensus(labels: Sequence[str], records: Sequence[Mapping[str, Any]], ask: 
             "enough": len(claims) >= 3}
 
 
+def base_rate_line(view: Mapping[str, Any] | None) -> str:
+    rate = _mapping(_mapping(view).get("base_rate"))
+    if not rate or rate.get("rate") is None:
+        return ""
+    return (" OUTSIDE VIEW (Green & Armstrong structured analogies, computed): " + _clean(rate.get("text"))
+            + ". Start the likelihood from this rate and say how this case differs.")
+
+
 # ---------------------------------------------------------------- 2. generator instruction
 def instruction(view: Mapping[str, Any], fact_ids: Sequence[str] = ()) -> str:
     claims = [c for c in view.get("claims") or [] if isinstance(c, Mapping)]
@@ -145,9 +153,41 @@ def instruction(view: Mapping[str, Any], fact_ids: Sequence[str] = ()) -> str:
         "forecast_contract - a yes/no question resolvable within 2 to 12 weeks of today from a named public source "
         "(a docket, a Federal Register date, a filing, an official statement), with its deadline and resolution rule; "
         "(6) put what you would see if the consensus is right instead in alternative_explanations; (7) put the lens "
-        "name in analytical_lenses. Write the first sentence of the insight as the thesis in at most 35 plain words; "
+        "name in analytical_lenses; (8) in what_to_watch give 2-3 signals, each naming the public source to watch "
+        "(a docket number, an SEC form type, a Federal Register agency or document, an official channel)."
+        + base_rate_line(view) + " Write the first sentence of the insight as the thesis in at most 35 plain words; "
         "no coined labels (\"structural asymmetry\", \"blind spot\", \"paradigm\"). If no candidate meets all of "
         "this, return fewer or none."
+    )
+
+
+def lens_instruction(view: Mapping[str, Any], lens: str, fact_ids: Sequence[str] = ()) -> str:
+    """v13.26 (research report of 22 Nov, stage D): the rules for ONE lens in ONE short generation call.
+    Same requirements as instruction(), for a single candidate; the consensus is listed when there is one."""
+    text = dict(LENSES).get(lens, lens)
+    claims = [c for c in view.get("claims") or [] if isinstance(c, Mapping)] if view else []
+    listed = "\n".join(f"CONSENSUS[{n}] ({c.get('source')}{', ' + c['date'] if c.get('date') else ''}): {c['claim']}"
+                       for n, c in enumerate(claims, start=1))
+    if not listed and view and _clean(view.get("consensus")):
+        listed = f"CONSENSUS[1]: {_clean(view.get('consensus'))}"
+    facts = (" Primary records (federal rules, filings, dockets) are in the evidence as " + ", ".join(list(fact_ids)[:12])
+             + " - prefer their dates and numbers." if fact_ids else "")
+    return (
+        f"LENS: {lens} - {text}.\n"
+        + ("WHAT INFORMED READERS ALREADY BELIEVE:\n" + listed + "\n" if listed else "")
+        + "Write ONE candidate through this lens only. It must: "
+        + ("(1) name in novel_proposition which CONSENSUS[n] it contradicts or materially refines and why that "
+           "consensus misses it; " if listed else "(1) say in novel_proposition what an informed reader of these "
+           "reports would not already conclude; ")
+        + "(2) rest on the constraint or mechanism this lens reveals - stated intentions are not constraints; "
+          "(3) carry at least one cited number or date in the insight text;" + facts + " (4) name the actor and "
+          "the move it is forced into; (5) give a forecast_contract: a yes/no question resolvable within 2 to 12 "
+          "weeks from a named public source (a docket, a Federal Register date, a filing, an official statement), "
+          "with its deadline and resolution rule; (6) put what you would see if the consensus is right instead in "
+          "alternative_explanations; (7) in what_to_watch give 2-3 signals, each naming the public source to watch (a "
+          "docket number, an SEC form type, a Federal Register agency or document, an official channel). First "
+          "sentence of the insight: the thesis in at most 35 plain words, no coined labels (\"structural asymmetry\", "
+          "\"blind spot\", \"paradigm\")." + base_rate_line(view)
     )
 
 
@@ -188,6 +228,74 @@ def structure_problems(candidate: Mapping[str, Any], today: datetime | None = No
         if days < MIN_HORIZON_DAYS or days > MAX_HORIZON_DAYS:
             problems.append(f"call_horizon_{days}_days")
     return problems
+
+
+# ---------------------------------------------------------------- 2b. structured analogies (stage C)
+# v13.27 (research report of 22 Nov, stage C): Green & Armstrong (International Journal of Forecasting,
+# 2007) - structured analogies beat unaided experts (46% vs 32% accuracy; 60% with two or more analogies)
+# when each analogy's similarity is RATED and the forecast is derived MECHANICALLY from the ratings, not
+# from the analyst's favourite case. The outside model rates each past case 0-10 on mechanism and says
+# whether the comparable outcome followed; the base rate is the similarity-weighted share, computed here.
+def analogue_prompt(labels: Sequence[str], cases: Sequence[Mapping[str, Any]]) -> str:
+    lines = [f"[{c['case_id']}] ({c.get('year') or '?'}) {c['text']}" + (f" Outcome: {c['outcome']}" if c.get("outcome") else "")
+             for c in cases]
+    return ("CURRENT STORY: " + " | ".join(labels) + "\n\nPAST CASES:\n" + "\n".join(lines)
+            + "\n\nFor each past case rate how similar its MECHANISM is to the current story (0 = unrelated, "
+              "10 = same actors' roles, same lever, same harm pathway; sector and company names do not matter) and say "
+              "whether the outcome a reader would expect for the current story ACTUALLY FOLLOWED in that past case "
+              "(yes, no, or unknown if the case text does not say). Return JSON {\"cases\":[{\"case_id\":\"\","
+              "\"similarity\":0,\"outcome_followed\":\"yes|no|unknown\",\"expected_outcome\":\"short\"}]}.")
+
+
+def analogue_cases(records: Sequence[Mapping[str, Any]], limit: int = 6) -> list[dict[str, Any]]:
+    out = []
+    for record in records or []:
+        case = _mapping(record.get("historical_case"))
+        if not case:
+            continue
+        text = _clean(record.get("text") or record.get("source_excerpt"))[:260]
+        if text:
+            out.append({"case_id": _clean(record.get("evidence_id")), "text": text,
+                        "year": _clean(case.get("year") or case.get("date"))[:10],
+                        "outcome": _clean(case.get("outcome") or case.get("outcome_quote"))[:200]})
+    return out[:limit]
+
+
+def base_rate(rated: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+    """Similarity-weighted share of comparable cases in which the outcome followed (unknowns excluded)."""
+    usable = [r for r in rated if isinstance(r.get("similarity"), (int, float)) and r.get("outcome_followed") in {"yes", "no"}]
+    weight = sum(float(r["similarity"]) for r in usable)
+    if not usable or weight <= 0:
+        return {"cases_rated": len(rated), "cases_used": 0, "rate": None,
+                "text": "no rated past case with a known outcome"}
+    rate = sum(float(r["similarity"]) for r in usable if r["outcome_followed"] == "yes") / weight
+    strength = "weak (fewer than 3 cases)" if len(usable) < 3 else "usable"
+    return {"cases_rated": len(rated), "cases_used": len(usable), "rate": round(rate, 2),
+            "text": (f"in {len(usable)} rated past case(s), similarity-weighted, the expected outcome followed "
+                     f"{round(rate * 100)}% of the time - {strength}")}
+
+
+def rate_analogues(labels: Sequence[str], cases: Sequence[Mapping[str, Any]], ask: Callable[[str], Any]) -> dict[str, Any]:
+    if not cases:
+        return base_rate([])
+    try:
+        data = _parse(ask(analogue_prompt(labels, cases)))
+    except Exception as error:
+        return dict(base_rate([]), error=type(error).__name__)
+    known = {c["case_id"] for c in cases}
+    rated = []
+    for row in data.get("cases") or []:
+        if not isinstance(row, Mapping) or _clean(row.get("case_id")) not in known:
+            continue
+        try:
+            similarity = max(0.0, min(10.0, float(row.get("similarity"))))
+        except (TypeError, ValueError):
+            continue
+        followed = _clean(row.get("outcome_followed")).casefold()
+        rated.append({"case_id": _clean(row.get("case_id")), "similarity": similarity,
+                      "outcome_followed": followed if followed in {"yes", "no"} else "unknown",
+                      "expected_outcome": _clean(row.get("expected_outcome"))[:160]})
+    return dict(base_rate(rated), rated=rated)
 
 
 # ---------------------------------------------------------------- 3a. evidence first
@@ -264,8 +372,10 @@ def premortem_prompt(candidate: Mapping[str, Any], evidence_lines: Sequence[str]
             + "\nINSIGHT: " + _clean(candidate.get("insight") or candidate.get("text"))[:900]
             + "\n\nEVIDENCE ALREADY IN HAND:\n" + "\n".join(evidence_lines[:30])
             + '\n\nGive the three most likely reasons it failed. For each, say whether the evidence above ALREADY '
-              'shows it (quote the record id). Return JSON {"reasons":[{"reason":"","already_in_evidence":true|false,'
-              '"evidence_id":""}]}.')
+              'shows it (quote the record id). Then the KEY ASSUMPTIONS CHECK (CIA Tradecraft Primer): list up to 3 '
+              'things that must be true for the call, each with what would undermine it. Return JSON {"reasons":'
+              '[{"reason":"","already_in_evidence":true|false,"evidence_id":""}],"key_assumptions":[{"assumption":"",'
+              '"undermined_by":""}]}.')
 
 
 def premortem(candidate: Mapping[str, Any], evidence_lines: Sequence[str], ask: Callable[[str], Any]) -> dict[str, Any]:
@@ -275,7 +385,9 @@ def premortem(candidate: Mapping[str, Any], evidence_lines: Sequence[str], ask: 
         return {"killed": False, "checked": False, "error": type(error).__name__}
     reasons = [r for r in data.get("reasons") or [] if isinstance(r, Mapping)]
     shown = [r for r in reasons if r.get("already_in_evidence") is True and _clean(r.get("evidence_id"))]
-    return {"killed": bool(shown), "checked": bool(reasons),
+    assumptions = [{"assumption": _clean(a.get("assumption"))[:200], "undermined_by": _clean(a.get("undermined_by"))[:200]}
+                   for a in data.get("key_assumptions") or [] if isinstance(a, Mapping) and _clean(a.get("assumption"))][:3]
+    return {"killed": bool(shown), "checked": bool(reasons), "key_assumptions": assumptions,
             "reasons": [_clean(r.get("reason"))[:160] for r in reasons[:3]],
             "evidenced": [{"reason": _clean(r.get("reason"))[:160], "evidence_id": _clean(r.get("evidence_id"))} for r in shown]}
 

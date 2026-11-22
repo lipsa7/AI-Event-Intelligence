@@ -3435,6 +3435,15 @@ def render_key_assumptions(item: Mapping[str, Any]) -> None:
         # v6.25: shown, not hidden, when the contrary-evidence search could not finish.
         st.markdown("**Counter-evidence check incomplete:** " + _markdown_safe(check.get("note")))
     render_evidence_table(item)
+    # v13.27: Key Assumptions Check (CIA Tradecraft Primer) from the outside model's pre-mortem.
+    meta = item.get("metadata") if isinstance(item.get("metadata"), Mapping) else {}
+    mortem = item.get("variant_premortem") or meta.get("variant_premortem")
+    stated = [a for a in as_list((mortem or {}).get("key_assumptions") if isinstance(mortem, Mapping) else [])
+              if isinstance(a, Mapping) and clean_text(a.get("assumption"))]
+    if stated:
+        st.markdown("**Must be true for the call:** " + "; ".join(
+            _markdown_safe(a.get("assumption")) + (f" (undermined if: {_markdown_safe(a.get('undermined_by'))})"
+                                                  if clean_text(a.get("undermined_by")) else "") for a in stated))
     checked = item.get("expert_commentary_checked")
     if isinstance(checked, int) and checked > 0:
         st.caption(FRONTIER_NOTE.format(n=checked))

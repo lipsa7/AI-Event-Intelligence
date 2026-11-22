@@ -113,7 +113,8 @@ def test_run_reports_whether_the_objective_was_met():
     background = {"insight_revision_id": "R2", "text": "x", "source_backed": {"reasons": ["conclusion_restates_sources"]}}
     m = run_metrics.compute(state={}, report={"hidden_insights": [original, background]})
     assert m["objective"] == {"original_insights": 1, "at_editors_bar": 1, "at_bar_with_call_within_12_weeks": 1,
-                              "background_findings": 1, "met": True}
-    assert "MET: 1 original insight(s)" in run_metrics.summary_lines(m)[0] and "estimated" in run_metrics.summary_lines(m)[0]
+                              "background_findings": 1, "met": True, "rubric_passed": "1/1",
+                              "new_vs_consensus": "not judged", "win_probability_vs_approved_example": None}
+    assert "MET: 1 original insight(s)" in run_metrics.summary_lines(m)[0] and "estimate" in run_metrics.summary_lines(m)[0]
     none = run_metrics.compute(state={}, report={"hidden_insights": [background]})
     assert none["objective"]["met"] is False and "NOT MET" in run_metrics.summary_lines(none)[0]

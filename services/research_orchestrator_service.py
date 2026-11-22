@@ -3091,8 +3091,16 @@ class ResearchOrchestratorService:
         if not pool:
             return ["" for _ in texts]
 
-        def ask(prompt: str) -> Any:
-            return self._ask_briefing_model(prompt)
+        # v13.27: the outside open-source model decides whether a new insight repeats an earlier one
+        # (Gemini comparing its own new text with its own earlier text is self-judging). Without it, Gemini
+        # still does this one comparison - it compares two texts, it does not grade quality - and says so.
+        from services import outside_judge
+        if outside_judge.available():
+            ask = outside_judge.ask
+            self._repeat_check_judge = "outside:" + outside_judge.model()
+        else:
+            ask = self._ask_briefing_model
+            self._repeat_check_judge = "gemini:no_outside_model"
         return earlier_insights.repeats(list(texts), pool, ask=ask)
 
     def _ask_briefing_model(self, prompt: str) -> Any:
@@ -3152,7 +3160,9 @@ class ResearchOrchestratorService:
         if self._remaining_discretionary_seconds() < self.BRIEFING_MIN_SECONDS:
             return dict(base, **brief.plain_briefing(facts, "time_budget"))
         try:
-            raw_reply = self._ask_briefing_model(brief.build_prompt(topic, facts, cases, focus=self._briefing_focus()))
+            raw_reply = self._ask_briefing_model(brief.build_prompt(
+                topic, facts, cases, focus=self._briefing_focus(),
+                anchors=list(getattr(self, "_briefing_anchors", []) or [])))
             draft = brief.parse_draft(raw_reply, facts, cases)
             try:  # v6.20.11: how many implications the model wrote vs. how many were well-formed
                 raw_data = raw_reply if isinstance(raw_reply, Mapping) else json.loads(
@@ -3796,6 +3806,8 @@ class ResearchOrchestratorService:
         }
         if os.getenv("EVENT_INTELLIGENCE_HYPOTHESIS_LAB", "1") == "0":
             return dict(base, status="disabled")
+        if self._lab_retired():
+            return dict(base, status="retired_for_lens_generation")
         depth_state = _as_mapping(state.get("depth_integrity"))
         deep = _enum(
             state.get("research_depth")
@@ -4407,6 +4419,9 @@ class ResearchOrchestratorService:
                     else:
                         early["attempted"] = False
                     state["focus_research_early"] = early
+            # v13.27: the briefing builds on this run's ORIGINAL released insights (not background findings).
+            from services import proof_line as _proof
+            self._briefing_anchors = _proof.split(report.get("hidden_insights") or [])[0][:3]
             briefing = self._editorial_briefing(
                 topic=topic, developments=developments, evidence=evidence, state=state)
         except Exception as error:
@@ -17516,7 +17531,7 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
         if _enum(research_depth) == "deep" and cap < self.RECOMMENDED_DEEP_CALL_CAP:
             logger.warning("gemini_call_cap=%s is below the %s a deep run needs for several insights; "
                            "the run will stop exploring stories early", cap, self.RECOMMENDED_DEEP_CALL_CAP)
-        lab_on = os.getenv("EVENT_INTELLIGENCE_HYPOTHESIS_LAB", "1") != "0"
+        lab_on = os.getenv("EVENT_INTELLIGENCE_HYPOTHESIS_LAB", "1") != "0" and not self._lab_retired()
         if lab_on and _enum(research_depth) == "deep":
             held = _env_int(self.LAB_RESERVED_CALLS_ENV, self.LAB_RESERVED_CALLS_DEFAULT, 0, 500)
             held = min(held, int(cap * self.LAB_RESERVED_CALLS_MAX_SHARE))
@@ -18152,6 +18167,16 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
         else:
             result = par_check.judge(text, ask=outside_judge.ask, sources_summary=summary)
             result["judged_by"] = "outside:" + outside_judge.model()
+            if result.get("passed") and result.get("available"):
+                # v13.27 (stage I): head to head with the user's most similar approved insight, both orders;
+                # below 0.5 it is held back with one repair (the missing element), like any below-bar insight.
+                duel = par_check.head_to_head(text, ask=outside_judge.ask)
+                result["head_to_head"] = duel
+                probability = duel.get("win_probability")
+                if probability is not None and probability < 0.5:
+                    result.update({"passed": False, "missing": "below_approved_example",
+                                   "fix": "Make it at least as specific and non-obvious as this approved insight: "
+                                          + _clean(duel.get("exemplar"))[:200]})
         logger.info("par_check=%s", json.dumps({"version": par_check.VERSION, "passed": result.get("passed"),
                                                 "judged_by": result.get("judged_by"),
                                                 "missing": result.get("missing"), "reason": result.get("reason"),
@@ -18163,6 +18188,15 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
 
     def _variant_on(self) -> bool:
         return os.getenv("EVENT_INTELLIGENCE_VARIANT_VIEW", "1").strip() not in {"0", "false", "no"}
+
+    def _lab_retired(self) -> bool:
+        """v13.27 (research report of 22 Nov, Q6 keep/change/drop): the hypothesis lab is retired when the
+        per-lens generator runs - it pays for the four lens calls per slot. EVENT_INTELLIGENCE_KEEP_LAB=1
+        keeps it anyway."""
+        if os.getenv("EVENT_INTELLIGENCE_KEEP_LAB", "0").strip() in {"1", "true", "yes"}:
+            return False
+        lens_on = os.getenv("EVENT_INTELLIGENCE_LENS_GENERATION", "1").strip() not in {"0", "false", "no"}
+        return lens_on and self._variant_on()
 
     CONSENSUS_SEARCHES_ENV = "EVENT_INTELLIGENCE_CONSENSUS_SEARCHES"
 
@@ -18215,12 +18249,34 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
             if evidence is not None and hasattr(evidence, "extend") and evidence is not records:
                 evidence.extend(new_records)
         view["fact_ids"] = [r["evidence_id"] for r in new_records]
+        # v13.27 (stage C): structured analogies - the outside model rates the slot's past cases, the base
+        # rate is computed here (Green & Armstrong 2007). No outside model: not rated, never Gemini.
+        from services import outside_judge
+        cases = variant_view.analogue_cases(rows)
+        if cases and outside_judge.available():
+            view["base_rate"] = variant_view.rate_analogues(list(labels), cases, ask=outside_judge.ask)
+        else:
+            view["base_rate"] = dict(variant_view.base_rate([]), cases_found=len(cases),
+                                     note="not rated" + ("" if cases else ": no past case in this slot's evidence")
+                                     + ("" if outside_judge.available() else ": no outside model"))
         logger.info("variant_consensus=%s", json.dumps({
             "developments": list(labels)[:3], "claims": len(view.get("claims") or []),
             "analysis_found": len(analysis), "enough": view.get("enough"),
             "primary_data": receipt, "primary_records": len(new_records),
+            "base_rate": _as_mapping(view.get("base_rate")).get("text"),
             "consensus": view.get("consensus", "")[:240], "error": view.get("error", "")}, ensure_ascii=False))
         return view
+
+    def _generation_lenses(self, view: Mapping[str, Any]) -> list[dict[str, str]]:
+        """v13.26: [{"name", "instruction"}] for one short generation call per lens, or [] to use the old
+        single prompt (EVENT_INTELLIGENCE_LENS_GENERATION=0, or the variant stages switched off)."""
+        if os.getenv("EVENT_INTELLIGENCE_LENS_GENERATION", "1").strip() in {"0", "false", "no"} \
+                or not self._variant_on():
+            return []
+        from services import variant_view
+        fact_ids = (view or {}).get("fact_ids") or []
+        return [{"name": name, "instruction": variant_view.lens_instruction(view or {}, name, fact_ids)}
+                for name, _ in variant_view.LENSES]
 
     def _variant_instruction(self, view: Mapping[str, Any]) -> str:
         if not self._variant_on() or not view:
@@ -18397,6 +18453,10 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
             entry["consensus"] = _clean(view.get("consensus"))[:200]
             entry["consensus_claims"] = len(view.get("claims") or [])
             entry["primary_records"] = len(view.get("fact_ids") or [])
+            # v13.26 (22 Nov 2026, research report of 22 Nov, stage D): one short generation call per lens
+            # (variant_view.LENSES) instead of one long prompt asked for up to three candidates. The variant
+            # rules then travel with each lens, not in the shared instruction.
+            lenses = self._generation_lenses(view)
             try:
                 result = self.strategic_inference_agent.analyze(
                     research_question=topic, current_events=sub_events, evidence=sub_evidence,
@@ -18408,10 +18468,13 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
                                         else INSIGHT_EXPLORATION_INSTRUCTION).format(
                             developments=" | ".join(combo["labels"]), rejected=rejected)
                         + self._expected_view_block(evidence, sub_evidence)
-                        + self._variant_instruction(view),
+                        + ("" if lenses else self._variant_instruction(view)),
                     },
                     budget_service=self.execution_budget_service, execution_stage="refinement",
+                    **({"lenses": lenses} if lenses else {}),
                 )
+                entry["lens_calls"] = list(getattr(self.strategic_inference_agent, "last_lens_calls", []) or []) \
+                    if lenses else []
                 found = []
                 for item in self._extract_insights(result):
                     if claim_fingerprint(item) in tried_fingerprints:
@@ -18421,7 +18484,7 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
                     meta["exploration_combination"] = combo["labels"]
                     item["metadata"] = meta
                     found.append(item)
-                    if len(found) >= self.VARIANT_MAX_CANDIDATES:   # v13.23: up to three competing (was two)
+                    if len(found) >= max(self.VARIANT_MAX_CANDIDATES, len(lenses)):   # v13.26: one per lens
                         break
                 found = self._variant_select(found, view, entry, sub_evidence)
                 entry["result"] = "candidate" if found else "no_candidate"

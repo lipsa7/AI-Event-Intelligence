@@ -159,16 +159,28 @@ def compute(*, state: Mapping[str, Any], report: Mapping[str, Any], events: Sequ
     def _field(item: Mapping[str, Any], key: str) -> Any:
         return item.get(key) if item.get(key) is not None else _m(item.get("metadata")).get(key)
     originals = [i for i in insights if not _m(_field(i, "source_backed"))]
-    at_bar = [i for i in originals if _m(_field(i, "par_check")).get("passed") is True]
+    # v13.27: an insight the editor's bar did NOT judge (no outside model) does not count toward MET.
+    at_bar = [i for i in originals if _m(_field(i, "par_check")).get("passed") is True
+              and _m(_field(i, "par_check")).get("available") is not False]
     try:
         from services import variant_view
         checkable_soon = [i for i in at_bar if not [p for p in variant_view.structure_problems(i)
                                                     if p.startswith(("call_horizon", "no_dated_call"))]]
     except Exception:
         checkable_soon = []
+    # v13.27 (research report of 22 Nov, Q5.6): three ESTIMATED numbers, never "met" - the editor's-bar
+    # rubric, novelty against the consensus, and the win probability against the user's approved example.
+    judged = [i for i in originals if _m(_field(i, "par_check")) and _m(_field(i, "par_check")).get("available") is not False]
+    novel = [i for i in originals if _m(_field(i, "variant_novelty")).get("checked")]
+    duels = [float(_m(_m(_field(i, "par_check")).get("head_to_head")).get("win_probability"))
+             for i in originals if isinstance(_m(_m(_field(i, "par_check")).get("head_to_head")).get("win_probability"), (int, float))]
     objective = {"original_insights": len(originals), "at_editors_bar": len(at_bar),
                  "at_bar_with_call_within_12_weeks": len(checkable_soon),
                  "background_findings": len(insights) - len(originals),
+                 "rubric_passed": f"{len(at_bar)}/{len(judged)}" if judged else "not judged",
+                 "new_vs_consensus": (f"{sum(1 for i in novel if _m(_field(i, 'variant_novelty')).get('new'))}/{len(novel)}"
+                                      if novel else "not judged"),
+                 "win_probability_vs_approved_example": round(sum(duels) / len(duels), 2) if duels else None,
                  "met": len(checkable_soon) >= 1}
 
     return {"version": VERSION, "released": bool(released), "retrieval": retrieval, "insight_funnel": funnel,
@@ -183,7 +195,10 @@ def summary_lines(metrics: Mapping[str, Any]) -> list[str]:
     def pct(value: Any) -> str:
         return f"{value:.0%}" if isinstance(value, (int, float)) else "n/a"
     o = _m(metrics.get("objective"))
-    objective_line = (f"Objective (estimated, not proven - blind comparison and resolved calls prove it) "
+    objective_line = (f"Objective estimate (not proof - blind comparisons and resolved calls are): "
+                      f"editor's bar {o.get('rubric_passed', 'not judged')}, new vs consensus "
+                      f"{o.get('new_vs_consensus', 'not judged')}, win chance vs your approved example "
+                      f"{o.get('win_probability_vs_approved_example') if o.get('win_probability_vs_approved_example') is not None else 'n/a'}; "
                       f"{'MET' if o.get('met') else 'NOT MET'}: {o.get('at_bar_with_call_within_12_weeks', 0)} "
                       f"original insight(s) at the editor's bar with a call checkable within 12 weeks "
                       f"({o.get('original_insights', 0)} original, {o.get('at_editors_bar', 0)} at the bar, "

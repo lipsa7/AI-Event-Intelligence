@@ -45,7 +45,7 @@ def orchestrator(monkeypatch, seconds=float("inf")):
 def capture_briefing(monkeypatch, obj, state):
     seen = {}
 
-    def build_prompt(topic, facts, cases, focus=""):
+    def build_prompt(topic, facts, cases, focus="", anchors=()):
         seen["facts"], seen["cases"] = [f["evidence_id"] for f in facts], [c["evidence_id"] for c in cases]
         return "prompt"
 

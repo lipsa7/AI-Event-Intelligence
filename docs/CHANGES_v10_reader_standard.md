@@ -1014,3 +1014,58 @@ candidates away instead of improving them, against the research report they were
   SKIPPED and logged "not_judged:no_outside_model" - Gemini never judges its own insights.
   tools/calibrate_par.py refuses to run without the outside model.
 - tests updated (test_v13_24_quality_stages, test_v13_22_par_check). Full suite: same 55 / 6 as before.
+
+## v13.26 (22 Nov 2026) - one short generation call per lens (research report of 22 Nov, stage D)
+
+The report's main recommendation, not done in v13.23-v13.25: the generator was one overloaded prompt -
+about 38,000 characters of rules before the evidence, plus the variant-view rules appended on top - asked
+for up to three candidates at once. Reasoning and instruction-following degrade with input length and
+the number of instructions (Levy, Jacoby & Goldberg, ACL 2024; IFScale 2025), and LLM idea generation
+collapses to a few themes unless diversity is forced (Si, Yang & Hashimoto, ICLR 2025).
+
+- agents/strategic_inference_agent.py: `analyze(..., lenses=[...])`. With lenses, generation is ONE CALL
+  PER LENS (`_lens_syntheses`): the lens and its rules, the story's instruction, the story's evidence and
+  computed gaps, the allowed IDs, the five rule sections the validators enforce mechanically (evidence
+  boundary, release contract, evidence linkage, support clusters, anchors - kept word for word) and the
+  SAME output schema. One candidate per lens; a lens whose call fails is skipped. The evidence review and
+  all normalisation are unchanged, so every check after it sees the same structure. Measured on a
+  two-record story: each lens prompt 15,098 characters against 46,326 for the old prompt.
+- services/variant_view.py `lens_instruction`: the rules for one lens - the consensus claim to contradict
+  or refine (when the consensus map found one), the constraint or mechanism, a cited number or date, the
+  actor and its forced move, a yes/no call resolvable in 2-12 weeks from a named public source, what you
+  would see if the consensus is right, and a thesis in at most 35 plain words.
+- research_orchestrator_service: each exploration slot passes the four lenses of variant_view.LENSES
+  (constraints, value chain, follow the money, structured analogy); the slot log records each lens call
+  (`lens_calls`: lens, result, prompt size). The old single prompt is used when
+  EVENT_INTELLIGENCE_LENS_GENERATION=0 or the variant stages are off (EVENT_INTELLIGENCE_VARIANT_VIEW=0).
+- try_variants.py prints each lens call's result.
+- Cost: an exploration slot makes four generation calls on the Pro model instead of one (about three
+  times the input tokens of that step); the evidence review is still done once per slot.
+- Not verified offline: whether Gemini fills the schema as completely from the short prompt as from the
+  long one (a candidate missing derivation fields is rejected by the normaliser as too thin). Check with
+  try_variants.py on a saved checkpoint before a full run.
+- tests/test_v13_26_lens_generation.py (4).
+
+## v13.27 (22 Nov 2026) - the remaining items of the 22 Nov research report
+
+- Base rate from structured analogies (Green & Armstrong, IJF 2007): services/variant_view.py
+  `analogue_cases`, `rate_analogues`, `base_rate`. The outside model rates each date-checked past case 0-10
+  on mechanism and says whether the expected outcome followed; the base rate is computed here
+  (similarity-weighted, unknowns excluded, "weak" under 3 cases) and put into every lens instruction.
+  Without the outside model it is "not rated" - Gemini never rates its own analogies.
+- Hypothesis lab retired when lens generation and the variant stages are on (its call reserve freed);
+  EVENT_INTELLIGENCE_KEEP_LAB=1 brings it back.
+- Indicators: each candidate gives 2-3 what-to-watch signals naming the public source to watch.
+- Key Assumptions Check (CIA Tradecraft Primer) added to the pre-mortem; shown under the insight as
+  "Must be true for the call".
+- Head to head with the user's most similar approved insight (services/par_check.py `head_to_head`), both
+  orders, tie = half. Below 0.5 the insight is held back with ONE repair (missing
+  "below_approved_example", the exemplar quoted as the fix) - not dropped. Runs only on the outside model.
+- Briefing implications anchored on this run's original released insights (actor, constraint, dated call,
+  indicators): services/editorial_briefing.py `anchor_lines`, `build_prompt(..., anchors=...)`.
+- Repeat-of-earlier-run check uses the outside model when it runs (Gemini only as fallback, recorded).
+- Run log objective line now gives three estimates: editor's bar passed/judged, new vs consensus, average
+  win probability against the approved example. An insight the editor's bar did not judge (no outside
+  model) no longer counts toward MET.
+- Not done: story slots favouring stories with numbers - slots are chosen before the numbers are read.
+- tests/test_v13_27_report_items.py (7); two older tests updated for the new fields.

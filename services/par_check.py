@@ -142,3 +142,43 @@ def brief(result: Mapping[str, Any]) -> str:
     return (f"[editor's bar] Below the standard of the approved examples ({code.replace('_', ' ')}). "
             + (fix + " " if fix else "")
             + "Keep every step backed; add the missing element, do not reword.")
+
+
+# ---------------------------------------------------------------- v13.27: head to head with an approved insight
+# Research report of 22 Nov, stage I: compare the top candidate with a stored "good" exemplar of the
+# user's, in both orders (position bias, Zheng et al. NeurIPS 2023); publish only if its win probability
+# is at least 0.5. The exemplar is the approved example most similar in wording to the candidate.
+def exemplar(candidate: str, examples: Sequence[Mapping[str, str]]) -> str:
+    good = [_clean(r.get("insight")) for r in examples if is_pass_label(r.get("my_rating", ""))]
+    if not good:
+        return ""
+    words = set(_clean(candidate).casefold().split())
+    return max(good, key=lambda text: len(words & set(text.casefold().split())))
+
+
+def head_to_head_prompt(first: str, second: str) -> str:
+    return ("Which insight would a demanding editor of a serious analysis publication rather publish? Judge the "
+            "substance: says something the news does not, a specific mechanism with a number, a named actor's forced "
+            "move, a call checkable soon. Length and vocabulary are not quality.\n\nA: " + _clean(first)[:1200]
+            + "\n\nB: " + _clean(second)[:1200] + '\n\nReturn JSON {"better":"A"|"B"|"tie"}.')
+
+
+def head_to_head(candidate: str, ask: Callable[[str], Any], examples: Sequence[Mapping[str, str]] | None = None) -> dict[str, Any]:
+    """{"win_probability": 0..1 or None, "exemplar": text}. Both orders; a tie counts half."""
+    if examples is None:
+        examples = split(load_labels())[0]
+    target = exemplar(candidate, examples)
+    if not target:
+        return {"win_probability": None, "exemplar": "", "reason": "no_exemplar"}
+    score, answered = 0.0, 0
+    for first, second, mine in ((candidate, target, "A"), (target, candidate, "B")):
+        try:
+            better = _clean(_parse(ask(head_to_head_prompt(first, second))).get("better")).upper()
+        except Exception:
+            continue
+        if better in {"A", "B", "TIE"}:
+            answered += 1
+            score += 1.0 if better == mine else 0.5 if better == "TIE" else 0.0
+    if not answered:
+        return {"win_probability": None, "exemplar": target[:300], "reason": "unanswered"}
+    return {"win_probability": round(score / answered, 2), "exemplar": target[:300], "orders_answered": answered}

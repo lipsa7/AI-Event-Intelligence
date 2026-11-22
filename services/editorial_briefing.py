@@ -282,8 +282,34 @@ def select_cases(historical_records: Sequence[Mapping[str, Any]], limit: int = 6
     return cases
 
 
+def anchor_lines(insights: Sequence[Mapping[str, Any]]) -> list[str]:
+    """v13.27 (research report of 22 Nov, Q6): the briefing's implications draw on the verified insights'
+    actor, constraint and indicators - RUN-ACC0E1ED's implications were generic ("state AGs will bring more
+    public-nuisance suits")."""
+    out = []
+    for item in insights or []:
+        if not isinstance(item, Mapping):
+            continue
+        meta = item.get("metadata") if isinstance(item.get("metadata"), Mapping) else {}
+
+        def pick(key: str) -> Any:
+            return item.get(key) if item.get(key) not in (None, "", [], {}) else meta.get(key)
+        leverage = pick("leverage_analysis") if isinstance(pick("leverage_analysis"), Mapping) else {}
+        contract = pick("forecast_contract") if isinstance(pick("forecast_contract"), Mapping) else {}
+        derivation = pick("derivation") if isinstance(pick("derivation"), Mapping) else {}
+        raw_watch = list(pick("what_to_watch") or []) + list(pick("watch_signals") or []) + list(derivation.get("watch_signals") or [])
+        watch = [_clean(w.get("signal") if isinstance(w, Mapping) else w) for w in raw_watch][:3]
+        out.append("- " + _clean(item.get("text") or item.get("insight"))[:400]
+                   + (f" | actor: {_clean(leverage.get('holder'))}" if leverage.get("holder") else "")
+                   + (f" | constraint: {_clean(leverage.get('controls'))}" if leverage.get("controls") else "")
+                   + (f" | call: {_clean(contract.get('question'))} by {_clean(contract.get('deadline'))[:10]}"
+                      if contract.get("question") else "")
+                   + (" | watch: " + "; ".join(w for w in watch if w) if any(watch) else ""))
+    return out
+
+
 def build_prompt(topic: str, facts: Sequence[Mapping[str, Any]], cases: Sequence[Mapping[str, Any]],
-                 focus: str = "") -> str:
+                 focus: str = "", anchors: Sequence[Mapping[str, Any]] = ()) -> str:
     lines = [
         "You are a senior analyst writing a short editorial intelligence briefing for a busy reader.",
         f"RESEARCH TOPIC: {_clean(topic)}",
@@ -302,6 +328,13 @@ def build_prompt(topic: str, facts: Sequence[Mapping[str, Any]], cases: Sequence
                          + (f" Outcome: {case['outcome']}" if case.get("outcome") else "")
                          + (f" [found for: {case['precedent_for']}]" if case.get("precedent_for") else "")
                          + f" Similar: {case['similarity']} Different: {case['difference']}")
+    anchored = anchor_lines(anchors)
+    if anchored:
+        lines += ["", "VERIFIED INSIGHTS OF THIS RUN (checked against sources; build on them):"] + anchored + [
+            "At least half of the implications must follow from these insights: the same named actor, the "
+            "constraint it faces, and the indicators to watch - extended one step (a second actor's response, a "
+            "date, a number). Do not write implications about a category of actors (\"regulators\", \"states\", "
+            "\"AI firms\"); name who."]
     if _clean(focus):
         # v6.36 policy fit: in the 2026-10-11 runs the incentive implications named generic actors
         # ("general-purpose AI model providers") and compliance steps ("submit ...") as the move.
