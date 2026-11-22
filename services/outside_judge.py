@@ -28,6 +28,7 @@ logger = logging.getLogger("event_intelligence.services.outside_judge")
 _STATS = {"calls": 0, "failed": 0}
 _CACHE: dict[str, Any] = {}
 EXCLUDED_FAMILIES = ("gemma", "gemini")
+EMBEDDING_WORDS = ("embed", "bge-", "minilm", "e5-", "rerank")
 
 
 def _host() -> str:
@@ -51,7 +52,15 @@ def _installed(get: Callable[..., Any] | None = None) -> list[str]:
             import requests
             get = requests.get
         data = get(_host() + "/api/tags", timeout=3).json()
-        names = [str(m.get("name") or m.get("model") or "") for m in data.get("models") or [] if isinstance(m, dict)]
+        rows = [m for m in data.get("models") or [] if isinstance(m, dict)]
+        # v13.27.3: Ollama lists the most recently changed model first - on the user's laptop that is
+        # nomic-embed-text, an embedding model that cannot answer a prompt, so every check would have failed.
+        # Embedding models are skipped and the LARGEST chat model is used (judge strength grows with size -
+        # Zheng et al., MT-Bench, NeurIPS 2023). OUTSIDE_JUDGE_MODEL / OLLAMA_JUDGE_MODEL still override.
+        rows = [m for m in rows if not any(word in str(m.get("name") or m.get("model") or "").casefold()
+                                           for word in EMBEDDING_WORDS)]
+        rows.sort(key=lambda m: -float(m.get("size") or 0))
+        names = [str(m.get("name") or m.get("model") or "") for m in rows]
     except Exception:
         names = []
     _CACHE["models"] = [n for n in names if n]

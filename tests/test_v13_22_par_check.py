@@ -74,8 +74,11 @@ def test_orchestrator_par_check_off_switch_and_on(monkeypatch):
     monkeypatch.setattr(outside_judge, "ask", ask)
     result = service._par_check({"text": "California sued OpenAI."},
                                 [{"gap_type": "commentary", "text": "Analysts say testing is now a nuisance."}])
-    assert not result["passed"] and result["missing"] == "no_specific_mechanism"
+    # v13.28: a judge not yet calibrated on the user's ratings is advisory - shown, not holding back.
+    assert result["passed"] and result["advisory_verdict"] == "fail" and result["missing"] == "no_specific_mechanism"
     assert "California sued OpenAI." in seen["prompt"] and "Analysts say testing" in seen["prompt"]
+    monkeypatch.setenv("EVENT_INTELLIGENCE_PAR_ADVISORY_UNTIL_TRUSTED", "0")
+    assert not service._par_check({"text": "California sued OpenAI."}, [])["passed"]
 
 
 def test_real_labels_file_has_the_example_rows():

@@ -17482,6 +17482,7 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
         v10: in a deep run part of the cap is held for the hypothesis lab, which runs last and was
         skipped when earlier stages used the whole cap (14 Nov run)."""
         self._run_started_monotonic = time.monotonic()   # v13.13: run time for the run metrics
+        self._par_scored = []   # v13.28: judge probabilities this run (rate_next)
         try:   # v13.3: the Exa fallback's per-run cap (services/exa_contents.py) starts again each run
             from services import exa_contents
             exa_contents.reset_run_budget()
@@ -18165,8 +18166,24 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
             result = {"passed": True, "available": False, "reason": "not_judged:no_outside_model",
                       "judged_by": "not_judged"}
         else:
+            from services import par_calibration
             result = par_check.judge(text, ask=outside_judge.ask, sources_summary=summary)
-            result["judged_by"] = "outside:" + outside_judge.model()
+            model = outside_judge.model()
+            result["judged_by"] = "outside:" + model
+            calibration = par_calibration.load()
+            trusted = par_calibration.trusted(calibration, model)
+            result["trusted"] = trusted
+            result["judge_passed"] = bool(result.get("passed"))
+            if result.get("available") and calibration and calibration.get("model") == model:
+                probability = par_calibration.probability(calibration, result.get("scores") or {},
+                                                          bool(result.get("passed")))
+                result["calibrated_probability"] = probability
+                self.__dict__.setdefault("_par_scored", []).append({"text": text, "probability": probability})
+                if trusted and probability is not None:
+                    # v13.28 (report, Method 8): a trusted judge decides by the calibrated probability.
+                    result["passed"] = probability >= float(calibration["threshold"])
+                    if not result["passed"] and _clean(result.get("missing")) in {"", "none"}:
+                        result["missing"] = "unsupported_leap"
             if result.get("passed") and result.get("available"):
                 # v13.27 (stage I): head to head with the user's most similar approved insight, both orders;
                 # below 0.5 it is held back with one repair (the missing element), like any below-bar insight.
@@ -18177,8 +18194,19 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
                     result.update({"passed": False, "missing": "below_approved_example",
                                    "fix": "Make it at least as specific and non-obvious as this approved insight: "
                                           + _clean(duel.get("exemplar"))[:200]})
+            if result.get("available") and not trusted and os.getenv(
+                    "EVENT_INTELLIGENCE_PAR_ADVISORY_UNTIL_TRUSTED", "1").strip() not in {"0", "false", "no"}:
+                # v13.28 (report, Methods 6 and 8): a judge not yet shown to agree with the user's ratings
+                # (cross-validated precision >= 0.7, tools/calibrate_par.py) does not hold insights back; its
+                # verdict is shown beside the insight instead. Small judges grade single items unreliably
+                # (Thakur et al. 2025; SLMJury 2026: Llama 3.1 8B MT-Bench rho 0.05).
+                result["advisory_verdict"] = "pass" if result.get("passed") else "fail"
+                result["passed"] = True
         logger.info("par_check=%s", json.dumps({"version": par_check.VERSION, "passed": result.get("passed"),
                                                 "judged_by": result.get("judged_by"),
+                                                "trusted": result.get("trusted"),
+                                                "advisory_verdict": result.get("advisory_verdict"),
+                                                "calibrated_probability": result.get("calibrated_probability"),
                                                 "missing": result.get("missing"), "reason": result.get("reason"),
                                                 "insight": text[:160]}, ensure_ascii=False))
         return result
@@ -23190,10 +23218,21 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
                 evidence=m_evidence, released=bool(self._release_is_authorized(release_decision)),
                 exa_usage=exa_contents.usage(), calls_by_stage=stage_snapshot(),
                 elapsed_seconds=(time.monotonic() - started) if started else None, evaluation=evaluation)
+            # v13.28 (report, Method 8.4): the candidates the judge is least sure about - rate these next.
+            from services import par_calibration as _cal
+            metrics["rate_next"] = _cal.rate_next(getattr(self, "_par_scored", []) or [])
+            from services import gate_funnel as _gf
+            if m_state and isinstance(m_state, Mapping):
+                metrics["gate_funnel"] = _gf.compute(_as_mapping(m_state.get("claim_support_gate")),
+                                                     list(m_state.get("gap_research_summary") or []))
             report.setdefault("analysis_metadata", {})["run_metrics"] = _json_safe(metrics)
             logger.info("run_metrics=%s", json.dumps(_json_safe(metrics), default=str))
             for line in run_metrics.summary_lines(metrics):
                 logger.info("run_metrics_summary | %s", line)
+            for line in _gf.lines(metrics.get("gate_funnel") or {}) if metrics.get("gate_funnel") else []:
+                logger.info("gate_funnel | %s", line.strip())
+            for row in metrics.get("rate_next") or []:
+                logger.info("rate_next | p=%s | %s", row.get("probability"), row.get("text"))
         except Exception as error:
             logger.warning("Run metrics failed to compute: %s", type(error).__name__)
         canonical_sections = {

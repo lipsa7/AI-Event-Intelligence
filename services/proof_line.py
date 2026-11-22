@@ -76,6 +76,17 @@ def parts(item: Mapping[str, Any], *, sources_read: int = 0,
     experts = item.get("expert_commentary_checked")
     if isinstance(experts, int) and experts > 0:
         out.append(f"checked against {experts} passages of published analysis")
+    # v13.28: the editor's bar - trusted (calibrated on the user's ratings) or advisory (not yet trusted).
+    par = _mapping(item.get("par_check")) or _mapping(_mapping(item.get("metadata")).get("par_check"))
+    if par.get("available"):
+        if par.get("trusted"):
+            probability = par.get("calibrated_probability")
+            out.append("passed the editor's bar" + (f" (chance you'd rate it good {probability:.0%})"
+                                                     if isinstance(probability, (int, float)) else ""))
+        elif par.get("advisory_verdict"):
+            out.append(f"editor's bar (judge not yet checked against your ratings): {par['advisory_verdict']}"
+                       + (f" - missing {_clean(par.get('missing')).replace('_', ' ')}"
+                          if par["advisory_verdict"] == "fail" and _clean(par.get("missing")) not in {"", "none"} else ""))
     contract = _mapping(item.get("forecast_contract"))
     deadline = _clean(contract.get("deadline"))[:10]
     if _clean(contract.get("question")) and deadline:

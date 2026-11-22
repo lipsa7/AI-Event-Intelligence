@@ -32,7 +32,7 @@ import os
 from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
 
-VERSION = "par-check-v1"
+VERSION = "par-check-v2-item-scores"
 LABELS_ENV = "EVENT_INTELLIGENCE_PAR_LABELS"
 DEFAULT_LABELS = os.path.join("data", "insight_review_90.csv")
 # Fixed few-shot rows (row "no" in the CSV), chosen once so calibration rows never overlap them.
@@ -54,8 +54,47 @@ RUBRIC = (
 )
 
 
+# v13.28 (research report of 22 Nov, Method 8): the judge also scores each rubric item 0-10, so a
+# calibration layer fitted on the user's ratings (services/par_calibration.py) can map scores to
+# "would she rate it good" - few-shot alone barely moves a judge (van den Burg et al. 2025).
+ITEMS = ("beyond_sources", "specific_mechanism", "named_actor_consequence", "checkable_signal",
+         "plain_substance", "earned")
+NEAREST_GOOD, NEAREST_BAD = 3, 3
+
+
 def _clean(value: Any) -> str:
     return " ".join(str(value or "").split())
+
+
+def _words(text: str) -> list[str]:
+    return [w for w in "".join(c.casefold() if c.isalnum() else " " for c in _clean(text)).split() if len(w) > 2]
+
+
+def nearest_examples(candidate: str, rows: Sequence[Mapping[str, str]], *, good: int = NEAREST_GOOD,
+                     bad: int = NEAREST_BAD) -> list[Mapping[str, str]]:
+    """v13.28 (report, Method 8.2): the user's most similar approved and rejected insights (TF-IDF cosine;
+    plain code, no model), instead of the same fixed examples for every candidate. The candidate's own
+    text is never its own example."""
+    import math
+    from collections import Counter
+    docs = [Counter(_words(r.get("insight", ""))) for r in rows]
+    df = Counter(w for d in docs for w in d)
+    n = len(docs) + 1
+
+    def vec(counts: Counter) -> dict[str, float]:
+        return {w: c * math.log(n / (1 + df.get(w, 0))) for w, c in counts.items()}
+
+    def cos(a: dict[str, float], b: dict[str, float]) -> float:
+        dot = sum(v * b.get(w, 0.0) for w, v in a.items())
+        norm = math.sqrt(sum(v * v for v in a.values())) * math.sqrt(sum(v * v for v in b.values()))
+        return dot / norm if norm else 0.0
+    target = vec(Counter(_words(candidate)))
+    own = _clean(candidate).casefold()
+    ranked = sorted(((cos(target, vec(d)), r) for d, r in zip(docs, rows)
+                     if _clean(r.get("insight")).casefold() != own), key=lambda pair: -pair[0])
+    goods = [r for _, r in ranked if is_pass_label(r.get("my_rating", ""))][:good]
+    bads = [r for _, r in ranked if not is_pass_label(r.get("my_rating", ""))][:bad]
+    return goods + bads
 
 
 def load_labels(path: str | os.PathLike | None = None) -> list[dict[str, str]]:
@@ -94,7 +133,8 @@ def prompt(candidate: str, examples: Sequence[Mapping[str, str]], *, sources_sum
         + "\nThe publication's owner labelled earlier insights like this:\n" + "\n".join(shots)
         + ("\n\nWhat the sources and published analysis already say:\n" + sources_summary[:1500] if sources_summary else "")
         + "\n\nCANDIDATE:\n" + _clean(candidate)[:1500]
-        + "\n\nReturn JSON {\"verdict\":\"pass\"|\"fail\",\"missing\":\"" + "|".join(MISSING_CODES)
+        + "\n\nScore each rubric rule 0-10 (10 = fully meets it): " + ", ".join(ITEMS) + "."
+        + "\nReturn JSON {\"scores\":{" + ",".join(f'\"{i}\":0' for i in ITEMS) + "},\"verdict\":\"pass\"|\"fail\",\"missing\":\"" + "|".join(MISSING_CODES)
         + "\",\"closest_example\":\"APPROVED or REJECTED\",\"fix\":\"one sentence: what the insight must add to pass\"}."
           " Pass only if every rule holds and it is at least as good as the APPROVED examples."
     )
@@ -116,9 +156,9 @@ def _parse(answer: Any) -> Mapping[str, Any]:
 
 def judge(candidate: str, ask: Callable[[str], Any], *, examples: Sequence[Mapping[str, str]] | None = None,
           sources_summary: str = "") -> dict[str, Any]:
-    """{"passed": bool, "missing": code, "fix": text, "available": bool}."""
+    """{"passed": bool, "missing": code, "fix": text, "available": bool, "scores": {item: 0-10}}."""
     if examples is None:
-        examples = split(load_labels())[0]
+        examples = nearest_examples(candidate, load_labels())   # v13.28: most similar rated insights
     if not examples:
         return {"passed": True, "available": False, "missing": "", "fix": "", "reason": "no_labels"}
     try:
@@ -132,8 +172,16 @@ def judge(candidate: str, ask: Callable[[str], Any], *, examples: Sequence[Mappi
     missing = _clean(data.get("missing"))
     if missing not in MISSING_CODES:
         missing = "none" if verdict == "pass" else "unsupported_leap"
+    raw = data.get("scores") if isinstance(data.get("scores"), Mapping) else {}
+    scores = {}
+    for item in ITEMS:
+        try:
+            scores[item] = max(0.0, min(10.0, float(raw.get(item))))
+        except (TypeError, ValueError):
+            pass
     return {"passed": verdict == "pass", "available": True, "missing": missing, "fix": _clean(data.get("fix"))[:300],
-            "closest": _clean(data.get("closest_example"))[:20], "reason": ""}
+            "closest": _clean(data.get("closest_example"))[:20], "reason": "",
+            "scores": scores if len(scores) == len(ITEMS) else {}}
 
 
 def brief(result: Mapping[str, Any]) -> str:
@@ -166,7 +214,7 @@ def head_to_head_prompt(first: str, second: str) -> str:
 def head_to_head(candidate: str, ask: Callable[[str], Any], examples: Sequence[Mapping[str, str]] | None = None) -> dict[str, Any]:
     """{"win_probability": 0..1 or None, "exemplar": text}. Both orders; a tie counts half."""
     if examples is None:
-        examples = split(load_labels())[0]
+        examples = load_labels()   # v13.28: the most similar of ALL the user's approved insights
     target = exemplar(candidate, examples)
     if not target:
         return {"win_probability": None, "exemplar": "", "reason": "no_exemplar"}

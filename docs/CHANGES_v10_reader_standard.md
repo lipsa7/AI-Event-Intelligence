@@ -1100,3 +1100,39 @@ model answers, no API calls) and the release loop with every stage on.
 - `variant_view.base_rate` ignores malformed entries instead of raising.
 - tests/test_v13_27_2_fixes.py (4); each fails on 5cf6628. Two older tests (test_v13_23_variant_view,
   test_v13_24_outside_judge) now expect two kept per story.
+
+## v13.27.3 (22 Nov 2026) - the local judge never picks an embedding model
+
+- services/outside_judge.py: Ollama lists the most recently changed model first; on the user's laptop that
+  is nomic-embed-text, which cannot answer a prompt, so every outside check (editor's bar, novelty,
+  head-to-head, base rate, pre-mortem, tournament) would have failed. Embedding models are skipped and the
+  largest installed chat model is used (llama3.1:8b on that laptop). OUTSIDE_JUDGE_MODEL or
+  OLLAMA_JUDGE_MODEL still choose a model explicitly.
+- tests/test_v13_27_3_judge_model.py (1).
+
+## v13.28 (22 Nov 2026) - per-gate funnel and an editor's bar calibrated on the user's ratings
+
+Research report of 22 Nov ("Getting AI Event Intelligence to produce original insights"), Methods 0 and 8.
+- services/gate_funnel.py + tools/gate_funnel.py: for each saved report, how many candidates entered and
+  left each gate (stories explored, lens calls, variant checks, claim and editor checks, precedent search)
+  and why; `--sheet` writes the rejects to data/labels/rejects_<date>.csv to mark rightly / wrongly. Every
+  run now logs the same funnel (`gate_funnel |` lines) and stores it in run_metrics. First result over the
+  last 6 reports: 22 candidates reached the claim check, 0 passed (14 premise not supported by cited
+  evidence, 6 restating sources); precedent search found cases in 3 of 18 searches, and the failures are
+  retrieval failures (free providers failing 8, pages not fetchable 6, NewsAPI out of coverage 4, GDELT
+  rate-limited 3), not reviewer strictness.
+- services/par_check.py: the judge also scores the six rubric items 0-10; its examples are the user's 3
+  most similar approved and 3 most similar rejected insights (TF-IDF, plain code), not a fixed set; the
+  head-to-head exemplar comes from all approved insights.
+- services/par_calibration.py: logistic regression from the item scores to the user's ratings, 5-fold
+  cross-validated, threshold at cross-validated precision >= 0.7 (report target; van den Burg et al. 2025:
+  a mapping fitted on ~100 labels raised agreement ~142%, few-shot ~1%). tools/calibrate_par.py scores every
+  labelled row with the local model (never Gemini), fits and saves data/par_calibration.json;
+  `--exemplars fixed` is the A/B against the old fixed examples.
+- research_orchestrator_service `_par_check`: with a trusted calibration for the installed model the
+  calibrated probability decides; without one the judge is ADVISORY - its verdict is shown on the insight
+  ("editor's bar (judge not yet checked against your ratings): fail - missing ...") and nothing is held
+  back by an unproven judge (EVENT_INTELLIGENCE_PAR_ADVISORY_UNTIL_TRUSTED=0 restores holding back).
+- Each run logs `rate_next |` - the up to 5 candidates whose probability is nearest 0.5 (Method 8.4).
+- run_metrics: an advisory pass does not count toward MET.
+- tests/test_v13_28_gates_and_calibration.py (8); test_v13_22_par_check updated for advisory mode.

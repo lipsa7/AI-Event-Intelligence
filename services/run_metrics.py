@@ -160,8 +160,10 @@ def compute(*, state: Mapping[str, Any], report: Mapping[str, Any], events: Sequ
         return item.get(key) if item.get(key) is not None else _m(item.get("metadata")).get(key)
     originals = [i for i in insights if not _m(_field(i, "source_backed"))]
     # v13.27: an insight the editor's bar did NOT judge (no outside model) does not count toward MET.
+    # v13.28: an advisory verdict (judge not yet trusted on the user's ratings) does not count either.
     at_bar = [i for i in originals if _m(_field(i, "par_check")).get("passed") is True
-              and _m(_field(i, "par_check")).get("available") is not False]
+              and _m(_field(i, "par_check")).get("available") is not False
+              and _m(_field(i, "par_check")).get("trusted") is not False]
     try:
         from services import variant_view
         checkable_soon = [i for i in at_bar if not [p for p in variant_view.structure_problems(i)
@@ -177,7 +179,10 @@ def compute(*, state: Mapping[str, Any], report: Mapping[str, Any], events: Sequ
     objective = {"original_insights": len(originals), "at_editors_bar": len(at_bar),
                  "at_bar_with_call_within_12_weeks": len(checkable_soon),
                  "background_findings": len(insights) - len(originals),
-                 "rubric_passed": f"{len(at_bar)}/{len(judged)}" if judged else "not judged",
+                 "rubric_passed": (f"{len(at_bar)}/{len(judged)}" if judged and not any(
+                     _m(_field(i, "par_check")).get("trusted") is False for i in judged) else
+                     f"advisory {sum(1 for i in judged if _m(_field(i, 'par_check')).get('judge_passed', _m(_field(i, 'par_check')).get('passed')))}"
+                     f"/{len(judged)} (judge not yet trusted)" if judged else "not judged"),
                  "new_vs_consensus": (f"{sum(1 for i in novel if _m(_field(i, 'variant_novelty')).get('new'))}/{len(novel)}"
                                       if novel else "not judged"),
                  "win_probability_vs_approved_example": round(sum(duels) / len(duels), 2) if duels else None,
