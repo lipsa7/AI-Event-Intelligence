@@ -26,12 +26,16 @@ from typing import Any, Mapping, Sequence
 
 import numpy as np
 
-VERSION = "par-calibration-v1"
+VERSION = "par-calibration-v1"   # unchanged: saved files stay readable
 PATH_ENV = "EVENT_INTELLIGENCE_PAR_CALIBRATION"
 DEFAULT_PATH = os.path.join("data", "par_calibration.json")
 MIN_PRECISION = 0.7      # research report of 22 Nov, Method 8: "target precision of at least 0.7"
 MIN_ROWS = 60
-MIN_PREDICTED_POSITIVE = 5
+# v13.28.1: at least 15 predicted-good rows before precision counts. With 5, scanning every threshold on
+# 90 rows found precision >= 0.7 by luck for a judge whose scores carry NO information in 13 of 200
+# simulated trials (6.5%) - and a trusted judge holds insights back. With 15: 1 in 150, while a judge
+# with a real signal is still trusted (tests/test_v13_28_1_calibration_trust.py).
+MIN_PREDICTED_POSITIVE = 15
 L2 = 1.0
 
 

@@ -1136,3 +1136,9 @@ Research report of 22 Nov ("Getting AI Event Intelligence to produce original in
 - Each run logs `rate_next |` - the up to 5 candidates whose probability is nearest 0.5 (Method 8.4).
 - run_metrics: an advisory pass does not count toward MET.
 - tests/test_v13_28_gates_and_calibration.py (8); test_v13_22_par_check updated for advisory mode.
+
+## v13.28.1 (22 Nov 2026): a judge is trusted only on enough rows
+
+- **Problem:** the calibration layer let the editor's-bar judge become a gate after only 5 rows were predicted "good". It tried every threshold and kept the first one with precision of at least 0.7. On 90 rows, a judge whose scores mean nothing passed that test by luck in 13 of 200 simulated trials (6.5%). Once trusted, such a judge holds back insights.
+- **Fix:** at least 15 rows must be predicted "good" before precision counts (`MIN_PREDICTED_POSITIVE = 15` in `services/par_calibration.py`). In simulation, a judge with no information was then trusted in 1 of 150 trials. Judges with a real signal were still trusted.
+- **Test:** `tests/test_v13_28_1_calibration_trust.py`.
