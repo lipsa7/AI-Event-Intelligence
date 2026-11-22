@@ -929,6 +929,11 @@ def _near_duplicate_key(text: str) -> str:
     return " ".join(words[:24]) if len(words) >= 6 else ""
 
 
+def _clean_block(value: Any) -> str:
+    """Instruction text with its line breaks kept (``_clean`` joins lines)."""
+    return "\n".join(" ".join(line.split()) for line in str(value or "").splitlines()).strip()
+
+
 def _prompt_event_ids(digest: Any, event_ids: Any, cap: int = 60) -> list[str]:
     """Event IDs listed in the generator prompt: every event the shown evidence cites, then others."""
     cited = []
@@ -1065,9 +1070,14 @@ class StrategicInferenceAgent:
         previous_report: Optional[Mapping[str, Any]] = None,
         budget_service: Any = None,
         execution_stage: str = "initial",
+        lenses: Optional[Sequence[Mapping[str, Any]]] = None,
     ) -> Dict[str, Any]:
         """
         Produce one structured strategic-reasoning package.
+
+        lenses (v13.26): when given, generation is ONE SHORT CALL PER LENS (each {"name", "instruction"})
+        instead of the one long multi-rule prompt; the evidence review, the JSON schema and all
+        normalisation are unchanged, so every check downstream sees the same structure.
 
         Parameters
         ----------
@@ -1413,6 +1423,7 @@ class StrategicInferenceAgent:
                 constraint_ids=constraint_ids,
                 active_budget=active_budget,
                 execution_stage=execution_stage,
+                lenses=lenses,
             )
 
             evidence_source_by_id = {
@@ -4727,6 +4738,7 @@ class StrategicInferenceAgent:
         constraint_ids: Sequence[str],
         active_budget: Any,
         execution_stage: str,
+        lenses: Optional[Sequence[Mapping[str, Any]]] = None,
     ) -> Dict[str, Any]:
         """Generate evidence-disciplined, scope-calibrated strategic synthesis."""
         desired_depth = _enum(reasoning_guidance.get("desired_depth") or "standard")
@@ -5253,7 +5265,15 @@ class StrategicInferenceAgent:
         from services import quote_first
         prompt = quote_first.apply_to_prompt(prompt)
 
-        synthesis_result = self._call_json(
+        if lenses:
+            synthesis_result = self._lens_syntheses(
+                lenses=lenses, full_prompt=prompt, support_clusters=support_clusters, digest=digest,
+                computed_gaps_text=computed_gaps_text, selected_evidence_ids=selected_evidence_ids,
+                event_ids=event_ids, constraint_ids=constraint_ids,
+                normalized_refinement=normalized_refinement, active_budget=active_budget,
+                execution_stage=execution_stage, evidence_count=len(evidence_records))
+        else:
+          synthesis_result = self._call_json(
             prompt=prompt,
             system_prompt=(
                 "You are the strategic synthesis component of an evidence-grounded research system. "
@@ -5340,6 +5360,106 @@ class StrategicInferenceAgent:
             )
 
         return synthesis_result
+
+    LENS_SYSTEM_PROMPT = (
+        "You write ONE candidate insight for an evidence-grounded research system, through ONE named lens. "
+        "Use only the supplied evidence IDs; every premise cites the record it comes from. JSON only."
+    )
+
+    # The rule sections the validators enforce mechanically (evidence IDs, sentence-level checking,
+    # support clusters, anchors); kept word for word in each lens call. The rest of the old rule block
+    # (exemplars, tier essays, mode lists) is what the lens and its rules replace.
+    LENS_CONTRACT_HEADINGS = ("NON-NEGOTIABLE EVIDENCE BOUNDARY", "RELEASE CONTRACT", "EVIDENCE-LINKAGE CONTRACT",
+                              "SUPPORT-CLUSTER CONTRACT", "EVIDENCE-SPECIFIC ANCHORS")
+
+    @classmethod
+    def _lens_contract_sections(cls, full_prompt: str) -> str:
+        heads = list(re.finditer(r"(?m)^([A-Z][A-Z0-9 ,/&()\u2014'-]{12,})$", full_prompt))
+        end_of_rules = full_prompt.find("Control guidance")
+        parts = []
+        for index, match in enumerate(heads):
+            if end_of_rules >= 0 and match.start() >= end_of_rules:
+                break
+            if not match.group(1).startswith(cls.LENS_CONTRACT_HEADINGS):
+                continue
+            end = heads[index + 1].start() if index + 1 < len(heads) else end_of_rules
+            if end_of_rules >= 0:
+                end = min(end, end_of_rules)
+            parts.append(full_prompt[match.start():end].strip())
+        return "\n\n".join(parts)
+
+    def _lens_syntheses(self, *, lenses, full_prompt, support_clusters, digest, computed_gaps_text,
+                        selected_evidence_ids, event_ids, constraint_ids, normalized_refinement,
+                        active_budget, execution_stage, evidence_count) -> Dict[str, Any]:
+        """v13.26 (22 Nov 2026, research report of 22 Nov, stage D): one short call per lens.
+
+        The report's main finding: the generator was one overloaded prompt (about 330 lines of rules
+        before a 150k-character digest); reasoning and instruction-following both degrade with input
+        length and instruction count (Levy et al., ACL 2024; IFScale 2025), and LLM idea generation
+        collapses to a few themes unless diversity is forced (Si, Yang & Hashimoto, ICLR 2025). Here each
+        call carries only: the lens and its rules (consensus to beat, number, actor, dated call), the
+        story's instruction, the story's evidence and computed gaps, the allowed IDs and the SAME output
+        schema - so normalisation and every gate after it are unchanged. One candidate per lens; a
+        lens whose call fails is skipped (never fatal)."""
+        from services import quote_first
+
+        marker = "Return exactly this top-level structure:"
+        schema = full_prompt[full_prompt.index(marker):] if marker in full_prompt else ""
+        contracts = self._lens_contract_sections(full_prompt)
+        merged: Dict[str, Any] = {"analysis_summary": "", "connections": [], "candidate_insights": [],
+                                  "what_to_watch": [], "critical_unknowns": [], "_lens_calls": []}
+        for lens in lenses:
+            name = _clean(lens.get("name")) or "lens"
+            prompt = (
+                f"TASK: ONE candidate insight through the {name.upper()} lens.\n\n"
+                + _clean_block(lens.get("instruction"))
+                + ("\n\n" + contracts if contracts else "")
+                + "\n\nStory instruction (NOT evidence):\n"
+                + json.dumps(normalized_refinement, ensure_ascii=False, default=str)[:6000]
+                + "\n\nSUPPORTABLE EVIDENCE CLUSTERS:\n"
+                + json.dumps(support_clusters, ensure_ascii=False, separators=(",", ":"), default=str)
+                + "\n\nEVIDENCE:\n"
+                + json.dumps(digest, ensure_ascii=False, separators=(",", ":"), default=str)
+                + ("\n\n" + computed_gaps_text if computed_gaps_text else "")
+                + "\n\nAllowed evidence IDs: " + json.dumps(selected_evidence_ids, ensure_ascii=False)
+                + "\nAllowed event IDs: " + json.dumps(_prompt_event_ids(digest, event_ids), ensure_ascii=False)
+                + "\nAllowed constraint IDs: " + json.dumps(list(constraint_ids)[:40], ensure_ascii=False)
+                + "\n\nReturn at most 1 candidate insight, written through this lens only; return none if the "
+                  "evidence does not support one. JSON only.\n\n"
+                + schema
+            )
+            prompt = quote_first.apply_to_prompt(prompt)
+            entry = {"lens": name, "prompt_characters": len(prompt)}
+            try:
+                result = self._call_json(
+                    prompt=prompt, system_prompt=self.LENS_SYSTEM_PROMPT, active_budget=active_budget,
+                    execution_stage=execution_stage, call_kind="strategic_synthesis_lens_v13_26",
+                    metadata={"lens": name, "accepted_evidence_count": evidence_count,
+                              "synthesis_evidence_count": len(digest), "candidate_limit": 1},
+                    expected_seconds=45.0)
+            except Exception as error:   # one lens failing never stops the others
+                entry["result"] = "failed:" + type(error).__name__
+                merged["_lens_calls"].append(entry)
+                continue
+            if not isinstance(result, Mapping):
+                entry["result"] = "not_an_object"
+                merged["_lens_calls"].append(entry)
+                continue
+            found = [c for c in result.get("candidate_insights") or [] if isinstance(c, Mapping)][:1]
+            for candidate in found:
+                candidate = dict(candidate)
+                lenses_named = [x for x in candidate.get("analytical_lenses") or [] if _clean(x)]
+                candidate["analytical_lenses"] = [name] + [x for x in lenses_named if _clean(x) != name]
+                merged["candidate_insights"].append(candidate)
+            entry["result"] = "candidate" if found else "no_candidate"
+            merged["_lens_calls"].append(entry)
+            if not merged["analysis_summary"]:
+                merged["analysis_summary"] = _clean(result.get("analysis_summary"))
+            merged["connections"] += [c for c in result.get("connections") or [] if isinstance(c, Mapping)]
+            merged["what_to_watch"] += [w for w in result.get("what_to_watch") or [] if isinstance(w, Mapping)]
+            merged["critical_unknowns"] += [u for u in result.get("critical_unknowns") or [] if _clean(u)]
+        self.last_lens_calls = list(merged["_lens_calls"])
+        return merged
 
     def _normalize_synthesis(
         self,

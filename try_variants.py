@@ -56,6 +56,8 @@ def main() -> int:
             entry = ((log.get("exploration") or {}).get("combinations") or [{}])[-1]
             print("CONSENSUS:", entry.get("consensus"))
             print(f"Consensus claims: {entry.get('consensus_claims')}; primary records added: {entry.get('primary_records')}")
+            for call in entry.get("lens_calls") or []:      # v13.26: one short generation call per lens
+                print(f"  LENS {call.get('lens')}: {call.get('result')} ({call.get('prompt_characters')} prompt characters)")
             for dropped in entry.get("variant_dropped") or []:
                 print(f"  DROPPED {dropped['problems']}: {dropped['insight']}")
             for item in candidates:

@@ -1069,3 +1069,14 @@ collapses to a few themes unless diversity is forced (Si, Yang & Hashimoto, ICLR
   model) no longer counts toward MET.
 - Not done: story slots favouring stories with numbers - slots are chosen before the numbers are read.
 - tests/test_v13_27_report_items.py (7); two older tests updated for the new fields.
+
+## v13.27.1 (22 Nov 2026) - the generator side of v13.26 restored
+
+v13.27 included v13.26's exploration side (each slot passes `lenses=` to the generator) but not its
+generator side (agents/strategic_inference_agent.py `analyze(..., lenses=...)`, `_lens_syntheses`). With
+the default settings every exploration call raised TypeError (logged as failed:TypeError) and, because
+v13.27 retires the hypothesis lab whenever lens generation is on, a run would have explored nothing.
+- agents/strategic_inference_agent.py: v13.26's lens generation (unchanged since 1d27cb3, so the file is
+  v13.26's).
+- tests/test_v13_26_lens_generation.py restored, plus a guard test that both sides exist together.
+- try_variants.py prints each lens call again.
