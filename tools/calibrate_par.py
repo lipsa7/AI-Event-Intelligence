@@ -37,21 +37,48 @@ def main() -> int:
         print("No labelled rows found.")
         return 1
     if not outside_judge.available():   # v13.25c: never Gemini judging Gemini
-        print("No outside open-source judge: start Ollama with a non-Google model (ollama list), then rerun.")
+        print("No outside open-source judge: set GROQ_API_KEY in .env, or start Ollama with a non-Google model.")
         return 1
     model = outside_judge.model()
-    print(f"Judge: {model} | examples: {args.exemplars}")
+    print(f"Judge: {outside_judge.provider()} {model} | examples: {args.exemplars}")
+    # v13.29: scores are kept per model, so a run stopped by Groq's daily limit resumes where it stopped.
+    import hashlib
+    import json as _json
+    cache_path = Path(__file__).resolve().parents[1] / "data" / "par_calibration_scores.jsonl"
+
+    def key(row: dict) -> str:
+        return hashlib.sha256((model + "|" + args.exemplars + "|" + row["insight"]).encode("utf-8")).hexdigest()[:24]
+    cache: dict[str, dict] = {}
+    if cache_path.exists():
+        for line in cache_path.read_text(encoding="utf-8").splitlines():
+            try:
+                item = _json.loads(line)
+                cache[item["key"]] = item["result"]
+            except (ValueError, KeyError, TypeError):
+                continue
     fixed, held = par_check.split(rows)
     sample = held if args.exemplars == "fixed" else list(rows)
     if args.limit:
         sample = random.Random(22).sample(sample, min(args.limit, len(sample)))
     tp = fn = tn = fp = unavailable = 0
     x, y, disagreements = [], [], []
+    stopped_early = False
     started = time.monotonic()
     for n, row in enumerate(sample, 1):
         pool = [r for r in rows if r is not row]
         examples = fixed if args.exemplars == "fixed" else par_check.nearest_examples(row["insight"], pool)
-        result = par_check.judge(row["insight"], ask=outside_judge.ask, examples=examples)
+        cached = cache.get(key(row))
+        if cached is not None:
+            result = cached
+        else:
+            if outside_judge.stopped():
+                stopped_early = True
+                break
+            result = par_check.judge(row["insight"], ask=outside_judge.ask, examples=examples)
+            if result.get("available"):
+                cache_path.parent.mkdir(parents=True, exist_ok=True)
+                with cache_path.open("a", encoding="utf-8") as handle:
+                    handle.write(_json.dumps({"key": key(row), "result": result}) + "\n")
         if not result.get("available"):
             unavailable += 1
             continue
@@ -66,6 +93,11 @@ def main() -> int:
             y.append(1 if good else 0)
         if n % 10 == 0:
             print(f"  {n}/{len(sample)} rows, {time.monotonic() - started:.0f} s")
+    if stopped_early:
+        print(f"\nThe judge stopped ({outside_judge.stats().get('last_error') or 'daily limit'}). "
+              f"{tp + fn + tn + fp} of {len(sample)} rows are scored and saved; rerun tomorrow to finish "
+              "(scored rows are not judged again).")
+        return 0
     print(f"\nScored {tp + fn + tn + fp} rows ({unavailable} unanswered; {len(x)} with all six item scores).")
     print(f"Judge's own verdict - passes your 'good': {tp}/{tp + fn}; fails your others: {tn}/{tn + fp}")
     for row, result in disagreements[:15]:

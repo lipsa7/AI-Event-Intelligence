@@ -3106,9 +3106,9 @@ class ResearchOrchestratorService:
         # (Gemini comparing its own new text with its own earlier text is self-judging). Without it, Gemini
         # still does this one comparison - it compares two texts, it does not grade quality - and says so.
         from services import outside_judge
-        if outside_judge.available():
-            ask = outside_judge.ask
-            self._repeat_check_judge = "outside:" + outside_judge.model()
+        if outside_judge.available_simple():   # v13.29: a comparison of two texts - the local model first
+            ask = outside_judge.ask_simple
+            self._repeat_check_judge = "outside:" + outside_judge.model_simple()
         else:
             ask = self._ask_briefing_model
             self._repeat_check_judge = "gemini:no_outside_model"
@@ -17493,6 +17493,11 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
         v10: in a deep run part of the cap is held for the hypothesis lab, which runs last and was
         skipped when earlier stages used the whole cap (14 Nov run)."""
         self._run_started_monotonic = time.monotonic()   # v13.13: run time for the run metrics
+        try:   # v13.28.3: each run detects the judge model again and forgets the last run's failures
+            from services import outside_judge as _oj
+            _oj.reset()
+        except Exception:
+            pass
         self._par_scored = []   # v13.28: judge probabilities this run (rate_next)
         try:   # v13.3: the Exa fallback's per-run cap (services/exa_contents.py) starts again each run
             from services import exa_contents
@@ -18282,6 +18287,14 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
         analysis = self._analysis_search(labels)
         view = variant_view.consensus(list(labels), rows, ask=self._ask_briefing_model, analysis=analysis)
         facts, receipt = primary_data.collect(view.get("search_terms") or {})
+        # v13.28.3: only records about this story (the search words come from a model call and can miss).
+        story_text = " ".join(list(labels) + [_clean(_as_mapping(r).get("text"))[:600] for r in rows])
+        corpus = [_clean(_as_mapping(r).get("text"))[:600] for r in (evidence if evidence is not None else rows)
+                  if isinstance(r, Mapping)]
+        facts, off_story = primary_data.relevant(facts, story_text, corpus)
+        if off_story:
+            view["primary_off_story"] = off_story[:6]
+            logger.info("primary_records_off_story=%s", json.dumps(off_story[:6], ensure_ascii=False))
         new_records = primary_data.records(facts, " | ".join(labels)[:160])
         known = {_clean(_as_mapping(r).get("evidence_id")) for r in (evidence if evidence is not None else rows)}
         new_records = [r for r in new_records if r["evidence_id"] not in known]
@@ -18295,12 +18308,12 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
         # rate is computed here (Green & Armstrong 2007). No outside model: not rated, never Gemini.
         from services import outside_judge
         cases = variant_view.analogue_cases(rows)
-        if cases and outside_judge.available():
-            view["base_rate"] = variant_view.rate_analogues(list(labels), cases, ask=outside_judge.ask)
+        if cases and outside_judge.available_simple():   # v13.29: ratings - the local model first
+            view["base_rate"] = variant_view.rate_analogues(list(labels), cases, ask=outside_judge.ask_simple)
         else:
             view["base_rate"] = dict(variant_view.base_rate([]), cases_found=len(cases),
                                      note="not rated" + ("" if cases else ": no past case in this slot's evidence")
-                                     + ("" if outside_judge.available() else ": no outside model"))
+                                     + ("" if outside_judge.available_simple() else ": no outside model"))
         logger.info("variant_consensus=%s", json.dumps({
             "developments": list(labels)[:3], "claims": len(view.get("claims") or []),
             "analysis_found": len(analysis), "enough": view.get("enough"),
@@ -18383,8 +18396,34 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
         lines = [f"[{_clean(_as_mapping(r).get('evidence_id'))}] {_clean(_as_mapping(r).get('text'))[:200]}"
                  for r in records or [] if isinstance(r, Mapping)]
 
+        # v13.29: EVENT_INTELLIGENCE_VARIANT_PERCEPTION=0 turns the P1/P2/P4 checks off (tests that predate them).
+        perception_on = os.getenv("EVENT_INTELLIGENCE_VARIANT_PERCEPTION", "1").strip() not in {"0", "false", "no"}
+
         def rule_problems(candidate: Mapping[str, Any]) -> list[str]:
-            return variant_view.structure_problems(candidate) + variant_view.plain_language_problems(candidate)
+            # v13.28.3: + a routine-step forecast and a figure taken from another story's record.
+            # v13.29: + the variant perception checked by code (research report of 22 Nov, P1 and P4).
+            return (variant_view.structure_problems(candidate) + variant_view.plain_language_problems(candidate)
+                    + variant_view.call_problems(candidate) + variant_view.number_problems(candidate, records)
+                    + (variant_view.perception_problems(candidate, view, records) if perception_on else []))
+
+        # v13.29 (report P2, P4): forecast diagnosticity from every outside judge available (Groq's reasoning
+        # model and the local model - different vendors; never Gemini on its own thesis), and the load-bearing
+        # number test by the local model.
+        diag_asks = [] if not perception_on else ([outside_judge.ask] if outside else []) + (
+            [outside_judge.ask_simple] if outside_judge.available_simple() and outside_judge.model_simple()
+            != (outside_judge.model() if outside else "") else [])
+
+        def forecast_problems(candidate: Mapping[str, Any]) -> tuple[list[str], dict[str, Any]]:
+            if not diag_asks:
+                return [], {"checked": False, "reason": "no_outside_judge"}
+            result = variant_view.diagnosticity(candidate, diag_asks)
+            problems = list(result.get("problems") or [])
+            if outside_judge.available_simple():
+                decorative = variant_view.number_is_decorative(candidate, outside_judge.ask_simple)
+                result["number_decorative"] = decorative
+                if decorative:
+                    problems.append("number_decorative")
+            return problems, result
 
         for item in found:
             meta = dict(_as_mapping(item.get("metadata")))
@@ -18411,8 +18450,23 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
                 meta["variant_novelty"] = fresh
                 if fresh.get("checked") and not fresh.get("new"):
                     problems.append("restates_consensus")
+            if not problems and diag_asks:
+                forecast, diag = forecast_problems(item)
+                if forecast:
+                    revised = self._variant_repair(item, forecast, lines)
+                    if revised is not None and not rule_problems(revised):
+                        again, diag_again = forecast_problems(revised)
+                        if len(again) < len(forecast):
+                            item, forecast, diag = revised, again, diag_again
+                            meta = dict(_as_mapping(item.get("metadata")))
+                            meta["variant_novelty"] = fresh if judge is not None else meta.get("variant_novelty")
+                meta["variant_diagnosticity"] = diag
+                problems += forecast
             if not problems and judge is not None:
-                mortem = variant_view.premortem(item, lines, ask=judge)
+                # v13.29: the pre-mortem looks failures up in evidence already in hand - a classification-style
+                # check, so the local model does it when installed (Groq's daily tokens go to the hard calls).
+                mortem = variant_view.premortem(item, lines, ask=outside_judge.ask_simple
+                                                if outside_judge.available_simple() else judge)
                 meta["variant_premortem"] = mortem
                 premortem_risk = bool(mortem.get("killed"))
             meta["variant_structure"] = problems or (["ok", "premortem_risk_in_evidence"] if premortem_risk else ["ok"])
@@ -18567,6 +18621,17 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
                     if len(found) >= max(self.VARIANT_MAX_CANDIDATES, len(lenses)):   # v13.26: one per lens
                         break
                 found = self._variant_select(found, view, entry, sub_evidence)
+                # v13.29: the kept candidates go into the log too (on 22 Nov they were only on the terminal).
+                entry["kept"] = [{"insight": _clean(i.get("insight") or i.get("text"))[:900],
+                                  "forecast": _clean(_as_mapping(i.get("forecast_contract") or _as_mapping(
+                                      i.get("metadata")).get("forecast_contract")).get("question"))[:300],
+                                  "lens": (i.get("analytical_lenses") or [""])[0],
+                                  "novelty": _as_mapping(i.get("metadata")).get("variant_novelty"),
+                                  "diagnosticity": {k: v for k, v in _as_mapping(_as_mapping(i.get("metadata")).get(
+                                      "variant_diagnosticity")).items() if k != "answers"},
+                                  "overlooked_fact": _as_mapping(i.get("variant_perception") or _as_mapping(
+                                      i.get("metadata")).get("variant_perception")).get("overlooked_evidence_id")}
+                                 for i in found]
                 entry["result"] = "candidate" if found else "no_candidate"
                 output += found
             except Exception as error:

@@ -5195,6 +5195,7 @@ class StrategicInferenceAgent:
             '    "pattern_status":"established|emerging|insufficient|not_applicable",\n'
             '    "insight":"Three plain sentences: (1) the consequence with the concrete fact (date, delay, number, amount or named document) in it; (2) the mechanism; (3) what it means next, starting with Watch for or Forecast:. No theory labels.",\n'
             '    "novel_proposition":"What is newly inferred rather than merely explained?",\n'
+            '    "variant_perception":{"consensus_quote":"words copied exactly from one CONSENSUS line this departs from (empty if none listed)","overlooked_evidence_id":"the ONE evidence ID the consensus does not use","why_consensus_misses_it":"","mechanism_chain":[{"step":"fact -> step -> conclusion, one link","evidence_ids":[]}],"rival_hypothesis":"the strongest other explanation","load_bearing_assumption":"the assumption that, if false, kills the thesis"},\n'
             '    "triggering_anomaly":"What contradiction, asymmetry, hidden constraint, sequence, missing expected fact or unresolved question triggered the insight?",\n'
             '    "insight_quality_check":{"is_merely_explanatory":false,"why_not_obvious":"Why an informed reader would not get this from headlines alone.","new_information_created":"What becomes visible only after combining evidence and mechanism."},\n'
             '    "actors":[{"name":"","actor_type":"company|customer|competitor|bank|investor|supplier|government|regulator|grid_operator|cloud_provider|industry_body|research_institution|other","event_ids":[],"evidence_ids":[]}],\n'
@@ -5460,6 +5461,22 @@ class StrategicInferenceAgent:
             merged["critical_unknowns"] += [u for u in result.get("critical_unknowns") or [] if _clean(u)]
         self.last_lens_calls = list(merged["_lens_calls"])
         return merged
+
+    @staticmethod
+    def _normalize_variant_perception(value: Any) -> Dict[str, Any]:
+        if not isinstance(value, Mapping):
+            return {}
+        chain = []
+        for step in value.get("mechanism_chain") or []:
+            if isinstance(step, Mapping) and _clean(step.get("step")):
+                chain.append({"step": _clean(step.get("step"))[:400],
+                              "evidence_ids": [_clean(e) for e in step.get("evidence_ids") or [] if _clean(e)][:6]})
+        return {"consensus_quote": _clean(value.get("consensus_quote"))[:400],
+                "overlooked_evidence_id": _clean(value.get("overlooked_evidence_id"))[:80],
+                "why_consensus_misses_it": _clean(value.get("why_consensus_misses_it"))[:400],
+                "mechanism_chain": chain[:6],
+                "rival_hypothesis": _clean(value.get("rival_hypothesis"))[:400],
+                "load_bearing_assumption": _clean(value.get("load_bearing_assumption"))[:400]}
 
     def _normalize_synthesis(
         self,
@@ -8239,6 +8256,9 @@ class StrategicInferenceAgent:
             "scope_validation": scope_validation,
             "insight_mode": insight_mode,
             "novel_proposition": novel_proposition,
+            # v13.29 (research report of 22 Nov, P1): the variant-perception fields, checked by code in
+            # services/variant_view.perception_problems.
+            "variant_perception": self._normalize_variant_perception(raw.get("variant_perception")),
             "triggering_anomaly": triggering_anomaly,
             "insight_quality_check": insight_quality_check,
             "derivation_summary": derivation_summary,
@@ -8287,6 +8307,7 @@ class StrategicInferenceAgent:
                 "scope_validation": scope_validation,
                 "insight_mode": insight_mode,
                 "novel_proposition": novel_proposition,
+                "variant_perception": self._normalize_variant_perception(raw.get("variant_perception")),
                 "triggering_anomaly": triggering_anomaly,
                 "insight_quality_check": insight_quality_check,
                 "insight_derivation": derivation_summary,

@@ -4839,6 +4839,21 @@ VARIANT_NEEDS = {
     "premortem_failure_already_in_evidence": "an answer to a failure reason already in the evidence",
     "no_premises": "facts from the sources (it cites none)",
     "ranked_below_slot_top": "a check of its own: it ranked below the story's top two, which went to the claim check",
+    "routine_call": "a forecast that could turn out wrong (its call is a routine step that almost always happens)",
+    # v13.29 (research report of 22 Nov, P1, P2, P4)
+    "no_variant_perception": "the consensus it departs from, the fact the consensus misses, and the chain between them",
+    "consensus_not_quoted": "the consensus it departs from, quoted exactly",
+    "overlooked_fact_missing": "the one fact from this story that the consensus does not use",
+    "overlooked_fact_used_by_consensus": "a fact the coverage has NOT already used",
+    "overlooked_fact_off_story": "an overlooked fact from this story, not a run-wide figure",
+    "mechanism_chain_too_short": "at least two cited steps from the fact to the conclusion",
+    "overlooked_fact_not_in_chain": "its overlooked fact inside the argument, not beside it",
+    "actor_not_in_chain": "the actor whose behaviour changes, inside the argument",
+    "no_rival_hypothesis": "the strongest other explanation",
+    "no_load_bearing_assumption": "the assumption that, if false, breaks it",
+    "forecast_not_uncertain": "a forecast that is genuinely uncertain (20-80% before the insight)",
+    "forecast_not_diagnostic": "a forecast much more likely if the insight is right than if it is wrong",
+    "number_decorative": "a number the argument depends on (its conclusion holds without it)",
 }
 
 
@@ -4847,11 +4862,15 @@ def variant_need(code: Any) -> str:
     code = clean_text(code)
     if code in VARIANT_NEEDS:
         return VARIANT_NEEDS[code]
+    if code.startswith("number_not_in_chain:"):
+        return "a number the argument uses (" + code.split(":", 1)[1] + " is in none of its cited steps)"
+    if code.startswith("number_off_story:"):
+        return "a number from its own story (" + code.split(":", 1)[1] + " comes from a record about something else)"
     if code.startswith("call_horizon_"):
         days = code[len("call_horizon_"):].split("_")[0]
         return f"a call due within 2-12 weeks (its call is {days} days out)"
     if code.startswith("thesis_") and code.endswith("_words"):
-        return "a main claim of at most 35 words (it has " + code[len("thesis_"):-len("_words")] + ")"
+        return "a main claim of at most 25 words (it has " + code[len("thesis_"):-len("_words")] + ")"
     if code.startswith("premise_") and "_quote_" in code:
         return "fact " + code.split("_")[1] + " quoted word for word from a source"
     if code.startswith("premise_") and code.endswith("_uncited"):

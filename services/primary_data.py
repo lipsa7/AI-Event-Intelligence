@@ -139,6 +139,41 @@ def collect(terms: Mapping[str, Any], fetch: Callable[..., Any] = _get_json) -> 
     return rows, receipt
 
 
+_BOILERPLATE = frozenset("""
+federal register rule rules proposed final notice notices document documents published publication comments comment
+close closes effective agency department office commission bureau administration service national united states
+filing filings form forms report annual quarterly current docket dockets court case cases search results the and for
+with from that this into under about their other which while been were have has its are was
+""".split())
+
+
+def _words(text: Any) -> set[str]:
+    return {w for w in "".join(c.casefold() if c.isalnum() else " " for c in _clean(text)).split()
+            if len(w) > 2 and not w.isdigit() and w not in _BOILERPLATE}
+
+
+def relevant(rows: Sequence[Mapping[str, Any]], story_text: str, corpus: Sequence[str] = (),
+             common_share: float = 0.25) -> tuple[list[dict[str, Any]], list[str]]:
+    """v13.28.3: keep a primary record only if it is about THIS story. On 22 Nov the Federal Register
+    search for California's lawsuit against OpenAI ran on "EU AI Act implementation regulation" (the
+    search words come from a model call) and its 4 unrelated US notices were added to the story's evidence,
+    where they counted as rules an insight could build on. A record is kept when its text shares at least
+    two words with the story and at least one of them is distinctive (in at most a quarter of the run's
+    records - "openai" or "artificial" in an AI run is not). Returns (kept, dropped texts)."""
+    story = _words(story_text)
+    docs = [_words(t) for t in corpus if _clean(t)]
+    def common(word: str) -> bool:
+        return bool(docs) and sum(1 for d in docs if word in d) > common_share * len(docs)
+    kept, dropped = [], []
+    for row in rows:
+        shared = _words(row.get("text")) & story
+        if len(shared) >= 2 and any(not common(w) for w in shared):
+            kept.append(dict(row))
+        else:
+            dropped.append(_clean(row.get("text"))[:160])
+    return kept, dropped
+
+
 def records(rows: Sequence[Mapping[str, Any]], title: str) -> list[dict[str, Any]]:
     """Citable context records (same shape as services/pattern_grid.pattern_records)."""
     out = []

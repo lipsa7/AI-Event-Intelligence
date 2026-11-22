@@ -1152,3 +1152,51 @@ These are three bugs that stopped original insights. They were found in the 22 N
 - **The text of a rule or filing could not count as a constraint.** v11 added the "primary" search (the bill, rule or filing a story is about), but the non-obviousness check never counted those records. Now they count when they come from the issuer itself: a government body, regulator, court or the organisation's own site or notice. News reports found by the same search do not count. The check still removes the rule and confirms that the story's own reports alone do not support the conclusion.
 - **Without the outside judge, two of the four lenses never reached the claim check.** With no tournament, a story's top two were simply the first two lenses (constraints, value chain), so the money and past-case lenses never got through. Now candidates that already have a way past the "one story only" test go first: a cited constraint record or a computed gap. Within each group, the judge's order or the lens order is kept.
 - **Tests:** `tests/test_v13_28_2_repairs.py`.
+
+## v13.28.3 (22 Nov 2026): the local judge works or says why; rules and numbers must belong to the story; no routine forecasts
+
+These are four problems found in the 22 Nov test run on saved data (`try_variants.py`, 2 stories, 13 Gemini calls).
+
+- **Every local-judge check failed, and nothing said why.** qwen3:14b was picked as the judge, but every novelty, pre-mortem and ranking check returned a bare "RuntimeError". The ranking failures were skipped silently, so the "winners" were really chosen by lens order, not by the judge. The judge now:
+  - tries Ollama's own endpoint (`/api/chat`, with JSON output and thinking turned off) when the OpenAI-style endpoint fails;
+  - removes a `<think>` reasoning block from the reply;
+  - logs the HTTP status and Ollama's own message;
+  - stops for the rest of the run after 3 failures in a row, so each failed call no longer waits up to 3 minutes and the checks honestly say "not judged".
+
+  `python tools/check_judge.py` tests the judge in seconds before a run.
+- **Rule records from the wrong search were added to a story.** For California's lawsuit against OpenAI, the Federal Register search ran on "EU AI Act implementation regulation". Its 4 unrelated notices were added to the story and counted as rules an insight could build on. A record is now kept only if it shares at least 2 words with the story and at least 1 of them is distinctive, meaning it appears in at most a quarter of the run's records. Dropped records are logged as `primary_records_off_story`.
+- **Numbers were borrowed from another story.** Both Texas winners carried "$121.4 billion" of AI infrastructure spending, a run-wide figure, just to meet the "has a number" rule. A figure found only in a record about something else is now a problem (`number_off_story`). It gets the usual single repair; if that fails, the candidate is shown as a draft.
+- **The forecasts were routine steps.** All four winners forecast "OpenAI will file a motion to dismiss or a demurrer", which happens in nearly every lawsuit, so the forecast comes true whatever the insight says. Such a forecast is now a problem (`routine_call`). The repair asks for a call that could turn out wrong, such as a ruling, a settlement, a product or policy change, or another party's move.
+- **Tests:** `tests/test_v13_28_3_judge_and_records.py`.
+
+## v13.29 (22 Nov 2026) - Groq judge; variant perception, forecast diagnosticity, load-bearing numbers
+
+Second research report of 22 Nov ("Making AI Event Intelligence produce original insights"), P1, P2, P4, P5.
+- **Judge (P5; owner: Groq free plan, no card).** services/outside_judge.py: with GROQ_API_KEY set, the hard
+  judgments (editor's bar, novelty, head-to-head, tournament) go to openai/gpt-oss-120b on GroqCloud - an
+  open-weight reasoning model, not Google - with reasoning_effort medium (JudgeBench, Tan et al. ICLR 2025:
+  reasoning judges 70.6-80.9% vs 50.9% for a plain GPT-4o). The classification-style checks (pre-mortem,
+  past-case ratings, repeat check, number ablation) go to the local Ollama model when one is installed. Free
+  plan (Groq rate-limits page): 30 requests/min, 1,000/day, 8,000 tokens/min, 200,000 tokens/day - calls are
+  paced to the token-per-minute limit, Groq's retry-after is honoured, and at the daily limit the judge stops
+  for the run ("not judged", never Gemini). tools/calibrate_par.py saves each scored row and resumes the next
+  day; tools/check_judge.py shows the provider. OUTSIDE_JUDGE_PROVIDER=ollama|groq forces one provider.
+- **Variant perception (P1).** Each lens candidate fills variant_perception: the consensus line it departs
+  from (quoted), the one overlooked evidence ID of this story, a mechanism chain of at least two cited links
+  carrying that fact and the named actor, the rival hypothesis and the load-bearing assumption (Steinhardt's
+  four parts; ICD 203). services/variant_view.perception_problems checks every part by code; a failing
+  candidate gets one repair and is otherwise a draft with what it needs. Thesis at most 25 words (was 35).
+- **Forecast diagnosticity (P2).** Every outside judge available (Groq and the local model - different
+  vendors) gives p(outside view), p(forecast | thesis true), p(forecast | thesis false); the forecast must be
+  20-80% from base rates and at least 0.25 more likely if the thesis is right. One repair, else a draft. The
+  judges see a small reference-class table (services/base_rates.py: FJC 2011 motion-to-dismiss rates and
+  others; unverified rows say so).
+- **Load-bearing numbers (P4).** A figure in the insight must come from a record the mechanism chain cites,
+  and the local model checks that the conclusion does not hold just as well without it.
+- The log now records each story's kept candidates (insight, forecast, lens, novelty, diagnosticity,
+  overlooked fact); try_variants prints the variant perception and diagnosticity.
+- Not built yet: P3 (a hand-curated, mechanism-tagged case library - needs verified case facts), P6 (a second
+  generator vendor - none available without a paid plan), P7 (typed cross-story joins), P8 (blind pairwise
+  and hindsight evaluation harness).
+- tests/test_v13_29_groq_judge.py (6), tests/test_v13_29_variant_perception.py (10); conftest keeps Groq and
+  the new checks off for older tests.

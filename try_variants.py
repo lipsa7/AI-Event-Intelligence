@@ -66,6 +66,10 @@ def main() -> int:
                 print("    call:", json.dumps(item.get("forecast_contract") or meta.get("forecast_contract"), ensure_ascii=False)[:400])
                 print("    lens:", item.get("analytical_lenses"), "| novelty:", json.dumps(meta.get("variant_novelty"))[:300])
                 print("    pre-mortem:", json.dumps(meta.get("variant_premortem"))[:300])
+                print("    variant perception:", json.dumps(item.get("variant_perception") or meta.get("variant_perception"),
+                                                         ensure_ascii=False)[:600])
+                print("    forecast diagnosticity:", json.dumps({k: v for k, v in (meta.get("variant_diagnosticity") or {}).items()
+                                                              if k != "answers"})[:300])
             if not candidates:
                 print("  No candidate survived (abstained for this story).")
     finally:

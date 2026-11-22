@@ -85,12 +85,16 @@ def _no_variant_view_in_tests(monkeypatch):
     """v13.23: the consensus call and tournament need a model; older exploration tests run without them.
     tests/test_v13_23_variant_view.py turns them on with fake answers."""
     monkeypatch.setenv("EVENT_INTELLIGENCE_VARIANT_VIEW", "0")
+    # v13.29: the variant-perception, diagnosticity and load-bearing-number checks need fields and judges the
+    # older fixtures do not have; tests/test_v13_29_variant_perception.py turns them on.
+    monkeypatch.setenv("EVENT_INTELLIGENCE_VARIANT_PERCEPTION", "0")
 
 
 @pytest.fixture(autouse=True)
 def _no_outside_judge_in_tests(monkeypatch):
     """v13.24: never call a local Ollama from tests; tests that need the outside judge use fakes."""
     from services import outside_judge
+    monkeypatch.setenv("OUTSIDE_JUDGE_PROVIDER", "ollama")   # v13.29: never call Groq from tests
     outside_judge.reset()
     real = outside_judge._installed
     monkeypatch.setattr(outside_judge, "_installed", lambda get=None: real(get) if get is not None else
