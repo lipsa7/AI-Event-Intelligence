@@ -83,36 +83,73 @@ def test_premortem_kills_only_when_failure_is_already_in_evidence():
     assert "[EVID-7] OpenAI said" in variant_view.premortem_prompt(cand, lines)
 
 
-def test_select_runs_the_stages_in_order(monkeypatch):
+def test_select_repairs_revises_and_downgrades_instead_of_dropping(monkeypatch):
+    """v13.25c: a rule miss is repaired once, a restatement revised once, a pre-mortem risk downgraded;
+    only a candidate whose repair fails is held back (shown as a draft)."""
+    from services import outside_judge
     from services.research_orchestrator_service import ResearchOrchestratorService as S
     monkeypatch.setenv("EVENT_INTELLIGENCE_VARIANT_VIEW", "1")
     near = (datetime.now(timezone.utc) + timedelta(days=40)).isoformat()
+    far = (datetime.now(timezone.utc) + timedelta(days=300)).isoformat()
 
-    def cand(text):
+    def cand(text, deadline=near):
         return {"insight": text, "leverage_analysis": {"holder": "OpenAI"},
                 "premises": [{"text": "p", "evidence_ids": ["EVID-1"], "notes": "quote_check=cited"}],
-                "forecast_contract": {"question": "Will OpenAI settle?", "deadline": near}}
+                "forecast_contract": {"question": "Will OpenAI settle?", "deadline": deadline}}
     jargon = cand("A structural asymmetry: OpenAI faces $2,500 fines.")
+    late = cand("OpenAI faces $2,500 fines and settles.", deadline=far)
     restating = cand("OpenAI will contest the $2,500-per-violation suit.")
-    doomed = cand("OpenAI settles the $2,500-per-violation suit by January.")
-    good = cand("The 9 Jan comment deadline forces OpenAI to file 2 safety reports first.")
-    calls = []
+    risky = cand("OpenAI settles the $2,500-per-violation suit by January.")
+    hopeless = cand("A paradigm shift for OpenAI on 3 fronts.")
+    repairs = []
 
-    def ask(prompt):
-        calls.append(prompt[:40])
+    def gemini(prompt):                              # the generator repairs; it never judges
+        assert prompt.startswith("Revise this insight"), "Gemini was asked to judge"
+        repairs.append(prompt)
+        if "paradigm" in prompt:
+            return {"insight": "Still a paradigm shift for OpenAI on 3 fronts."}
+        if "THE CONSENSUS IT REPEATS" in prompt:
+            return {"insight": "The 9 Jan comment deadline forces OpenAI to answer 2 regulators first."}
+        if "structural asymmetry" in prompt:
+            return {"insight": "OpenAI faces $2,500 fines per violation in California."}
+        return {"insight": "OpenAI must answer the complaint by 15 Jan.",
+                "forecast_contract": {"question": "Will OpenAI answer by 15 Jan?", "deadline": near,
+                                      "resolution_criteria": "docket"}}
+
+    def judge(prompt):
         if prompt.startswith("Does the CANDIDATE"):
-            return {"new": "contest" not in prompt.split("CANDIDATE: ")[1]}
+            return json.dumps({"new": "contest" not in prompt.split("CANDIDATE: ")[1], "overlap_quote": "contest"})
         if prompt.startswith("Pre-mortem"):
-            killed = "settles" in prompt
-            return {"reasons": [{"reason": "r", "already_in_evidence": killed, "evidence_id": "EVID-7" if killed else ""}]}
-        return {"better": "A"}
+            killed = "settles the" in prompt
+            return json.dumps({"reasons": [{"reason": "r", "already_in_evidence": killed, "evidence_id": "EVID-7" if killed else ""}]})
+        return json.dumps({"better": "A"})
+    monkeypatch.setattr(outside_judge, "available", lambda get=None: True)
+    monkeypatch.setattr(outside_judge, "ask", judge)
     service = S.__new__(S)
-    service._ask_briefing_model = ask
+    service._ask_briefing_model = gemini
+    service.VARIANT_KEEP = 10
     entry = {}
-    kept = service._variant_select([jargon, restating, doomed, good], {"claims": [{"claim": "OpenAI will contest.", "source": "E"}]},
-                                   entry, [{"evidence_id": "EVID-7", "text": "OpenAI plans to settle."}])
-    assert [k["insight"] for k in kept] == [good["insight"]]
-    reasons = [d["problems"] for d in entry["variant_dropped"]]
-    assert reasons[0][0].startswith("jargon:") and reasons[1] == ["restates_consensus"]
-    assert reasons[2] == ["premortem_failure_already_in_evidence"]
-    assert not any(c.startswith("Does the CANDIDATE") and "structural" in c for c in calls)   # jargon dropped before any call
+    kept = service._variant_select([jargon, late, restating, risky, hopeless],
+                                   {"claims": [{"claim": "OpenAI will contest.", "source": "E"}]}, entry,
+                                   [{"evidence_id": "EVID-7", "text": "OpenAI plans to settle."}])
+    texts = [k["insight"] for k in kept]
+    assert "OpenAI faces $2,500 fines per violation in California." in texts          # jargon repaired
+    assert "OpenAI must answer the complaint by 15 Jan." in texts                       # late call repaired
+    assert "The 9 Jan comment deadline forces OpenAI to answer 2 regulators first." in texts   # revised
+    assert texts[-1] == risky["insight"]                                                # downgraded, last
+    assert [d["insight"] for d in entry["variant_dropped"]] == ["Still a paradigm shift for OpenAI on 3 fronts."]
+    assert entry["variant_downgraded"] == 1 and entry["variant_repaired"] == 4
+
+
+def test_without_an_outside_model_nothing_is_judged_by_gemini(monkeypatch):
+    from services.research_orchestrator_service import ResearchOrchestratorService as S
+    monkeypatch.setenv("EVENT_INTELLIGENCE_VARIANT_VIEW", "1")
+    near = (datetime.now(timezone.utc) + timedelta(days=40)).isoformat()
+    item = {"insight": "OpenAI answers by 15 Jan.", "leverage_analysis": {"holder": "OpenAI"},
+            "premises": [{"evidence_ids": ["E"], "notes": "quote_check=cited"}],
+            "forecast_contract": {"question": "q", "deadline": near}}
+    service = S.__new__(S)
+    service._ask_briefing_model = lambda p: (_ for _ in ()).throw(AssertionError("Gemini must not judge"))
+    entry = {}
+    kept = service._variant_select([item], {"claims": [{"claim": "c", "source": "E"}]}, entry, [])
+    assert kept[0]["insight"] == item["insight"] and entry["judged_by"] == "not_judged:no_outside_model"

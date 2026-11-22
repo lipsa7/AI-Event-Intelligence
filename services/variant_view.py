@@ -36,7 +36,7 @@ import re
 from datetime import datetime, timezone
 from typing import Any, Callable, Mapping, Sequence
 
-VERSION = "variant-view-v2"
+VERSION = "variant-view-v3"
 MIN_HORIZON_DAYS = 14
 MAX_HORIZON_DAYS = 84
 MAX_CANDIDATES = 3
@@ -278,6 +278,67 @@ def premortem(candidate: Mapping[str, Any], evidence_lines: Sequence[str], ask: 
     return {"killed": bool(shown), "checked": bool(reasons),
             "reasons": [_clean(r.get("reason"))[:160] for r in reasons[:3]],
             "evidenced": [{"reason": _clean(r.get("reason"))[:160], "evidence_id": _clean(r.get("evidence_id"))} for r in shown]}
+
+
+# ---------------------------------------------------------------- 3e. repair, not drop
+# v13.25c (22 Nov 2026): a candidate that misses a rule is sent back ONCE with exactly what it misses
+# (the research report: "a Flash-Lite rewrite runs once; the meaning is then re-verified"; SciMON revises
+# an idea against the prior work it overlaps instead of discarding it). Only if the repair still fails is
+# it held back - and then shown in the report as a draft with what it needs.
+NEEDS_TEXT = {
+    "no_number": "put at least one number or date from the records into the insight text",
+    "no_named_actor": "name the company, agency or person who acts",
+    "no_dated_call": "add a yes/no forecast_contract question with a deadline and resolution rule",
+    "restates_consensus": "go beyond the consensus it repeats (quoted below): say what follows from it that it does not say",
+}
+
+
+def need_text(code: str) -> str:
+    if code in NEEDS_TEXT:
+        return NEEDS_TEXT[code]
+    if code.startswith("call_horizon_"):
+        return (f"move the forecast deadline to between {MIN_HORIZON_DAYS} and {MAX_HORIZON_DAYS} days from today "
+                "- pick the nearest checkable step on the way to the outcome (a filing, a hearing, a comment "
+                "deadline, a statement)")
+    if code.startswith("thesis_"):
+        return f"cut the first sentence (the thesis) to at most {THESIS_MAX_WORDS} plain words"
+    if code.startswith("jargon"):
+        return "replace these labels with what they mean in plain words: " + code.split(":", 1)[-1]
+    return code.replace("_", " ")
+
+
+def repair_prompt(candidate: Mapping[str, Any], problems: Sequence[str], evidence_lines: Sequence[str],
+                  overlap: str = "", today: datetime | None = None) -> str:
+    today = today or datetime.now(timezone.utc)
+    fixes = "\n".join(f"- {need_text(p)}" for p in problems)
+    return ("Revise this insight so it meets every point below. Keep its facts and its point; use only facts "
+            "stated in the records; do not add claims the records do not support.\nTODAY: " + today.strftime("%Y-%m-%d")
+            + "\nFIX:\n" + fixes
+            + (f"\nTHE CONSENSUS IT REPEATS: {overlap}" if overlap else "")
+            + "\n\nINSIGHT: " + _clean(candidate.get("insight") or candidate.get("text"))[:1500]
+            + "\nFORECAST: " + json.dumps(_mapping(candidate.get("forecast_contract")), ensure_ascii=False)[:500]
+            + "\n\nRECORDS:\n" + "\n".join(list(evidence_lines)[:30])
+            + '\n\nReturn JSON {"insight":"revised text, thesis first","forecast_contract":{"question":"yes/no",'
+              '"deadline":"ISO date","resolution_criteria":"public source and rule"},"holder":"named actor"}.')
+
+
+def apply_repair(candidate: Mapping[str, Any], answer: Any, problems: Sequence[str]) -> dict[str, Any] | None:
+    data = _parse(answer)
+    text = _clean(data.get("insight"))
+    if not text:
+        return None
+    out = dict(candidate)
+    out["insight"] = text
+    contract = _mapping(data.get("forecast_contract"))
+    if _clean(contract.get("question")) and _clean(contract.get("deadline")):
+        out["forecast_contract"] = {k: _clean(contract.get(k)) for k in ("question", "deadline", "resolution_criteria")}
+    holder = _clean(data.get("holder"))
+    if holder and not _clean(_mapping(out.get("leverage_analysis")).get("holder")):
+        out["leverage_analysis"] = dict(_mapping(out.get("leverage_analysis")), holder=holder)
+    meta = dict(_mapping(out.get("metadata")))
+    meta["variant_repaired"] = {"fixed": list(problems), "original_insight": _clean(candidate.get("insight") or candidate.get("text"))[:900]}
+    out["metadata"] = meta
+    return out
 
 
 # ---------------------------------------------------------------- 4. tournament

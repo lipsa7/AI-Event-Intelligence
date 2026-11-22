@@ -18144,9 +18144,14 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
         text = " ".join(_clean(insight.get(k)) for k in ("text", "insight", "title") if _clean(insight.get(k)))
         summary = self._expected_view_block(evidence, [])
         from services import outside_judge
-        judge, judged_by = outside_judge.judge_or(self._ask_briefing_model)   # v13.24: another model family
-        result = par_check.judge(text, ask=judge, sources_summary=summary)
-        result["judged_by"] = judged_by
+        if not outside_judge.available():
+            # v13.25c: never Gemini judging Gemini's insight (the user's rule; Huang et al. ICLR 2024). With
+            # no outside open-source model running, the editor's bar is not applied and the log says so.
+            result = {"passed": True, "available": False, "reason": "not_judged:no_outside_model",
+                      "judged_by": "not_judged"}
+        else:
+            result = par_check.judge(text, ask=outside_judge.ask, sources_summary=summary)
+            result["judged_by"] = "outside:" + outside_judge.model()
         logger.info("par_check=%s", json.dumps({"version": par_check.VERSION, "passed": result.get("passed"),
                                                 "judged_by": result.get("judged_by"),
                                                 "missing": result.get("missing"), "reason": result.get("reason"),
@@ -18223,53 +18228,87 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
         from services import variant_view
         return variant_view.instruction(view, view.get("fact_ids") or [])
 
+    def _variant_repair(self, item: dict[str, Any], problems: list[str], lines: Sequence[str],
+                        overlap: str = "") -> dict[str, Any] | None:
+        """v13.25c: one targeted rewrite by the generator (Gemini) with exactly what the candidate misses."""
+        from services import variant_view
+        try:
+            answer = self._ask_briefing_model(variant_view.repair_prompt(item, problems, lines, overlap=overlap))
+        except Exception as error:
+            logger.info("variant_repair failed: %s", type(error).__name__)
+            return None
+        return variant_view.apply_repair(item, answer, problems)
+
     def _variant_select(self, found: list[dict[str, Any]], view: Mapping[str, Any], entry: dict[str, Any],
                         records: Sequence[Any] = ()) -> list[dict[str, Any]]:
-        """v13.23/v13.24, in order (research report of 22 Nov, stages E-H):
-        E structure (number, named actor, call in 2-12 weeks) and plain language (thesis <= 35 words,
-          no coined labels) - no calls;
-        F novelty against the consensus map - 1 call each;
-        G pre-mortem - killed if a likely failure reason is already in the evidence - 1 call each;
-        H pairwise tournament in both orders. The winner goes on to the claim-support, non-obviousness
-          and editor's-bar gates. Every drop is logged with its reason."""
+        """v13.25c (22 Nov 2026) - nothing is thrown away unimproved:
+        * the word-for-word quote check is a note (the claim gate's search can still source the fact);
+        * a candidate missing a number, a named actor, a 2-12 week call, a <= 35-word plain thesis is
+          REPAIRED once with exactly what it misses (research report: rewrite once, re-verify);
+        * a candidate that restates the consensus is REVISED once against the overlap (SciMON);
+        * a pre-mortem failure reason already in the evidence DOWNGRADES it (ranked last), it is not killed;
+        * novelty, pre-mortem and the tournament are judged only by the outside open-source model; with no
+          outside judge they are SKIPPED, never done by Gemini on its own output;
+        * a candidate still failing after its repair is held back and shown as a draft with what it needs."""
         if not self._variant_on() or not found:
             return found
         from services import outside_judge, variant_view
-        judge, judged_by = outside_judge.judge_or(self._ask_briefing_model)
+        outside = outside_judge.available()
+        judge = outside_judge.ask if outside else None
+        judged_by = ("outside:" + outside_judge.model()) if outside else "not_judged:no_outside_model"
         entry["judged_by"] = judged_by
-        kept, dropped = [], []
+        kept, dropped, downgraded = [], [], []
         lines = [f"[{_clean(_as_mapping(r).get('evidence_id'))}] {_clean(_as_mapping(r).get('text'))[:200]}"
                  for r in records or [] if isinstance(r, Mapping)]
+
+        def rule_problems(candidate: Mapping[str, Any]) -> list[str]:
+            return variant_view.structure_problems(candidate) + variant_view.plain_language_problems(candidate)
+
         for item in found:
             meta = dict(_as_mapping(item.get("metadata")))
-            # v13.24: evidence first - every premise's quote must be found in an evidence record
-            # (services/quote_first.py, exact substring, no model). An insight whose facts are not in the
-            # sources is dropped here, before any judging (the old failure: written first, unsupported later).
-            problems = (variant_view.evidence_problems(item) + variant_view.structure_problems(item)
-                        + variant_view.plain_language_problems(item))
+            meta["evidence_check"] = variant_view.evidence_problems(item) or ["ok"]
             meta["judged_by"] = judged_by
-            if not problems:
+            item["metadata"] = meta
+            problems = rule_problems(item)
+            if problems:
+                repaired = self._variant_repair(item, problems, lines)
+                if repaired is not None:
+                    item, problems = repaired, rule_problems(repaired)
+            meta = dict(_as_mapping(item.get("metadata")))
+            premortem_risk = False
+            if not problems and judge is not None:
                 text = _clean(item.get("insight") or item.get("text"))
                 fresh = variant_view.novelty(text, view, ask=judge)
+                if fresh.get("checked") and not fresh.get("new"):
+                    revised = self._variant_repair(item, ["restates_consensus"], lines, overlap=fresh.get("overlap", ""))
+                    if revised is not None and not rule_problems(revised):
+                        again = variant_view.novelty(_clean(revised.get("insight")), view, ask=judge)
+                        if again.get("new"):
+                            item, fresh = revised, again
+                            meta = dict(_as_mapping(item.get("metadata")))
                 meta["variant_novelty"] = fresh
-                if not fresh.get("new"):
+                if fresh.get("checked") and not fresh.get("new"):
                     problems.append("restates_consensus")
-            if not problems:
+            if not problems and judge is not None:
                 mortem = variant_view.premortem(item, lines, ask=judge)
                 meta["variant_premortem"] = mortem
-                if mortem.get("killed"):
-                    problems.append("premortem_failure_already_in_evidence")
-            meta["variant_structure"] = problems or ["ok"]
+                premortem_risk = bool(mortem.get("killed"))
+            meta["variant_structure"] = problems or (["ok", "premortem_risk_in_evidence"] if premortem_risk else ["ok"])
             meta["variant_consensus"] = _clean(view.get("consensus"))[:500]
             item["metadata"] = meta
-            (dropped if problems else kept).append(item)
-        entry["variant_dropped"] = [{"insight": _clean(i.get("insight") or i.get("text"))[:160],
+            (dropped if problems else downgraded if premortem_risk else kept).append(item)
+        # v13.25: full text kept so the report shows every held-back variant as a DRAFT with what it needs.
+        entry["variant_dropped"] = [{"insight": _clean(i.get("insight") or i.get("text"))[:900],
                                      "problems": _as_mapping(i.get("metadata")).get("variant_structure")}
                                     for i in dropped]
-        if len(kept) > 1:
+        entry["variant_repaired"] = sum(1 for i in kept + downgraded + dropped
+                                        if _as_mapping(i.get("metadata")).get("variant_repaired"))
+        entry["variant_downgraded"] = len(downgraded)
+        if len(kept) > 1 and judge is not None:
             kept = variant_view.tournament(kept, view, ask=judge)
-        entry["variant_kept"] = len(kept[: self.VARIANT_KEEP])
-        return [dict(k) for k in kept[: self.VARIANT_KEEP]]
+        ranked = kept + downgraded
+        entry["variant_kept"] = len(ranked[: self.VARIANT_KEEP])
+        return [dict(k) for k in ranked[: self.VARIANT_KEEP]]
 
     EXPECTED_VIEW_MAX_ITEMS = 6
 

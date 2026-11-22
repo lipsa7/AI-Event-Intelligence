@@ -61,12 +61,17 @@ def test_orchestrator_par_check_off_switch_and_on(monkeypatch):
     assert service._par_check({"text": "x"}, [])["reason"] == "off"      # conftest turns it off
     monkeypatch.setenv("EVENT_INTELLIGENCE_PAR_CHECK", "1")
     monkeypatch.setattr(par_check, "load_labels", lambda path=None: ROWS)
+    from services import outside_judge
+    # v13.25c: no outside model -> not judged at all (never Gemini judging Gemini)
+    service._ask_briefing_model = lambda p: (_ for _ in ()).throw(AssertionError("Gemini must not judge"))
+    assert service._par_check({"text": "x"}, [])["reason"] == "not_judged:no_outside_model"
     seen = {}
 
     def ask(prompt):
         seen["prompt"] = prompt
-        return {"verdict": "fail", "missing": "no_specific_mechanism", "fix": "Name the rule."}
-    service._ask_briefing_model = ask
+        return json.dumps({"verdict": "fail", "missing": "no_specific_mechanism", "fix": "Name the rule."})
+    monkeypatch.setattr(outside_judge, "available", lambda get=None: True)
+    monkeypatch.setattr(outside_judge, "ask", ask)
     result = service._par_check({"text": "California sued OpenAI."},
                                 [{"gap_type": "commentary", "text": "Analysts say testing is now a nuisance."}])
     assert not result["passed"] and result["missing"] == "no_specific_mechanism"

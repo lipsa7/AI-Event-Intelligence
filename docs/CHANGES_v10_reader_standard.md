@@ -970,3 +970,47 @@ Built from the report's implementation spec (stages A-H inside each exploration 
   running Ollama the run falls back to Gemini and logs "self-judged:gemini". Huang et al. ICLR 2024
   (self-correction without external feedback degrades), Zheng et al. NeurIPS 2023 (self-enhancement
   bias). tests/test_v13_24_outside_judge.py (4).
+
+## v13.25 (22 Nov 2026) - every draft insight stays visible, with what it needs
+
+User's rule: the run must produce insights that can be made better. Two ways candidates disappeared:
+RUN-ACC0E1ED's 7 candidates were folded away under the two source-backed fallback findings (the
+section opened only when nothing at all was released), and from v13.23 the exploration stages
+(evidence first, structure, plain language, novelty, pre-mortem) drop variants before the claim check,
+so they never reached the list of checked candidates and left no trace in the report.
+
+- research_orchestrator_service `_variant_select`: a dropped variant's full text is kept in the run log
+  (900 characters, was 160).
+- dashboard: the section is now "Draft insights - written by this run, not verified, and what each one
+  needs". It is open unless an ORIGINAL insight was released (a source-backed fallback no longer folds
+  it away). It lists the candidates the claim check rejected and the variants dropped earlier, each with
+  what it needs in plain words: "a call due within 2-12 weeks (its call is 340 days out)", "fact 2 quoted
+  word for word from a source", "something the coverage does not already say", and so on.
+- tests/test_v13_25_drafts.py (3).
+
+## v13.25b (22 Nov 2026) - the quote rule no longer drops candidates
+
+- The v13.24 evidence-first rule dropped a candidate in its exploration slot when a fact's copied quote
+  was not found word for word in a source. That repeated the old failure - an insight thrown away
+  instead of sourced - and it removed the candidate before the claim gate, whose challenge search
+  attaches evidence and grounds the claims again. Now the quote check is recorded as a note
+  (metadata evidence_check, e.g. premise_1_quote_not_found) and the candidate goes on. If the claim
+  gate still finds no source, it is held back there and shown in the report's draft insights with its
+  reason. tests/test_v13_24_outside_judge.py updated.
+
+## v13.25c (22 Nov 2026) - repair, not drop; no self-judging
+
+The v13.24 variant stages repeated the old mistake in more places than the quote rule: they threw
+candidates away instead of improving them, against the research report they were built from.
+- Rule misses (no number, no named actor, call outside 2-12 weeks, thesis over 35 words, jargon):
+  the generator gets ONE targeted rewrite with exactly what is missing (variant_view.repair_prompt;
+  report: "a rewrite runs once; the meaning is then re-verified"). Still failing -> held back and shown
+  as a draft with what it needs.
+- Restates the consensus: revised ONCE against the overlapping consensus claim, then re-checked
+  (SciMON: revise against the prior work, do not discard).
+- Pre-mortem: a failure reason already in the evidence now DOWNGRADES the candidate (ranked last), it
+  does not kill it (report: "kills or downgrades").
+- No outside open-source model running: novelty, pre-mortem, tournament and the editor's bar are
+  SKIPPED and logged "not_judged:no_outside_model" - Gemini never judges its own insights.
+  tools/calibrate_par.py refuses to run without the outside model.
+- tests updated (test_v13_24_quality_stages, test_v13_22_par_check). Full suite: same 55 / 6 as before.

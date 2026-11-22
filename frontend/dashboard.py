@@ -4822,6 +4822,49 @@ def render_run_metrics(report: Mapping[str, Any]) -> None:
                    "Compare runs with `python -m tools.run_quality --last 5`.")
 
 
+VARIANT_NEEDS = {
+    "no_number": "a number from the sources",
+    "no_named_actor": "a named company, agency or person",
+    "no_dated_call": "a dated yes/no call that can be checked",
+    "restates_consensus": "something the coverage does not already say",
+    "premortem_failure_already_in_evidence": "an answer to a failure reason already in the evidence",
+    "no_premises": "facts from the sources (it cites none)",
+}
+
+
+def variant_need(code: Any) -> str:
+    """v13.25: what a dropped draft needs, in plain words."""
+    code = clean_text(code)
+    if code in VARIANT_NEEDS:
+        return VARIANT_NEEDS[code]
+    if code.startswith("call_horizon_"):
+        days = code[len("call_horizon_"):].split("_")[0]
+        return f"a call due within 2-12 weeks (its call is {days} days out)"
+    if code.startswith("thesis_") and code.endswith("_words"):
+        return "a main claim of at most 35 words (it has " + code[len("thesis_"):-len("_words")] + ")"
+    if code.startswith("premise_") and "_quote_" in code:
+        return "fact " + code.split("_")[1] + " quoted word for word from a source"
+    if code.startswith("premise_") and code.endswith("_uncited"):
+        return "a source for fact " + code.split("_")[1]
+    if code.startswith("jargon"):
+        return "plain words instead of labels (" + code.split(":", 1)[-1].replace("_", " ") + ")"
+    return code.replace("_", " ")
+
+
+def draft_variants(gate: Mapping[str, Any]) -> list[dict[str, Any]]:
+    """v13.25: drafts the exploration stages dropped before the claim check, with what each needs."""
+    out = []
+    exploration = gate.get("exploration") if isinstance(gate.get("exploration"), Mapping) else {}
+    for combo in as_list(exploration.get("combinations")):
+        if not isinstance(combo, Mapping):
+            continue
+        for item in as_list(combo.get("variant_dropped")):
+            if isinstance(item, Mapping) and clean_text(item.get("insight")):
+                needs = [variant_need(code) for code in as_list(item.get("problems")) if clean_text(code)]
+                out.append({"insight": clean_text(item.get("insight")), "needs": needs or ["not recorded"]})
+    return out
+
+
 def render_claim_support_check(
     report: Mapping[str, Any],
 ) -> None:
@@ -4854,14 +4897,19 @@ def render_claim_support_check(
         elif len(attempts) > 1:
             parts.append(f"released on attempt {len(attempts)} of {len(attempts)}")
         st.caption("Claim check: " + "; ".join(parts) + ".")
-    title = (
-        "Candidates checked and why they were not released"
-        if not released else "Other candidates checked"
-    )
+    # v13.25 (22 Nov 2026): these are DRAFT insights - written by the run, held back by a check - shown so
+    # they can be made better. Open by default unless an ORIGINAL insight was released (a source-backed
+    # fallback finding used to fold them away: RUN-ACC0E1ED's 7 candidates were hidden that way).
+    original = [item for item in attempts if item.get("passed") and item.get("released_as") != "source_backed"]
+    title = ("Draft insights - written by this run, not verified, and what each one needs"
+             if not original else "Other draft insights checked")
     rejected = [item for item in attempts if not item.get("passed") and not item.get("released_as")]
-    if not rejected:
+    dropped = [d for d in draft_variants(gate)]
+    if not rejected and not dropped:
         return
-    with st.expander(title, expanded=not released):
+    with st.expander(title, expanded=not original):
+        st.caption("Not shown as insights: each failed a check named below. They are kept so the next step "
+                   "(more evidence, a second story, a dated call) can be seen.")
         for number, item in enumerate(rejected, start=1):
             reasons = [
                 claim_check_label(reason)
@@ -4886,6 +4934,9 @@ def render_claim_support_check(
                     + clean_text(failed.get("claim_text"))
                     + (f" — *{detail}*" if detail else "")
                 )
+        for number, draft in enumerate(dropped, start=len(rejected) + 1):
+            st.markdown(f"**{number}. (draft, dropped before the claim check)** " + clean_text(draft["insight"]))
+            st.caption("Needs: " + "; ".join(draft["needs"]))
         stopped = clean_text(gate.get("stopped"))
         if stopped and not released:
             st.caption(

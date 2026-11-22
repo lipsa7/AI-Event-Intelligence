@@ -43,7 +43,10 @@ def main() -> int:
     sample = rng.sample(good, n_good) + rng.sample(other, min(len(other), args.limit - n_good))
     orchestrator = ResearchOrchestratorService()
     from services import outside_judge
-    judge, judged_by = outside_judge.judge_or(orchestrator._ask_briefing_model)   # v13.24
+    if not outside_judge.available():   # v13.25c: never Gemini judging Gemini
+        print("No outside open-source judge: start Ollama with a non-Google model (ollama list), then rerun.")
+        return 1
+    judge, judged_by = outside_judge.ask, "outside:" + outside_judge.model()
     print(f"Judge: {judged_by}")
     g.set_call_budget(args.limit)
     tp = fn = tn = fp = unavailable = 0

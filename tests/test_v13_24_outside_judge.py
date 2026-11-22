@@ -74,7 +74,9 @@ def test_evidence_first_premise_check():
     assert variant_view.evidence_problems({}) == ["no_premises"]
 
 
-def test_select_uses_the_outside_judge_and_drops_unsourced_before_judging(monkeypatch):
+def test_select_uses_the_outside_judge_and_keeps_unsourced_for_the_claim_gate(monkeypatch):
+    """v13.25b: a fact not yet matched to a source is noted, not dropped - the claim gate's challenge
+    search attaches evidence and grounds it again; dropping it here would throw the insight away unsourced."""
     from datetime import datetime, timedelta, timezone
     from services.research_orchestrator_service import ResearchOrchestratorService as S
     monkeypatch.setenv("EVENT_INTELLIGENCE_VARIANT_VIEW", "1")
@@ -84,12 +86,13 @@ def test_select_uses_the_outside_judge_and_drops_unsourced_before_judging(monkey
     sourced = dict(base, insight="OpenAI faces 4 suits.", premises=[{"evidence_ids": ["EVID-1"], "notes": "quote_check=cited"}])
     outside_calls, gemini_calls = [], []
     monkeypatch.setattr(outside_judge, "available", lambda: True)
-    monkeypatch.setattr(outside_judge, "ask", lambda p: outside_calls.append(p) or ('{"new": true}' if p.startswith("Does") else '{"reasons": []}'))
+    monkeypatch.setattr(outside_judge, "ask", lambda p: outside_calls.append(p) or ('{"new": true}' if p.startswith("Does") else
+                                                                                      ('{"reasons": []}' if p.startswith("Pre") else '{"better": "A"}')))
     service = S.__new__(S)
     service._ask_briefing_model = lambda p: gemini_calls.append(p) or {}
     entry = {}
     kept = service._variant_select([unsourced, sourced], {"claims": [{"claim": "c", "source": "E"}]}, entry, [])
-    assert [k["insight"] for k in kept] == ["OpenAI faces 4 suits."]
-    assert entry["variant_dropped"][0]["problems"] == ["premise_1_quote_not_found"]
+    assert entry["variant_dropped"] == [] and len(kept) == 1          # both survived; tournament kept one
     assert entry["judged_by"].startswith("outside:") and gemini_calls == []
-    assert len(outside_calls) == 2 and not any("3 suits" in c for c in outside_calls)
+    notes = {c["insight"]: c["metadata"]["evidence_check"] for c in (unsourced, sourced)}
+    assert notes == {"OpenAI faces 3 suits.": ["premise_1_quote_not_found"], "OpenAI faces 4 suits.": ["ok"]}
