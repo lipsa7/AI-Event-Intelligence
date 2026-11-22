@@ -50,6 +50,12 @@ from typing import Any, Callable, Mapping, Sequence
 
 VERSION = "non-obviousness-v5-computed-gap-route"
 CONSTRAINT_GAPS = frozenset({"policy", "dependency", "numbers", "precedent", "pattern"})  # v6.23: + computed pattern
+# v13.28.2: v11 added the "primary" research gap (the bill, rule or filing the development is about) but
+# never counted it here, so the actual text of a rule could not serve as the constraint an insight builds
+# on. It counts only from the issuer itself - a government, regulator, court or the organisation's own
+# site or notice; the same search also returns news reports of the story (22 Nov: AP, The Verge, CNN),
+# which are more reports of the development, not a constraint. Test 3 still ablates the constraint.
+PRIMARY_DOCUMENT_TIERS = frozenset({"official", "primary", "press_release", "research"})
 SUFFICIENT = frozenset({"supported", "inference_supported"})
 MAX_CONCLUSIONS = 2      # inferred conclusion sentences tested per candidate
 MAX_DEVELOPMENTS = 3     # single-development re-checks per conclusion sentence
@@ -123,6 +129,10 @@ def is_constraint(record: Any) -> bool:
     gap = _clean(record.get("gap_type")).casefold()
     if gap in NON_CONSTRAINT_GAPS:
         return False
+    if gap == "primary":
+        tier = _clean((record.get("source_credibility") or {}).get("tier")
+                      if isinstance(record.get("source_credibility"), Mapping) else "").casefold()
+        return bool(record.get("historical_case")) or tier in PRIMARY_DOCUMENT_TIERS
     return bool(record.get("historical_case") or gap in CONSTRAINT_GAPS
                 or (record.get("analytical_context_only") and not gap))
 

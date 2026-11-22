@@ -144,6 +144,17 @@ INSIGHT_EXPLORATION_COMBINATIONS = _env_int("EVENT_INTELLIGENCE_INSIGHT_EXPLORAT
 DEEP_FINAL_CLAIM_RESEARCH_MAX = 3
 DEEP_FINAL_CLAIM_RESEARCH_MIN_SECONDS = 60
 FINAL_RESEARCH_COMPLETE = frozenset({"completed_found", "completed_none_found"})
+# v13.28.2: repair for a candidate whose claims were backed but whose conclusion its sources already state.
+CLAIM_DEEPEN_INSTRUCTION = (
+    "DEEPEN REPAIR. The target insight's claims are backed, but its conclusion only restates what its own "
+    "sources already say, so it is background, not an original insight. Keep its backed premises. Then add ONE "
+    "step that no source states, built only from records already provided: (a) a cited CONTEXT record - a rule, "
+    "deadline, dependency, number or past case - applied to the development, saying what it FORCES, for whom, by "
+    "when; or (b) a gap you compute from the records (dates or amounts far apart) and what it implies; or (c) a "
+    "second, different development that, combined with the first, implies something neither states alone. If "
+    "the conclusion could be stated from one report alone, it is still not original. Cite every record you use. "
+    "Do not invent facts, numbers or actors. Return one candidate, or none if no such step is supported. "
+)
 CLAIM_REPAIR_INSTRUCTION = (
     "CLAIM-SUPPORT REPAIR. Preserve the strongest SUPPORTED CORE of the candidate; do not throw away an "
     "interesting cross-event thesis merely because one causal bridge was overstated. For each failed claim in "
@@ -18326,6 +18337,30 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
             return None
         return variant_view.apply_repair(item, answer, problems)
 
+    @staticmethod
+    def _route_ready_first(items: list[dict[str, Any]], records: Sequence[Any] = ()) -> list[dict[str, Any]]:
+        """v13.28.2: stable partition - candidates with a route past the non-obviousness test's first step
+        (a cited context record that is a constraint, a computed gap, or two different stories) first."""
+        from services import non_obviousness
+        by_id = {_clean(_as_mapping(r).get("evidence_id")): _as_mapping(r) for r in records or []
+                 if isinstance(r, Mapping) and _clean(r.get("evidence_id"))}
+        ready, rest = [], []
+        for item in items:
+            support = [_clean(x) for x in item.get("supporting_evidence_ids") or [] if _clean(x)]
+            route = ""
+            try:
+                if any(non_obviousness.is_constraint(by_id.get(eid)) for eid in support):
+                    route = "constraint"
+                elif non_obviousness.computed_gap(support, by_id):
+                    route = "computed_gap"
+            except Exception:
+                route = ""
+            meta = dict(_as_mapping(item.get("metadata")))
+            meta["route_ready"] = route
+            item = {**item, "metadata": meta}
+            (ready if route else rest).append(item)
+        return ready + rest
+
     def _variant_select(self, found: list[dict[str, Any]], view: Mapping[str, Any], entry: dict[str, Any],
                         records: Sequence[Any] = ()) -> list[dict[str, Any]]:
         """v13.25c (22 Nov 2026) - nothing is thrown away unimproved:
@@ -18393,6 +18428,16 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
         entry["variant_downgraded"] = len(downgraded)
         if len(kept) > 1 and judge is not None:
             kept = variant_view.tournament(kept, view, ask=judge)
+        # v13.28.2: with no outside judge there is no tournament, so the slot's top two were simply the
+        # first two lenses (constraints, value chain) and the money and past-case lenses never reached the
+        # claim check. And with a judge, a candidate built on one story with no cited rule, deadline,
+        # number, past case or computed gap fails the non-obviousness test whatever its wording
+        # ("conclusion_single_development", 2 of 5 rejections on 22 Nov). Candidates that HAVE such a
+        # route go first; the judge's order (or the lens order) is kept within each group.
+        kept = self._route_ready_first(kept, records)
+        downgraded = self._route_ready_first(downgraded, records)
+        entry["variant_route_ready"] = sum(1 for i in kept + downgraded
+                                           if _as_mapping(i.get("metadata")).get("route_ready"))
         ranked = kept + downgraded
         # v13.27.2: candidates beyond the slot's top VARIANT_KEEP are drafts too, not discarded unseen.
         entry["variant_dropped"] += [{"insight": _clean(i.get("insight") or i.get("text"))[:900],
@@ -18543,7 +18588,26 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
         from services import claim_support_gate as gate
         from services.hypothesis_evidence_service import claim_fingerprint
         brief = (gate.repair_brief(verdict) + list(verdict.get("brief_extra") or []))[:20]
-        if kind == "repair":
+        if kind == "repair" and verdict.get("repair_kind") == "deepen":
+            # v13.28.2: the claims were backed but the conclusion only restated its sources. Narrowing it
+            # (the claim repair) would keep it unoriginal, so this repair goes the other way: keep the
+            # backed facts and add the step no source states (report of 22 Nov: SciMON's revise-when-too-
+            # close loop raised novelty for 57.8% of revised ideas).
+            insight_id = _clean(failed.get("insight_id"))
+            context = {
+                "target_insights": [dict(failed)],
+                "target_insight_ids": [insight_id] if insight_id else [],
+                "quality_weaknesses": brief,
+                "improvement_actions": [
+                    "keep_the_backed_premises",
+                    "add_one_cited_rule_deadline_number_or_past_case_or_a_second_development",
+                    "state_what_that_forces_for_a_named_actor_that_no_source_states",
+                    "cite_every_record_used",
+                    "do_not_add_facts_not_in_the_records",
+                ],
+                "instruction": CLAIM_DEEPEN_INSTRUCTION + CONVERGENCE_GUIDANCE,
+            }
+        elif kind == "repair":
             insight_id = _clean(failed.get("insight_id"))
             revision_id = _clean(failed.get("insight_revision_id"))
             context = {
@@ -19012,7 +19076,11 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
                         reasons = list(backed.get("reasons") or [])
                         attempt["released_as"] = ("source_backed" if not shown_backed >= self.SOURCE_BACKED_MAX_SHOWN
                                                   else "not_shown:source_backed_limit")
-                        verdict = {**verdict, "passed": False, "repairable": False,
+                        # v13.28.2: an explored candidate is repairable ONCE, as a "deepen" repair, from
+                        # its own repair allowance (a main-pass candidate still leads to a different one). 5 of 7 candidates on 22 Nov failed here and none was given a
+                        # second try (owner: "it should generate insights so they can be made better").
+                        verdict = {**verdict, "passed": False, "repairable": origin == "exploration",
+                                   "repair_kind": "deepen",
                                    "reasons": ["source_backed_not_original:" + r for r in reasons],
                                    "brief_extra": non_obviousness.brief([r.split(":", 1)[-1] for r in reasons]) or [
                                        "[non-obvious] The conclusion only restates what the sources already say. "
@@ -19032,7 +19100,8 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
                         "[non-obvious] The conclusion only restates what the sources already say. "
                         "Derive a conclusion that follows from combining at least two sources "
                         "but is stated by none of them, and keep every step backed."]
-                    verdict = {**verdict, "passed": False, "repairable": False,
+                    verdict = {**verdict, "passed": False, "repairable": origin == "exploration",   # v13.28.2
+                               "repair_kind": "deepen",
                                "reasons": downgrade_reasons, "brief_extra": extra}
                     attempt.update({"passed": False, "reasons": list(verdict["reasons"]), "release_notes": notes})
                 else:
@@ -19064,18 +19133,21 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
             if stop_retries:
                 log["stopped"] = "research_incomplete"
                 break
-            if pool:
-                continue
             # v13.14 (20 Nov 2026): each explored story's candidate gets ONE repair of its own when its
             # failure is repairable. The run-wide limit of extra attempts (2) was used up by the first
             # candidate's repair and alternative, so no explored candidate was ever repaired: on 20 Nov
             # (RUN-FF8F59D2...) the Forum AI election candidate failed on a single premise ("Anthropic's
             # Claude" where the source said "Claude") and was dropped. Still bounded by time and calls.
+            # v13.28.2: checked BEFORE "if pool: continue". Since v13.27.2 a story gives two candidates;
+            # the first (the slot's best) failed while the second still waited in the pool, so the loop
+            # moved on and only the second-best candidate was ever repaired. The limit is one repair per
+            # explored candidate (stories x VARIANT_KEEP), not one per story.
             own_repair = (origin == "exploration" and verdict.get("repairable")
-                          and log.get("exploration_repairs", 0) < max(1, INSIGHT_EXPLORATION_COMBINATIONS))
+                          and log.get("exploration_repairs", 0)
+                          < max(1, INSIGHT_EXPLORATION_COMBINATIONS * self.VARIANT_KEEP))
             if own_repair and self._remaining_discretionary_seconds() >= DEEP_CLAIM_GATE_MIN_SECONDS:
                 log["exploration_repairs"] = log.get("exploration_repairs", 0) + 1
-                attempt["next"] = "repair"
+                attempt["next"] = "deepen" if verdict.get("repair_kind") == "deepen" else "repair"
                 new_candidates = self._claim_gate_synthesis(
                     kind="repair", failed=candidate, verdict=verdict, tried=tried, topic=topic,
                     events=events, evidence=evidence, graph_context=graph_context,
@@ -19085,6 +19157,8 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
                 if not new_candidates:
                     attempt["next_result"] = "no_candidate"
                 pool.extend((item, "repair") for item in new_candidates)
+                continue
+            if pool:
                 continue
             if log["extra_syntheses"] >= DEEP_CLAIM_GATE_EXTRA_SYNTHESES:
                 log["stopped"] = "retry_limit"
