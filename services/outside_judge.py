@@ -23,6 +23,14 @@ import logging
 import os
 from typing import Any, Callable
 
+# v13.29.1: the tools (check_judge, calibrate_par) import this module without the orchestrator, so GROQ_API_KEY
+# in .env was never read there and they silently used Ollama. Load the project .env here too (skipped in tests).
+try:
+    from services import project_env as _project_env
+    _project_env.load()
+except Exception:
+    pass
+
 VERSION = "outside-judge-v4-groq"
 logger = logging.getLogger("event_intelligence.services.outside_judge")
 _STATS = {"calls": 0, "failed": 0}

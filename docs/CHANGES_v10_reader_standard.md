@@ -1200,3 +1200,11 @@ Second research report of 22 Nov ("Making AI Event Intelligence produce original
   and hindsight evaluation harness).
 - tests/test_v13_29_groq_judge.py (6), tests/test_v13_29_variant_perception.py (10); conftest keeps Groq and
   the new checks off for older tests.
+
+## v13.29.1 (22 Nov 2026): four bugs in v13.29
+
+- **The tools never used Groq.** `tools/check_judge.py` and `tools/calibrate_par.py` load the judge module without the orchestrator, so `GROQ_API_KEY` in `.env` was never read: they reported, and calibrated, the local Ollama model instead. The judge module now loads the project `.env` itself (this is skipped in tests).
+- **A failed or exhausted judge held back every original insight.** When the editor's-bar judge failed (an error, Groq's daily limit or an unreadable answer), it returned "failed". Every original insight was then held back as "below the editor's bar". A failed judge now counts as "not judged", the same as having no judge at all.
+- **The repair could not fix "consensus not quoted".** It was told to copy a consensus line word for word but was never shown the consensus lines. They are now included in every repair.
+- **A story could send nothing on.** v13.29 added about a dozen checks. When every candidate of a story still missed one after its repair, the story produced nothing at all; in the test run on saved data with no paid calls, all 4 candidates of a story were held back. Now the candidate with the fewest problems goes on to the claim check, ranked last and labelled `variant_passed_on_with_problems`. The claim check, non-obviousness test and editor's bar still decide whether it is released.
+- **Tests:** `tests/test_v13_29_1_fixes.py`.

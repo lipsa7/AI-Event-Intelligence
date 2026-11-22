@@ -18186,6 +18186,12 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
             result = par_check.judge(text, ask=outside_judge.ask, sources_summary=summary)
             model = outside_judge.model()
             result["judged_by"] = "outside:" + model
+            if not result.get("available"):
+                # v13.29.1: a judge that FAILED (error, Groq's daily limit, unreadable answer) is "not judged",
+                # like no judge at all. It returned passed=False, so a broken or exhausted judge held back every
+                # original insight as "below the editor's bar".
+                result.update({"passed": True, "judged_by": "not_judged:judge_failed:" + model,
+                               "reason": _clean(result.get("reason")) or "par_check_unavailable"})
             calibration = par_calibration.load()
             trusted = par_calibration.trusted(calibration, model)
             result["trusted"] = trusted
@@ -18395,6 +18401,9 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
         kept, dropped, downgraded = [], [], []
         lines = [f"[{_clean(_as_mapping(r).get('evidence_id'))}] {_clean(_as_mapping(r).get('text'))[:200]}"
                  for r in records or [] if isinstance(r, Mapping)]
+        # v13.29.1: the repair is told to copy a CONSENSUS line word for word, so it must be shown them.
+        repair_lines = [f"CONSENSUS[{n}] ({_clean(_as_mapping(c).get('source'))}): {_clean(_as_mapping(c).get('claim'))}"
+                        for n, c in enumerate(view.get("claims") or [], start=1) if isinstance(c, Mapping)] + lines
 
         # v13.29: EVENT_INTELLIGENCE_VARIANT_PERCEPTION=0 turns the P1/P2/P4 checks off (tests that predate them).
         perception_on = os.getenv("EVENT_INTELLIGENCE_VARIANT_PERCEPTION", "1").strip() not in {"0", "false", "no"}
@@ -18432,7 +18441,7 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
             item["metadata"] = meta
             problems = rule_problems(item)
             if problems:
-                repaired = self._variant_repair(item, problems, lines)
+                repaired = self._variant_repair(item, problems, repair_lines)
                 if repaired is not None:
                     item, problems = repaired, rule_problems(repaired)
             meta = dict(_as_mapping(item.get("metadata")))
@@ -18441,7 +18450,7 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
                 text = _clean(item.get("insight") or item.get("text"))
                 fresh = variant_view.novelty(text, view, ask=judge)
                 if fresh.get("checked") and not fresh.get("new"):
-                    revised = self._variant_repair(item, ["restates_consensus"], lines, overlap=fresh.get("overlap", ""))
+                    revised = self._variant_repair(item, ["restates_consensus"], repair_lines, overlap=fresh.get("overlap", ""))
                     if revised is not None and not rule_problems(revised):
                         again = variant_view.novelty(_clean(revised.get("insight")), view, ask=judge)
                         if again.get("new"):
@@ -18453,7 +18462,7 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
             if not problems and diag_asks:
                 forecast, diag = forecast_problems(item)
                 if forecast:
-                    revised = self._variant_repair(item, forecast, lines)
+                    revised = self._variant_repair(item, forecast, repair_lines)
                     if revised is not None and not rule_problems(revised):
                         again, diag_again = forecast_problems(revised)
                         if len(again) < len(forecast):
@@ -18473,6 +18482,18 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
             meta["variant_consensus"] = _clean(view.get("consensus"))[:500]
             item["metadata"] = meta
             (dropped if problems else downgraded if premortem_risk else kept).append(item)
+        if dropped and not kept and not downgraded:
+            # v13.29.1: v13.29 added about a dozen checks; when every candidate of a story still misses one after
+            # its repair, the story sent nothing on and nothing could be improved further (owner: "it should
+            # generate insights so they can be made better"). The one with the fewest problems goes on, ranked
+            # last and labelled; the claim check, non-obviousness test and editor's bar still decide.
+            best = min(dropped, key=lambda i: len(_as_mapping(i.get("metadata")).get("variant_structure") or []))
+            dropped.remove(best)
+            meta = dict(_as_mapping(best.get("metadata")))
+            meta["variant_passed_on_with_problems"] = list(meta.get("variant_structure") or [])
+            best["metadata"] = meta
+            downgraded.append(best)
+            entry["variant_passed_on_with_problems"] = 1
         # v13.25: full text kept so the report shows every held-back variant as a DRAFT with what it needs.
         entry["variant_dropped"] = [{"insight": _clean(i.get("insight") or i.get("text"))[:900],
                                      "problems": _as_mapping(i.get("metadata")).get("variant_structure")}
