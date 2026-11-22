@@ -297,7 +297,12 @@ def anchor_lines(insights: Sequence[Mapping[str, Any]]) -> list[str]:
         leverage = pick("leverage_analysis") if isinstance(pick("leverage_analysis"), Mapping) else {}
         contract = pick("forecast_contract") if isinstance(pick("forecast_contract"), Mapping) else {}
         derivation = pick("derivation") if isinstance(pick("derivation"), Mapping) else {}
-        raw_watch = list(pick("what_to_watch") or []) + list(pick("watch_signals") or []) + list(derivation.get("watch_signals") or [])
+        def as_items(value: Any) -> list:
+            # v13.27.2: a single signal given as a string was split into its letters by list().
+            if isinstance(value, (str, Mapping)):
+                return [value] if value else []
+            return list(value or [])
+        raw_watch = as_items(pick("what_to_watch")) + as_items(pick("watch_signals")) + as_items(derivation.get("watch_signals"))
         watch = [_clean(w.get("signal") if isinstance(w, Mapping) else w) for w in raw_watch][:3]
         out.append("- " + _clean(item.get("text") or item.get("insight"))[:400]
                    + (f" | actor: {_clean(leverage.get('holder'))}" if leverage.get("holder") else "")

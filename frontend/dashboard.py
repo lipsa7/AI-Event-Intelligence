@@ -4838,6 +4838,7 @@ VARIANT_NEEDS = {
     "restates_consensus": "something the coverage does not already say",
     "premortem_failure_already_in_evidence": "an answer to a failure reason already in the evidence",
     "no_premises": "facts from the sources (it cites none)",
+    "ranked_below_slot_top": "a check of its own: it ranked below the story's top two, which went to the claim check",
 }
 
 

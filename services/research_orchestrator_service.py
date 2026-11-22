@@ -18184,7 +18184,10 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
         return result
 
     VARIANT_MAX_CANDIDATES = 3
-    VARIANT_KEEP = 1
+    # v13.27.2: two per slot go on to the claim check (was 1). With four lens candidates per slot and no
+    # outside judge there is no tournament, so "the winner" was simply the first lens's candidate and the
+    # other three were discarded unseen - three Pro calls wasted per slot. The rest are shown as drafts.
+    VARIANT_KEEP = 2
 
     def _variant_on(self) -> bool:
         return os.getenv("EVENT_INTELLIGENCE_VARIANT_VIEW", "1").strip() not in {"0", "false", "no"}
@@ -18363,6 +18366,10 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
         if len(kept) > 1 and judge is not None:
             kept = variant_view.tournament(kept, view, ask=judge)
         ranked = kept + downgraded
+        # v13.27.2: candidates beyond the slot's top VARIANT_KEEP are drafts too, not discarded unseen.
+        entry["variant_dropped"] += [{"insight": _clean(i.get("insight") or i.get("text"))[:900],
+                                      "problems": ["ranked_below_slot_top"]}
+                                     for i in ranked[self.VARIANT_KEEP:]]
         entry["variant_kept"] = len(ranked[: self.VARIANT_KEEP])
         return [dict(k) for k in ranked[: self.VARIANT_KEEP]]
 

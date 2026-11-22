@@ -91,7 +91,8 @@ def test_orchestrator_select_drops_uncheckable_and_keeps_the_winner(monkeypatch)
                                       deadline=(datetime.now(timezone.utc) + timedelta(days=60)).isoformat())
     entry = {}
     kept = service._variant_select([long_call, near, other], {"consensus": "c"}, entry)
-    assert len(kept) == 1 and entry["variant_kept"] == 1
+    # v13.27.2: the top TWO go on to the claim check (was one); the long-horizon call is a draft.
+    assert len(kept) == 2 and entry["variant_kept"] == 2
     assert entry["variant_dropped"][0]["problems"][0].startswith("call_horizon_")
     assert kept[0]["metadata"]["variant_structure"] == ["ok"]
 

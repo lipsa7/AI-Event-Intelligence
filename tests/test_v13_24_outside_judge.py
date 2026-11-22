@@ -92,7 +92,8 @@ def test_select_uses_the_outside_judge_and_keeps_unsourced_for_the_claim_gate(mo
     service._ask_briefing_model = lambda p: gemini_calls.append(p) or {}
     entry = {}
     kept = service._variant_select([unsourced, sourced], {"claims": [{"claim": "c", "source": "E"}]}, entry, [])
-    assert entry["variant_dropped"] == [] and len(kept) == 1          # both survived; tournament kept one
+    # both survived; v13.27.2: the top two go on (was one), tournament order kept
+    assert entry["variant_dropped"] == [] and len(kept) == 2
     assert entry["judged_by"].startswith("outside:") and gemini_calls == []
     notes = {c["insight"]: c["metadata"]["evidence_check"] for c in (unsourced, sourced)}
     assert notes == {"OpenAI faces 3 suits.": ["premise_1_quote_not_found"], "OpenAI faces 4 suits.": ["ok"]}

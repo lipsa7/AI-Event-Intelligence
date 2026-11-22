@@ -40,7 +40,16 @@ VERSION = "variant-view-v4"
 MIN_HORIZON_DAYS = 14
 MAX_HORIZON_DAYS = 84
 MAX_CANDIDATES = 3
-_NUMBER = re.compile(r"\d")   # any figure or date (amount, share, count, day, year)
+# Any figure or date: a digit (amount, share, count, day, year), a month name ("in June"), or a number
+# word ("three months", "a dozen"). v13.27.2: digits only failed "the June breach was disclosed in
+# September, three months later" - a date-anchored candidate the lens rules ask for ("a cited number or date").
+_MONTHS = ("january|february|march|april|june|july|august|september|october|november|december")
+_NUMBER = re.compile(
+    # v13.27.2 + review: "may", "one", "half", "double" and short month names ("mar", "dec") are ordinary
+    # words ("OpenAI may face one more suit"), so they are left out - with a digit beside them ("May 2026",
+    # "12 Dec") the digit already counts.
+    r"\d|\b(?:" + _MONTHS + r"|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|dozen|hundred|"
+    r"thousand|million|billion|trillion)\b", re.I)
 
 
 def _clean(value: Any) -> str:
@@ -263,6 +272,7 @@ def analogue_cases(records: Sequence[Mapping[str, Any]], limit: int = 6) -> list
 
 def base_rate(rated: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
     """Similarity-weighted share of comparable cases in which the outcome followed (unknowns excluded)."""
+    rated = [r for r in rated or [] if isinstance(r, Mapping)]
     usable = [r for r in rated if isinstance(r.get("similarity"), (int, float)) and r.get("outcome_followed") in {"yes", "no"}]
     weight = sum(float(r["similarity"]) for r in usable)
     if not usable or weight <= 0:

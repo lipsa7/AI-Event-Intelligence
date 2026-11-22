@@ -1080,3 +1080,23 @@ v13.27 retires the hypothesis lab whenever lens generation is on, a run would ha
   v13.26's).
 - tests/test_v13_26_lens_generation.py restored, plus a guard test that both sides exist together.
 - try_variants.py prints each lens call again.
+
+## v13.27.2 (22 Nov 2026) - bugs found in the paths the test setup switches off
+
+The test setup turns the editor's bar, the variant stages and the outside judge off, so these paths only
+run together in a live run. Reviewed with an exploration slot run end to end on the saved corpus (fake
+model answers, no API calls) and the release loop with every stage on.
+- **Two candidates per story go on, the rest are drafts** (`VARIANT_KEEP` 1 -> 2). With four lens
+  candidates per slot and no outside judge there is no tournament, so the one "winner" was simply the
+  first lens's candidate and the other three were discarded unseen - three Pro calls wasted per slot.
+  Candidates beyond the top two are now listed as drafts ("ranked_below_slot_top").
+- **A date or number word counts as a number** (`variant_view._NUMBER`). Only digits counted, so "the
+  June breach was disclosed in September, three months later" failed "no_number" and cost a rewrite
+  call, although the lens rules ask for "a cited number or date". Month names and number words count now
+  - except "May", "one", "half", "double" and short month names, which are ordinary words ("OpenAI may face
+  one more suit" would otherwise pass); beside a digit the digit counts anyway.
+- **A single watch signal given as text** was split into its letters in the briefing anchors
+  (`editorial_briefing.anchor_lines`).
+- `variant_view.base_rate` ignores malformed entries instead of raising.
+- tests/test_v13_27_2_fixes.py (4); each fails on 5cf6628. Two older tests (test_v13_23_variant_view,
+  test_v13_24_outside_judge) now expect two kept per story.
