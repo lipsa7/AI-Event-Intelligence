@@ -29,12 +29,14 @@ def groq(monkeypatch):
     outside_judge._RECENT_TOKENS.clear()
 
 
-def test_hard_calls_go_to_groq_and_simple_calls_to_the_local_model(groq, monkeypatch):
+def test_hard_calls_go_to_gpt_oss_120b_and_simple_calls_to_gpt_oss_20b(groq, monkeypatch):
+    # v13.29.2: the owner's laptop cannot load a local judge, so both go to Groq by default (two models,
+    # each with its own free-plan allowance).
     monkeypatch.setattr(outside_judge, "_installed", lambda get=None: ["qwen3:14b"])
     assert outside_judge.provider("hard") == "groq" and outside_judge.model() == "openai/gpt-oss-120b"
+    assert outside_judge.provider("simple") == "groq" and outside_judge.model(kind="simple") == "openai/gpt-oss-20b"
+    monkeypatch.setenv("OUTSIDE_JUDGE_SIMPLE_PROVIDER", "ollama")
     assert outside_judge.provider("simple") == "ollama" and outside_judge.model(kind="simple") == "qwen3:14b"
-    monkeypatch.setattr(outside_judge, "_installed", lambda get=None: [])
-    assert outside_judge.provider("simple") == "groq"      # no local model: Groq does those too
 
 
 def test_groq_request_carries_the_key_reasoning_and_json_mode(groq):

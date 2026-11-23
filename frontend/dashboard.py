@@ -4826,9 +4826,33 @@ def render_run_metrics(report: Mapping[str, Any]) -> None:
         cols[4].metric("Gemini calls", cost.get("gemini_calls") if cost.get("gemini_calls") is not None else "n/a")
         for line in run_metrics.summary_lines(metrics):
             st.markdown("- " + _markdown_safe(line))
+        render_quality_trend()
         st.caption("Claim support: share of the released insights' claims that their cited sources support "
                    "(RAGAS faithfulness). Citation coverage: share of claims citing at least one source (ALCE). "
                    "Compare runs with `python -m tools.run_quality --last 5`.")
+
+
+def render_quality_trend() -> None:
+    """v13.31: is insight quality improving? The quality scorecard of the last runs (services/quality_scorecard.py)."""
+    try:
+        from services import quality_scorecard
+        rows = [r for r in quality_scorecard.history(last=20) if r.get("candidates") or r.get("claim_check") not in (None, "0/0")]
+    except Exception:
+        return
+    if not rows:
+        return
+    st.markdown("**Insight quality over runs** (share of the code-checkable 'at par' items each candidate meets; "
+                "'at par' itself needs the blind test in tools/blind_pairs.py)")
+    import pandas as pd
+    frame = pd.DataFrame([{"run": str(r.get("created_at"))[:16], "mean rubric": r.get("mean_rubric_score"),
+                           "meet every item": r.get("share_meeting_every_item"),
+                           "original insights released": r.get("original_insights_released"),
+                           "passed the claim check": int(str(r.get("claim_check") or "0/0").split("/")[0])}
+                          for r in rows]).set_index("run")
+    st.line_chart(frame[["mean rubric", "meet every item"]])
+    st.bar_chart(frame[["original insights released", "passed the claim check"]])
+    latest = rows[-1].get("item_pass_rates") or {}
+    st.caption("Latest run, items passed: " + ", ".join(f"{k} {v:.0%}" for k, v in latest.items() if v is not None))
 
 
 VARIANT_NEEDS = {
@@ -4854,6 +4878,11 @@ VARIANT_NEEDS = {
     "forecast_not_uncertain": "a forecast that is genuinely uncertain (20-80% before the insight)",
     "forecast_not_diagnostic": "a forecast much more likely if the insight is right than if it is wrong",
     "number_decorative": "a number the argument depends on (its conclusion holds without it)",
+    "near_copy_of_existing": "something not already said (it is nearly a copy of published analysis or an earlier insight)",
+    "contradicted_by_source": "a correction: one of its sources says otherwise",
+    "case_not_in_library": "a past case from the curated library (it cited one from memory)",
+    "no_disanalogy": "where its past case differs from this story",
+    "forecast_scheduled_event": "a forecast of what a scheduled event decides, not whether it happens",
 }
 
 
@@ -4862,13 +4891,17 @@ def variant_need(code: Any) -> str:
     code = clean_text(code)
     if code in VARIANT_NEEDS:
         return VARIANT_NEEDS[code]
+    if code.startswith("link_unquoted:") or code.startswith("link_quote_not_in_source:"):
+        return "the source's own words for step " + code.split(":", 1)[1] + " of its argument"
+    if code.startswith("link_not_connected:"):
+        return "a record that connects steps " + code.split(":", 1)[1] + " (the facts only sit side by side)"
     if code.startswith("number_not_in_chain:"):
         return "a number the argument uses (" + code.split(":", 1)[1] + " is in none of its cited steps)"
     if code.startswith("number_off_story:"):
         return "a number from its own story (" + code.split(":", 1)[1] + " comes from a record about something else)"
     if code.startswith("call_horizon_"):
         days = code[len("call_horizon_"):].split("_")[0]
-        return f"a call due within 2-12 weeks (its call is {days} days out)"
+        return f"a call due within a week to a year (its call is {days} days out)"
     if code.startswith("thesis_") and code.endswith("_words"):
         return "a main claim of at most 25 words (it has " + code[len("thesis_"):-len("_words")] + ")"
     if code.startswith("premise_") and "_quote_" in code:

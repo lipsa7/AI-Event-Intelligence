@@ -90,7 +90,7 @@ def test_select_repairs_revises_and_downgrades_instead_of_dropping(monkeypatch):
     from services.research_orchestrator_service import ResearchOrchestratorService as S
     monkeypatch.setenv("EVENT_INTELLIGENCE_VARIANT_VIEW", "1")
     near = (datetime.now(timezone.utc) + timedelta(days=40)).isoformat()
-    far = (datetime.now(timezone.utc) + timedelta(days=300)).isoformat()
+    far = (datetime.now(timezone.utc) + timedelta(days=400)).isoformat()   # v13.31: horizon up to 365 days
 
     def cand(text, deadline=near):
         return {"insight": text, "leverage_analysis": {"holder": "OpenAI"},

@@ -67,7 +67,7 @@ def test_orchestrator_uses_lenses_only_when_the_variant_stages_are_on(monkeypatc
     monkeypatch.setenv("EVENT_INTELLIGENCE_VARIANT_VIEW", "1")
     lenses = service._generation_lenses({"claims": []})
     assert [l["name"] for l in lenses] == [n for n, _ in variant_view.LENSES]
-    assert "2 to 12" in lenses[0]["instruction"] and "CONSENSUS" not in lenses[0]["instruction"]
+    assert "a week to a" in lenses[0]["instruction"] and "CONSENSUS" not in lenses[0]["instruction"]
     monkeypatch.setenv("EVENT_INTELLIGENCE_LENS_GENERATION", "0")
     assert service._generation_lenses({"claims": []}) == []
     monkeypatch.setenv("EVENT_INTELLIGENCE_LENS_GENERATION", "1")

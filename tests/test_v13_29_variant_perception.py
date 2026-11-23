@@ -21,9 +21,11 @@ def vp(**over):
     base = {"consensus_quote": "California sued OpenAI over 80 loss-of-control incidents",
             "overlooked_evidence_id": "EVID-COMPLAINT",
             "why_consensus_misses_it": "coverage leads with the incidents, not the marketing",
-            "mechanism_chain": [{"step": "OpenAI marketed agentic browsing to enterprises", "evidence_ids": ["EVID-COMPLAINT"]},
+            "mechanism_chain": [{"step": "OpenAI marketed agentic browsing to enterprises", "evidence_ids": ["EVID-COMPLAINT"],
+                                 "quote": "OpenAI marketed agentic browsing to enterprises"},
                                 {"step": "promotion is the hook for California nuisance liability, so OpenAI's "
-                                         "exposure turns on the 80 incidents tied to that use", "evidence_ids": ["EVID-NEWS1"]}],
+                                         "exposure turns on the 80 incidents tied to that use", "evidence_ids": ["EVID-NEWS1"],
+                                 "quote": "California sued OpenAI over 80 loss-of-control incidents"}],
             "rival_hypothesis": "the suit is leverage for a settlement on disclosure only",
             "load_bearing_assumption": "the court reads promotion, not manufacture, as the act"}
     base.update(over)
@@ -51,7 +53,8 @@ def test_each_part_is_checked():
         cand(variant_perception=vp(overlooked_evidence_id="EVID-NEWS1")), VIEW, RECORDS)
     assert "overlooked_fact_off_story" in variant_view.perception_problems(
         cand(variant_perception=vp(overlooked_evidence_id="EVID-RUNWIDE")), VIEW, RECORDS)
-    short = vp(mechanism_chain=[{"step": "OpenAI marketed it", "evidence_ids": ["EVID-COMPLAINT"]}])
+    short = vp(mechanism_chain=[{"step": "OpenAI marketed it", "evidence_ids": ["EVID-COMPLAINT"],
+                                 "quote": "OpenAI marketed agentic browsing to enterprises"}])
     assert "mechanism_chain_too_short" in variant_view.perception_problems(cand(variant_perception=short), VIEW, RECORDS)
     assert {"no_rival_hypothesis", "no_load_bearing_assumption"} <= set(variant_view.perception_problems(
         cand(variant_perception=vp(rival_hypothesis="", load_bearing_assumption="")), VIEW, RECORDS))

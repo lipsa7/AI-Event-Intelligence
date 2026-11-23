@@ -106,7 +106,16 @@ def main() -> int:
     if len(set(y)) < 2 or len(x) < 20:
         print("\nToo few scored rows of both kinds to fit the calibration layer.")
         return 1
+    verdicts = [int(v[-1]) for v in x]
+    raw = par_calibration.classification(verdicts, y)
+    print(f"Judge's own verdict on your labels: kappa {raw['kappa']}, passes your good {raw['tpr']}, "
+          f"fails your others {raw['tnr']} (aim: both above 0.8; kappa 0.4-0.6 substantial, above 0.7 excellent)")
+    held = par_calibration.holdout(x, y)
+    if held:
+        print(f"Calibrated, on a held-out 25% of your labels: precision {held.get('precision')}, fails your others "
+              f"{held.get('fail_recall')}, kappa {held.get('kappa')} over {held.get('n')} rows")
     calibration = par_calibration.build(x, y, model=model, items=par_check.ITEMS, exemplar_mode=args.exemplars)
+    calibration["judge_kappa"], calibration["holdout"] = raw["kappa"], held
     print(f"\nCalibration (5-fold cross-validated): precision {calibration['cv_precision']}, recall "
           f"{calibration['cv_recall']} at threshold {calibration['threshold']} "
           f"({calibration['cv_predicted_positive']} predicted good of {len(y)}; {sum(y)} rated good)")

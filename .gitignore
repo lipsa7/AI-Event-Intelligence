@@ -39,3 +39,5 @@ backup_before_*/
 # Added by tools/untrack_temp_files.py
 *.db-shm
 *.db-wal
+
+data/logs/

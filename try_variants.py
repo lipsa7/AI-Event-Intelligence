@@ -58,11 +58,15 @@ def main() -> int:
             print(f"Consensus claims: {entry.get('consensus_claims')}; primary records added: {entry.get('primary_records')}")
             for call in entry.get("lens_calls") or []:      # v13.26: one short generation call per lens
                 print(f"  LENS {call.get('lens')}: {call.get('result')} ({call.get('prompt_characters')} prompt characters)")
+            print(f"Inputs: {entry.get('computed_facts', 0)} computed facts, {entry.get('consensus_sources', 0)} consensus "
+                  f"sources, {entry.get('past_cases', 0)} past cases")
             for dropped in entry.get("variant_dropped") or []:
-                print(f"  DROPPED {dropped['problems']}: {dropped['insight']}")
+                score = (dropped.get("rubric") or {}).get("score")
+                print(f"  DRAFT [{dropped.get('move')}] rubric {score} {dropped['problems']}: {dropped['insight']}")
             for item in candidates:
                 meta = item.get("metadata") or {}
                 print("  WINNER:", item.get("insight") or item.get("text"))
+                print("    rubric:", json.dumps(meta.get("rubric")))
                 print("    call:", json.dumps(item.get("forecast_contract") or meta.get("forecast_contract"), ensure_ascii=False)[:400])
                 print("    lens:", item.get("analytical_lenses"), "| novelty:", json.dumps(meta.get("variant_novelty"))[:300])
                 print("    pre-mortem:", json.dumps(meta.get("variant_premortem"))[:300])
@@ -75,6 +79,28 @@ def main() -> int:
     finally:
         used = gemini.calls_used()
         gemini.set_call_budget(None)
+    # v13.31: the quality scorecard of this stage test, appended to data/stage_scores.csv for the trend
+    # (python tools/quality_scorecard.py --stage).
+    from services import quality_scorecard
+    card = quality_scorecard.run_scorecard(log)
+    print("\n" + "\n".join(quality_scorecard.lines(card)))
+    try:
+        import csv
+        from datetime import datetime
+        path = Path(__file__).resolve().parent / "data" / "stage_scores.csv"
+        new = not path.exists()
+        with path.open("a", encoding="utf-8", newline="") as handle:
+            writer = csv.DictWriter(handle, fieldnames=["when", "run_id", "candidates", "mean_rubric", "every_item",
+                                                        "kept", "most_failed"])
+            if new:
+                writer.writeheader()
+            writer.writerow({"when": datetime.now().strftime("%Y-%m-%d %H:%M"), "run_id": checkpoint["run_id"],
+                             "candidates": card.get("candidates"), "mean_rubric": card.get("mean_rubric_score"),
+                             "every_item": card.get("share_meeting_every_item"),
+                             "kept": sum(int(c.get("variant_kept") or 0) for c in log["exploration"]["combinations"]),
+                             "most_failed": json.dumps(card.get("most_failed_items"))})
+    except OSError as error:
+        print(f"(stage score not saved: {error})")
     print(f"\nGemini API attempts used by this test: {used} of at most {args.max_calls}")
     return 0
 

@@ -55,7 +55,7 @@ def _gate():
 def test_dropped_variants_are_listed_with_plain_needs(d):
     drafts = d.draft_variants(_gate())
     assert [x["insight"][:10] for x in drafts] == ["Washington", "x" * 10]
-    assert drafts[0]["needs"] == ["a call due within 2-12 weeks (its call is 340 days out)",
+    assert drafts[0]["needs"] == ["a call due within a week to a year (its call is 340 days out)",
                                   "plain words instead of labels (structural asymmetry)"]
     assert drafts[1]["needs"] == ["fact 2 quoted word for word from a source", "a number from the sources"]
 

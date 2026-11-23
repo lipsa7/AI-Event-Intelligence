@@ -5,6 +5,7 @@ import email.utils
 import hashlib
 import importlib
 import json
+from collections import Counter
 import math
 import os
 import re
@@ -17499,6 +17500,7 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
         except Exception:
             pass
         self._par_scored = []   # v13.28: judge probabilities this run (rate_next)
+        self._run_kept_texts = []   # v13.31: this run's kept candidates (meaning-distance across stories)
         try:   # v13.3: the Exa fallback's per-run cap (services/exa_contents.py) starts again each run
             from services import exa_contents
             exa_contents.reset_run_budget()
@@ -18253,10 +18255,14 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
 
     CONSENSUS_SEARCHES_ENV = "EVENT_INTELLIGENCE_CONSENSUS_SEARCHES"
 
+    CONSENSUS_ANGLES = (("analysis", " analysis outlook"), ("official", " regulator agency statement press release"),
+                        ("filing", " company filing risk factors 10-K"), ("think_tank", " think tank policy report"),
+                        ("market", " Polymarket Kalshi prediction market odds"))
+
     def _analysis_search(self, labels: Sequence[str]) -> list[dict[str, Any]]:
         """v13.24 (stage A): published analysis about the story, found with Google grounding (free up to
-        5,000 prompts a month). One search per story slot, at most EVENT_INTELLIGENCE_CONSENSUS_SEARCHES
-        (default 10) a run."""
+        5,000 prompts a month). v13.30: five searches per story slot (CONSENSUS_ANGLES), at most
+        EVENT_INTELLIGENCE_CONSENSUS_SEARCHES (default 60) a run."""
         helper = self.__dict__.get("_consensus_search_helper")
         if helper is None:
             helper = False
@@ -18264,7 +18270,7 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
             if llm is not None and os.getenv("EVENT_INTELLIGENCE_GROUNDED_SEARCH", "1") != "0":
                 try:
                     from services.grounded_search import GeminiGroundedSearch
-                    limit = _env_int(self.CONSENSUS_SEARCHES_ENV, 10, 0, 50)
+                    limit = _env_int(self.CONSENSUS_SEARCHES_ENV, 60, 0, 500)
                     candidate = GeminiGroundedSearch(llm, max_calls=limit)
                     helper = candidate if limit > 0 and candidate.available else False
                 except Exception as error:
@@ -18274,12 +18280,27 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
             return []
         import re as _re
         heads = [_re.split(r"\s[-\u2013\u2014]\s|#|\|", _clean(label))[0].strip() for label in list(labels)[:2]]
-        query = " ".join(h for h in heads if h)[:150] + " analysis outlook"
-        try:
-            return [dict(r) for r in helper.search(query, max_results=6).get("results") or [] if isinstance(r, Mapping)]
-        except Exception as error:
-            logger.info("consensus search failed: %s", type(error).__name__)
-            return []
+        subject = " ".join(h for h in heads if h)[:150]
+        # v13.30 (research report of 22 Nov, Method 5): the consensus is built from more than news analysis -
+        # company filings, agency releases, think-tank work and prediction markets - so "new" is judged against
+        # what is actually said. On 22 Nov each story's map had 1 piece of published analysis.
+        out: list[dict[str, Any]] = []
+        seen: set[str] = set()
+        for angle, words in self.CONSENSUS_ANGLES:
+            try:
+                found = helper.search(subject + words, max_results=4).get("results") or []
+            except Exception as error:
+                logger.info("consensus search failed (%s): %s", angle, type(error).__name__)
+                continue
+            for row in found:
+                if not isinstance(row, Mapping):
+                    continue
+                url = _clean(row.get("url"))
+                if url and url in seen:
+                    continue
+                seen.add(url)
+                out.append(dict(row, angle=angle))
+        return out[:16]
 
     def _consensus_view(self, labels: Sequence[str], records: list[Any], evidence: list[Any] | None = None) -> dict[str, Any]:
         """v13.23/v13.24: the retrieved, cited consensus map (stage A) and the primary records - federal
@@ -18292,6 +18313,29 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
         rows = [r for r in records or [] if isinstance(r, Mapping)]
         analysis = self._analysis_search(labels)
         view = variant_view.consensus(list(labels), rows, ask=self._ask_briefing_model, analysis=analysis)
+        view["analysis"] = analysis   # v13.30: also compared by meaning (services/semantic_novelty.py)
+        # v13.31: inputs for the analytic moves - the story's records (signals), past cases from the curated
+        # library, and this app's earlier theses on the same actors (Thompson "rarely starts from scratch").
+        view["labels"] = list(labels)
+        view["_records"] = rows
+        try:
+            from services import case_library, semantic_novelty as _sn
+            service = _sn._service()
+            story_text = " ".join(list(labels) + [_clean(_as_mapping(r).get("text"))[:400] for r in rows[:12]])
+            view["cases"] = case_library.retrieve(story_text, embed=service.similarities if service else None)
+        except Exception as error:
+            logger.info("case library failed: %s", type(error).__name__)
+            view["cases"] = []
+        # v13.31 review: names from the story's records, not its labels (labels carry bylines and photo credits
+        # such as "Getty Images"); an earlier thesis counts only if it names at least two of them.
+        from collections import Counter as _Counter
+        from services import link_check as _lc
+        counts = _Counter(n for r in rows for n in _lc.entities(_as_mapping(r).get("text")) if " " not in n and len(n) > 3)
+        names = [n for n, _ in counts.most_common(6)]
+        earlier = [t for t in getattr(self, "_semantic_earlier", []) or []
+                   if sum(1 for n in names if n in t.casefold()) >= 2]
+        view["earlier_theses"] = earlier[:3]
+        view["story_names"] = names
         facts, receipt = primary_data.collect(view.get("search_terms") or {})
         # v13.28.3: only records about this story (the search words come from a model call and can miss).
         story_text = " ".join(list(labels) + [_clean(_as_mapping(r).get("text"))[:600] for r in rows])
@@ -18320,9 +18364,24 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
             view["base_rate"] = dict(variant_view.base_rate([]), cases_found=len(cases),
                                      note="not rated" + ("" if cases else ": no past case in this slot's evidence")
                                      + ("" if outside_judge.available_simple() else ": no outside model"))
+        # v13.30 (report Method 1): the fact table - every dated figure in this story's records, and the gaps,
+        # ratios and rates computed by code - goes to every lens (services/fact_table.py).
+        try:
+            from services import fact_table
+            story_rows = [r for r in rows if isinstance(r, Mapping)] + list(new_records)
+            view["fact_rows"] = fact_table.extract(story_rows)
+            view["computed_facts"] = fact_table.compute(view["fact_rows"])
+            view["fact_table_block"] = fact_table.prompt_block(view["fact_rows"], view["computed_facts"])
+        except Exception as error:
+            logger.info("fact table failed: %s", type(error).__name__)
         logger.info("variant_consensus=%s", json.dumps({
             "developments": list(labels)[:3], "claims": len(view.get("claims") or []),
-            "analysis_found": len(analysis), "enough": view.get("enough"),
+            "independent_sources": [c.get("independent_sources") for c in view.get("claims") or []],
+            "analysis_found": len(analysis), "analysis_by_angle": dict(Counter(_clean(a.get("angle")) for a in analysis)),
+            "fact_rows": len(view.get("fact_rows") or []), "computed_facts": len(view.get("computed_facts") or []),
+            "past_cases": [c.get("case_id") for c in view.get("cases") or []],
+            "earlier_theses": len(view.get("earlier_theses") or []),
+            "enough": view.get("enough"),
             "primary_data": receipt, "primary_records": len(new_records),
             "base_rate": _as_mapping(view.get("base_rate")).get("text"),
             "consensus": view.get("consensus", "")[:240], "error": view.get("error", "")}, ensure_ascii=False))
@@ -18336,6 +18395,13 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
             return []
         from services import variant_view
         fact_ids = (view or {}).get("fact_ids") or []
+        if os.getenv("EVENT_INTELLIGENCE_ANALYTIC_MOVES", "1").strip() not in {"0", "false", "no"}:
+            # v13.31 (analyst report; AnalysisBank): the publications' analytic moves, chosen by the story's
+            # signals, one move per call - the four lenses are four of them.
+            from services import analytic_moves
+            moves = analytic_moves.select(view or {}, (view or {}).get("_records") or [])
+            return [{"name": move, "instruction": variant_view.move_instruction(view or {}, move, fact_ids)}
+                    for move in moves]
         return [{"name": name, "instruction": variant_view.lens_instruction(view or {}, name, fact_ids)}
                 for name, _ in variant_view.LENSES]
 
@@ -18355,6 +18421,20 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
             logger.info("variant_repair failed: %s", type(error).__name__)
             return None
         return variant_view.apply_repair(item, answer, problems)
+
+    def _shorten_thesis(self, item: Mapping[str, Any]) -> dict[str, Any] | None:
+        """v13.31: one short call on the thesis sentence alone (length limits fail in prompts and in
+        self-counting rewrites - Yuan et al.; LIFEBench); code then counts the words."""
+        from services import variant_view
+        sentence = variant_view.thesis_of(_clean(item.get("insight") or item.get("text")))
+        if not sentence:
+            return None
+        try:
+            answer = self._ask_briefing_model(variant_view.shorten_prompt(sentence, variant_view.THESIS_MAX_WORDS))
+        except Exception as error:
+            logger.info("thesis shorten failed: %s", type(error).__name__)
+            return None
+        return variant_view.apply_short_thesis(item, answer, variant_view.THESIS_MAX_WORDS)
 
     @staticmethod
     def _route_ready_first(items: list[dict[str, Any]], records: Sequence[Any] = ()) -> list[dict[str, Any]]:
@@ -18407,6 +18487,11 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
 
         # v13.29: EVENT_INTELLIGENCE_VARIANT_PERCEPTION=0 turns the P1/P2/P4 checks off (tests that predate them).
         perception_on = os.getenv("EVENT_INTELLIGENCE_VARIANT_PERCEPTION", "1").strip() not in {"0", "false", "no"}
+        from services import semantic_novelty
+        references = semantic_novelty.reference_texts(
+            view, list(getattr(self, "_semantic_earlier", []) or []) + list(self.__dict__.get("_run_kept_texts", []))) \
+            if perception_on else []
+        from services import quality_scorecard
 
         def rule_problems(candidate: Mapping[str, Any]) -> list[str]:
             # v13.28.3: + a routine-step forecast and a figure taken from another story's record.
@@ -18421,6 +18506,10 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
         diag_asks = [] if not perception_on else ([outside_judge.ask] if outside else []) + (
             [outside_judge.ask_simple] if outside_judge.available_simple() and outside_judge.model_simple()
             != (outside_judge.model() if outside else "") else [])
+        if diag_asks and outside_judge.provider() == "groq":
+            # v13.30 (report P2: forecasters from different developers): a model from another developer on
+            # Groq's free plan (Alibaba's Qwen, else Meta's Llama), so the median is not one family's view.
+            diag_asks.append(outside_judge.ask_other_developer)
 
         def forecast_problems(candidate: Mapping[str, Any]) -> tuple[list[str], dict[str, Any]]:
             if not diag_asks:
@@ -18440,13 +18529,47 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
             meta["judged_by"] = judged_by
             item["metadata"] = meta
             problems = rule_problems(item)
+            if any(p.startswith("thesis_") for p in problems):
+                # v13.31: length is fixed by a short call on the thesis sentence alone, then counted by code.
+                shorter = self._shorten_thesis(item)
+                if shorter is not None:
+                    item, problems = shorter, rule_problems(shorter)
             if problems:
                 repaired = self._variant_repair(item, problems, repair_lines)
                 if repaired is not None:
                     item, problems = repaired, rule_problems(repaired)
+            if not problems and perception_on:
+                # v13.30 (report Methods 5-6, SciMON): compared by meaning with the wider consensus and every
+                # earlier insight; too close -> revised against its 3 nearest, at most twice; a near-copy after
+                # that is a draft. No embeddings -> skipped and recorded.
+                closeness = semantic_novelty.check(_clean(item.get("insight") or item.get("text")), references)
+                for _ in range(semantic_novelty.MAX_REVISIONS):
+                    if not closeness.get("too_close"):
+                        break
+                    revised = self._variant_repair(item, ["too_close_to_existing"], repair_lines,
+                                                   overlap=semantic_novelty.revision_brief(closeness))
+                    if revised is None or rule_problems(revised):
+                        break
+                    again = semantic_novelty.check(_clean(revised.get("insight")), references)
+                    if again.get("checked") and again.get("max", 1.0) < closeness.get("max", 1.0):
+                        item, closeness = revised, again
+                    else:
+                        break
+                item_meta = dict(_as_mapping(item.get("metadata")))
+                item_meta["semantic_novelty"] = closeness
+                item["metadata"] = item_meta
+                if closeness.get("near_copy"):
+                    problems.append("near_copy_of_existing")
             meta = dict(_as_mapping(item.get("metadata")))
             premortem_risk = False
-            if not problems and judge is not None:
+            fresh: dict[str, Any] = {}
+            # v13.31 review: the LLM novelty verdict is advisory and costs Groq's free daily tokens (200,000 a day
+            # for gpt-oss-120b, about 25 full judgments per the v13.30 report), so it runs only when asked:
+            # EVENT_INTELLIGENCE_LLM_NOVELTY=1. Meaning-distance (above) is the novelty check.
+            llm_novelty = os.getenv("EVENT_INTELLIGENCE_LLM_NOVELTY", "0").strip() in {"1", "true", "yes"} \
+                or os.getenv("EVENT_INTELLIGENCE_LLM_NOVELTY_GATE", "0").strip() in {"1", "true", "yes"} \
+                or not perception_on
+            if not problems and judge is not None and llm_novelty:
                 text = _clean(item.get("insight") or item.get("text"))
                 fresh = variant_view.novelty(text, view, ask=judge)
                 if fresh.get("checked") and not fresh.get("new"):
@@ -18458,7 +18581,14 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
                             meta = dict(_as_mapping(item.get("metadata")))
                 meta["variant_novelty"] = fresh
                 if fresh.get("checked") and not fresh.get("new"):
-                    problems.append("restates_consensus")
+                    # v13.31: an LLM's novelty verdict is a note, not a gate - no model judges open-ended
+                    # novelty reliably (Si et al.: best judge 53.3% vs 56.1% between expert reviewers; gpt-oss-120b
+                    # kappa 0.44 on open-ended preference). Novelty is decided by meaning-distance (above) and by
+                    # people (tools/blind_pairs.py). EVENT_INTELLIGENCE_LLM_NOVELTY_GATE=1 restores the gate.
+                    if os.getenv("EVENT_INTELLIGENCE_LLM_NOVELTY_GATE", "0").strip() in {"1", "true", "yes"}:
+                        problems.append("restates_consensus")
+                    else:
+                        meta["llm_novelty_note"] = "the judge thought it restates: " + _clean(fresh.get("overlap"))[:200]
             if not problems and diag_asks:
                 forecast, diag = forecast_problems(item)
                 if forecast:
@@ -18468,7 +18598,7 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
                         if len(again) < len(forecast):
                             item, forecast, diag = revised, again, diag_again
                             meta = dict(_as_mapping(item.get("metadata")))
-                            meta["variant_novelty"] = fresh if judge is not None else meta.get("variant_novelty")
+                            meta["variant_novelty"] = fresh or meta.get("variant_novelty")
                 meta["variant_diagnosticity"] = diag
                 problems += forecast
             if not problems and judge is not None:
@@ -18478,8 +18608,26 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
                                                 if outside_judge.available_simple() else judge)
                 meta["variant_premortem"] = mortem
                 premortem_risk = bool(mortem.get("killed"))
+            if not problems and perception_on and outside_judge.available_simple():
+                # v13.31 (analyst report): a novel claim needs a verification pass - AnalysisBank's novel claims
+                # were contradicted by their source 9.4-28.6% of the time. A yes/no check; one repair.
+                check = variant_view.contradiction(item, lines, ask=outside_judge.ask_simple)
+                if check.get("contradicted"):
+                    fixed = self._variant_repair(item, ["contradicted_by_source"], repair_lines,
+                                                 overlap=f"{check.get('statement')} - but {check.get('evidence_id')} says: "
+                                                         f"{check.get('record_says')}")
+                    if fixed is not None and not rule_problems(fixed):
+                        again = variant_view.contradiction(fixed, lines, ask=outside_judge.ask_simple)
+                        if again.get("checked") and not again.get("contradicted"):
+                            item, check = fixed, again
+                            meta = dict(_as_mapping(item.get("metadata")), **{k: v for k, v in meta.items()
+                                                                              if k not in {"variant_repaired"}})
+                meta["contradiction_check"] = check
+                if check.get("contradicted"):
+                    problems.append("contradicted_by_source")
             meta["variant_structure"] = problems or (["ok", "premortem_risk_in_evidence"] if premortem_risk else ["ok"])
             meta["variant_consensus"] = _clean(view.get("consensus"))[:500]
+            meta["rubric"] = quality_scorecard.score_candidate(meta, problems, _clean(item.get("insight") or item.get("text")))
             item["metadata"] = meta
             (dropped if problems else downgraded if premortem_risk else kept).append(item)
         if dropped and not kept and not downgraded:
@@ -18496,7 +18644,9 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
             entry["variant_passed_on_with_problems"] = 1
         # v13.25: full text kept so the report shows every held-back variant as a DRAFT with what it needs.
         entry["variant_dropped"] = [{"insight": _clean(i.get("insight") or i.get("text"))[:900],
-                                     "problems": _as_mapping(i.get("metadata")).get("variant_structure")}
+                                     "problems": _as_mapping(i.get("metadata")).get("variant_structure"),
+                                     "move": (i.get("analytical_lenses") or [""])[0],
+                                     "rubric": _as_mapping(i.get("metadata")).get("rubric")}
                                     for i in dropped]
         entry["variant_repaired"] = sum(1 for i in kept + downgraded + dropped
                                         if _as_mapping(i.get("metadata")).get("variant_repaired"))
@@ -18516,9 +18666,13 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
         ranked = kept + downgraded
         # v13.27.2: candidates beyond the slot's top VARIANT_KEEP are drafts too, not discarded unseen.
         entry["variant_dropped"] += [{"insight": _clean(i.get("insight") or i.get("text"))[:900],
-                                      "problems": ["ranked_below_slot_top"]}
+                                      "problems": ["ranked_below_slot_top"],
+                                      "move": (i.get("analytical_lenses") or [""])[0],
+                                      "rubric": _as_mapping(i.get("metadata")).get("rubric")}
                                      for i in ranked[self.VARIANT_KEEP:]]
         entry["variant_kept"] = len(ranked[: self.VARIANT_KEEP])
+        self.__dict__.setdefault("_run_kept_texts", []).extend(
+            _clean(i.get("insight") or i.get("text")) for i in ranked[: self.VARIANT_KEEP])
         return [dict(k) for k in ranked[: self.VARIANT_KEEP]]
 
     EXPECTED_VIEW_MAX_ITEMS = 6
@@ -18611,6 +18765,12 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
             # v13.26 (22 Nov 2026, research report of 22 Nov, stage D): one short generation call per lens
             # (variant_view.LENSES) instead of one long prompt asked for up to three candidates. The variant
             # rules then travel with each lens, not in the shared instruction.
+            if "_semantic_earlier" not in self.__dict__:
+                try:   # v13.30: every earlier insight on this topic, compared by meaning
+                    from services import earlier_insights
+                    self._semantic_earlier = list(earlier_insights.load(topic))[:400]
+                except Exception:
+                    self._semantic_earlier = []
             lenses = self._generation_lenses(view)
             try:
                 result = self.strategic_inference_agent.analyze(
@@ -18651,8 +18811,12 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
                                   "diagnosticity": {k: v for k, v in _as_mapping(_as_mapping(i.get("metadata")).get(
                                       "variant_diagnosticity")).items() if k != "answers"},
                                   "overlooked_fact": _as_mapping(i.get("variant_perception") or _as_mapping(
-                                      i.get("metadata")).get("variant_perception")).get("overlooked_evidence_id")}
+                                      i.get("metadata")).get("variant_perception")).get("overlooked_evidence_id"),
+                                  "rubric": _as_mapping(i.get("metadata")).get("rubric")}
                                  for i in found]
+                entry["computed_facts"] = len(view.get("computed_facts") or [])
+                entry["consensus_sources"] = len(view.get("analysis") or [])
+                entry["past_cases"] = len(view.get("cases") or [])
                 entry["result"] = "candidate" if found else "no_candidate"
                 output += found
             except Exception as error:
@@ -23381,6 +23545,10 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
             # v13.28 (report, Method 8.4): the candidates the judge is least sure about - rate these next.
             from services import par_calibration as _cal
             metrics["rate_next"] = _cal.rate_next(getattr(self, "_par_scored", []) or [])
+            # v13.31: the quality scorecard - is insight quality improving run to run (services/quality_scorecard.py)
+            from services import quality_scorecard as _qs
+            metrics["quality_scorecard"] = _qs.run_scorecard(
+                _as_mapping(m_state.get("claim_support_gate")) if isinstance(m_state, Mapping) else {}, report)
             from services import gate_funnel as _gf
             if m_state and isinstance(m_state, Mapping):
                 metrics["gate_funnel"] = _gf.compute(_as_mapping(m_state.get("claim_support_gate")),
@@ -23391,6 +23559,8 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
                 logger.info("run_metrics_summary | %s", line)
             for line in _gf.lines(metrics.get("gate_funnel") or {}) if metrics.get("gate_funnel") else []:
                 logger.info("gate_funnel | %s", line.strip())
+            for line in _qs.lines(metrics.get("quality_scorecard") or {}):
+                logger.info("quality_scorecard | %s", line)
             for row in metrics.get("rate_next") or []:
                 logger.info("rate_next | p=%s | %s", row.get("probability"), row.get("text"))
         except Exception as error:

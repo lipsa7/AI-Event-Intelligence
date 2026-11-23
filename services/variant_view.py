@@ -36,9 +36,13 @@ import re
 from datetime import datetime, timezone
 from typing import Any, Callable, Mapping, Sequence
 
-VERSION = "variant-view-v5-variant-perception"
-MIN_HORIZON_DAYS = 14
-MAX_HORIZON_DAYS = 84
+VERSION = "variant-view-v6-moves"
+# v13.31: both research reports of 22 Nov - a fixed 2-12 week window does not fit court calendars (median 15.6
+# months from filing to disposition for federal civil cases, Judicial Business 2025) and is not standard
+# practice (ForecastBench asks at 7, 30, 90, 180 and 365 days). Forecasts may run 7 to 365 days; a docket or
+# agency milestone is preferred for the near term.
+MIN_HORIZON_DAYS = 7
+MAX_HORIZON_DAYS = 365
 MAX_CANDIDATES = 3
 # Any figure or date: a digit (amount, share, count, day, year), a month name ("in June"), or a number
 # word ("three months", "a dozen"). v13.27.2: digits only failed "the June breach was disclosed in
@@ -54,6 +58,10 @@ _NUMBER = re.compile(
 
 def _clean(value: Any) -> str:
     return " ".join(str(value or "").split())
+
+
+def _clean_block(value: Any) -> str:
+    return "\n".join(_clean(line) for line in str(value or "").splitlines() if _clean(line))
 
 
 def _mapping(value: Any) -> Mapping[str, Any]:
@@ -95,17 +103,20 @@ def consensus_prompt(labels: Sequence[str], records: Sequence[Mapping[str, Any]]
         if text:
             kind = "published analysis" if _clean(record.get("gap_type")).startswith("commentary") else "report"
             lines.append(f"[{_clean(record.get('evidence_id'))}] ({kind}) {text}")
-    for n, item in enumerate(list(analysis)[:8], start=1):
+    for n, item in enumerate(list(analysis)[:16], start=1):
         text = _clean(item.get("snippet") or item.get("title"))[:260]
         if text:
-            lines.append(f"[CONS-{n}] (published analysis, {_clean(item.get('url'))[:90]}) {text}")
+            kind = {"official": "agency or official statement", "filing": "company filing", "think_tank": "think tank",
+                    "market": "prediction market"}.get(_clean(item.get("angle")), "published analysis")
+            lines.append(f"[CONS-{n}] ({kind}, {_clean(item.get('url'))[:90]}) {text}")
     return (
         "Developments: " + " | ".join(labels) + "\n\nSources:\n" + "\n".join(lines)
         + "\n\nList the CONSENSUS: 3 to 5 claims that most coverage and analysts already make about these developments "
           "- what they believe and what they expect to happen next. Each claim cites the source id it comes from and its "
           "date if shown. No opinions of your own. Also give short search terms (2-5 words each) for finding primary "
           "records: a US Federal Register rule or notice, an SEC filing, and a court case about these developments "
-          "(empty string if none applies). Return JSON {\"claims\":[{\"claim\":\"...\",\"source\":\"EVID-... or CONS-n\","
+          "(empty string if none applies). For each claim list EVERY source id that makes it (how widely it is held). "
+          "Return JSON {\"claims\":[{\"claim\":\"...\",\"source\":\"EVID-... or CONS-n\",\"sources\":[\"...\"],"
           "\"date\":\"\"}],\"search_terms\":{\"federal_register\":\"\",\"sec\":\"\",\"court\":\"\"}}."
     )
 
@@ -119,11 +130,12 @@ def consensus(labels: Sequence[str], records: Sequence[Mapping[str, Any]], ask: 
     claims = []
     for row in data.get("claims") or []:
         if isinstance(row, Mapping) and _clean(row.get("claim")) and _clean(row.get("source")):
+            sources = {_clean(x) for x in row.get("sources") or [] if _clean(x)} | {_clean(row.get("source"))}
             claims.append({"claim": _clean(row.get("claim"))[:300], "source": _clean(row.get("source"))[:40],
-                           "date": _clean(row.get("date"))[:20]})
-    claims = claims[:5]
+                           "date": _clean(row.get("date"))[:20], "independent_sources": len(sources)})
+    claims = sorted(claims, key=lambda c: -c.get("independent_sources", 1))[:5]   # v13.30: most widely held first
     terms = data.get("search_terms") if isinstance(data.get("search_terms"), Mapping) else {}
-    analysis_urls = {f"CONS-{n}": _clean(item.get("url")) for n, item in enumerate(list(analysis)[:8], start=1)}
+    analysis_urls = {f"CONS-{n}": _clean(item.get("url")) for n, item in enumerate(list(analysis)[:16], start=1)}
     for claim in claims:
         if claim["source"] in analysis_urls:
             claim["url"] = analysis_urls[claim["source"]]
@@ -190,14 +202,15 @@ def lens_instruction(view: Mapping[str, Any], lens: str, fact_ids: Sequence[str]
            "reports would not already conclude; ")
         + "(2) rest on the constraint or mechanism this lens reveals - stated intentions are not constraints; "
           "(3) carry at least one cited number or date in the insight text;" + facts + " (4) name the actor and "
-          "the move it is forced into; (5) give a forecast_contract: a yes/no question resolvable within 2 to 12 "
-          "weeks from a named public source (a docket, a Federal Register date, a filing, an official statement), "
+          "the move it is forced into; (5) give a forecast_contract: a yes/no question resolvable within a week to a "
+          "year from a named public source (a docket, a Federal Register date, a filing, an official statement), "
           "with its deadline and resolution rule; (6) put what you would see if the consensus is right instead in "
           "alternative_explanations; (7) in what_to_watch give 2-3 signals, each naming the public source to watch (a "
           "docket number, an SEC form type, a Federal Register agency or document, an official channel). First "
           "sentence of the insight: the thesis in at most " + str(THESIS_MAX_WORDS) + " plain words, no coined labels "
           "(\"structural asymmetry\", \"blind spot\", \"paradigm\")." + base_rate_line(view)
         + (VARIANT_PERCEPTION_RULES if listed else VARIANT_PERCEPTION_RULES_NO_CONSENSUS)
+        + ("\n\n" + _clean_block(view.get("fact_table_block")) if view and view.get("fact_table_block") else "")
     )
 
 
@@ -207,7 +220,8 @@ def lens_instruction(view: Mapping[str, Any], lens: str, fact_ids: Sequence[str]
 VARIANT_PERCEPTION_RULES = (
     " Fill variant_perception: consensus_quote = words copied exactly from one CONSENSUS line you depart from; "
     "overlooked_evidence_id = the ONE evidence ID from THIS story that the consensus does not use, and why it "
-    "misses it; mechanism_chain = at least two links from that fact to the conclusion, each citing evidence IDs, "
+    "misses it; mechanism_chain = at least two links from that fact to the conclusion, each citing evidence IDs "
+    "and quoting in \"quote\" the exact words of the cited record it rests on, "
     "with the overlooked fact and the named actor inside the chain and any number in the insight carried by a "
     "link (not added for colour); rival_hypothesis = the strongest other explanation, not a straw man; "
     "load_bearing_assumption = the one assumption that, if false, kills the thesis. The forecast must be much "
@@ -218,6 +232,48 @@ VARIANT_PERCEPTION_RULES_NO_CONSENSUS = (VARIANT_PERCEPTION_RULES
                                                  "depart from; ", "consensus_quote = empty; ")
                                         .replace("the consensus does not use", "these reports do not lead with")
                                         .replace("it misses it", "readers would miss it"))
+
+
+# ---------------------------------------------------------------- 2c. one analytic move per call (v13.31)
+def move_instruction(view: Mapping[str, Any], move: str, fact_ids: Sequence[str] = ()) -> str:
+    """The prompt for ONE analytic move (services/analytic_moves.py). States the purpose and the output, not the
+    gate thresholds - code enforces those (both reports: rules shown to the generator get gamed)."""
+    from services import analytic_moves
+    claims = [c for c in (view or {}).get("claims") or [] if isinstance(c, Mapping)]
+    listed = "\n".join(f"CONSENSUS[{n}] ({c.get('source')}, held by {c.get('independent_sources', 1)} source(s)): {c['claim']}"
+                       for n, c in enumerate(claims, start=1))
+    facts = (" Primary records (rules, filings, dockets): " + ", ".join(list(fact_ids)[:12]) + "." if fact_ids else "")
+    examples = ""
+    try:
+        # v13.31 review (v13.30 report, step 2): the owner's own approved insights as a compact few-shot - the two
+        # most similar to this story - instead of more instructions.
+        from services import par_check
+        story = " ".join([str((view or {}).get("labels") or "")] + [str(c.get("claim")) for c in claims])
+        good = par_check.nearest_examples(story, par_check.load_labels(), good=2, bad=0)
+        if good:
+            examples = "INSIGHTS THE OWNER APPROVED (the standard to meet; do not copy their facts):\n" + "\n".join(
+                "- " + _clean(r.get("insight"))[:400] for r in good)
+    except Exception:
+        examples = ""
+    blocks = [analytic_moves.instruction(move), examples,
+              ("WHAT INFORMED READERS ALREADY BELIEVE (do not restate it):\n" + listed) if listed else "",
+              analytic_moves.cases_block((view or {}).get("cases") or []),
+              analytic_moves.earlier_block((view or {}).get("earlier_theses") or []),
+              _clean_block((view or {}).get("fact_table_block"))]
+    return ("\n\n".join(b for b in blocks if b)
+            + "\n\nGOAL: one insight a demanding editor of a paid analysis publication would run - something these "
+              "records support but no source states." + facts
+            + " FORECAST: a yes/no question with a date from the records' own calendar (a hearing, a comment "
+              "deadline, an effective date, a filing due date) or an outcome within a year, resolvable from a named "
+              "public source, that would come out differently if the rival explanation were true."
+            + base_rate_line(view)
+            + (VARIANT_PERCEPTION_RULES if listed else VARIANT_PERCEPTION_RULES_NO_CONSENSUS)
+            + (" If you use a PAST CASE, put its case ID in variant_perception.case_id and how it differs in "
+               "variant_perception.disanalogy; start the forecast's probability from the outcome of the most similar "
+               "case (Green & Armstrong: the mechanical rule beat experts' overrides, 45% vs 25%)."
+               if (view or {}).get("cases") else "")
+            + (" Put extends / corrects / contradicts and the earlier thesis in variant_perception.prior_relation."
+               if (view or {}).get("earlier_theses") else ""))
 
 
 # ---------------------------------------------------------------- 3. structure gate
@@ -266,12 +322,41 @@ _ROUTINE_CALL = re.compile(
     r"respond to the (?:lawsuit|complaint|suit)|answer the (?:lawsuit|complaint)|notice of appeal|"
     r"will (?:appeal|deny|contest|challenge) (?:the|this) (?:lawsuit|ruling|allegations|claims))\b", re.I)
 _FIGURE = re.compile(r"\$?\d[\d,]*(?:\.\d+)?(?:\s?(?:billion|million|trillion|bn|m|%|percent))?", re.I)
+# v13.29.2: a day of the month is part of a date, not a figure. On 22 Nov two Texas drafts were held back
+# only by "number_not_in_chain:15," - the 15 of "January 15, 2027" in their forecast sentence.
+_MONTH_WORD = r"(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\.?"
+_DATE = re.compile(r"\b" + _MONTH_WORD + r"\s+\d{1,2}(?:st|nd|rd|th)?(?:,?\s+\d{4})?\b|\b\d{1,2}(?:st|nd|rd|th)?\s+"
+                   + _MONTH_WORD + r"(?:,?\s+\d{4})?\b|\b\d{4}-\d{2}-\d{2}\b", re.I)
+
+
+def _figures(text: str) -> list[str]:
+    """Figures in the text that are not part of a date (and without a trailing comma)."""
+    dates = [m.span() for m in _DATE.finditer(text)]
+    out = []
+    for match in _FIGURE.finditer(text):
+        start, end = match.span()
+        if any(start < d_end and end > d_start for d_start, d_end in dates):
+            continue
+        figure = match.group(0).strip().rstrip(",")
+        if figure:
+            out.append(figure)
+    return out
+
+
+# v13.31 (analyst report, forecast gate): "reject ... scheduled docket events and statutory deadlines" - whether
+# a scheduled hearing is held, a comment period closes or a rule takes effect on its own date is not a forecast.
+_SCHEDULED = re.compile(r"\b(hearing|oral argument|conference|comment period|effective date|deadline|trial date)\b.*\b("
+                        r"(?:be |is |was )?held|take[s]? place|occur|close[sd]?|take[s]? effect|pass(?:es)?|expire[sd]?)\b|"
+                        r"\b(take[s]? effect|go(?:es)? into effect)\b.*\b(as scheduled|on schedule|on its effective date)\b", re.I)
 
 
 def call_problems(candidate: Mapping[str, Any]) -> list[str]:
     contract = _mapping(candidate.get("forecast_contract")) or _mapping(
         _mapping(candidate.get("metadata")).get("forecast_contract"))
-    return ["routine_call"] if _ROUTINE_CALL.search(_clean(contract.get("question"))) else []
+    question = _clean(contract.get("question"))
+    if _ROUTINE_CALL.search(question):
+        return ["routine_call"]
+    return ["forecast_scheduled_event"] if _SCHEDULED.search(question) else []
 
 
 def number_problems(candidate: Mapping[str, Any], records: Sequence[Any]) -> list[str]:
@@ -288,8 +373,7 @@ def number_problems(candidate: Mapping[str, Any], records: Sequence[Any]) -> lis
     corpus = [_clean(r.get("text") or r.get("claim")) for r in rows]
     problems = []
     text = _clean(candidate.get("insight") or candidate.get("text"))
-    for match in _FIGURE.finditer(text):
-        figure = match.group(0).strip()
+    for figure in _figures(text):
         digits = re.sub(r"[^\d.]", "", figure).strip(".")
         if len(digits.replace(".", "")) < 2 or (len(digits) == 4 and digits.startswith(("19", "20"))):
             continue   # single digits and years are not the figures this rule is about
@@ -311,6 +395,14 @@ def _vp(candidate: Mapping[str, Any]) -> Mapping[str, Any]:
 
 def _norm_words(text: Any) -> str:
     return " ".join("".join(c.casefold() if c.isalnum() else " " for c in _clean(text)).split())
+
+
+def _computed_figures(view: Mapping[str, Any]) -> dict[str, set[str]]:
+    try:
+        from services import fact_table
+        return fact_table.figures(_mapping(view).get("computed_facts") or [])
+    except Exception:
+        return {}
 
 
 def perception_problems(candidate: Mapping[str, Any], view: Mapping[str, Any], records: Sequence[Any]) -> list[str]:
@@ -355,17 +447,28 @@ def perception_problems(candidate: Mapping[str, Any], view: Mapping[str, Any], r
         _mapping(candidate.get("metadata")).get("leverage_analysis")).get("holder"))
     if holder and holder.casefold().split()[0] not in chain_text:
         problems.append("actor_not_in_chain")
+    # v13.31: every step quotes its record, and consecutive steps are connected by a record (anti-stitching).
+    from services import link_check
+    problems += link_check.problems(chain, list(rows.values()))
+    case_id = _clean(vp.get("case_id"))
+    if case_id and _mapping(view).get("cases") is not None and case_id not in {
+            _clean(_mapping(c).get("case_id")) for c in _mapping(view).get("cases") or []}:
+        problems.append("case_not_in_library")
+    if case_id and not _clean(vp.get("disanalogy")):
+        problems.append("no_disanalogy")   # analyst report: an analogy states where it differs
     if not _clean(vp.get("rival_hypothesis")):
         problems.append("no_rival_hypothesis")
     if not _clean(vp.get("load_bearing_assumption")):
         problems.append("no_load_bearing_assumption")
     text = _clean(candidate.get("insight") or candidate.get("text"))
     cited_text = " ".join(_clean(rows[e].get("text") or rows[e].get("claim")) for e in chain_ids if e in rows)
-    for match in _FIGURE.finditer(text):
-        figure = match.group(0).strip()
+    for figure in _figures(text):
         digits = re.sub(r"[^\d.]", "", figure).strip(".")
         if len(digits.replace(".", "")) < 2 or (len(digits) == 4 and digits.startswith(("19", "20"))):
             continue
+        computed = _computed_figures(view).get(digits, set())
+        if computed and (computed & chain_ids or not chain_ids):
+            continue   # v13.30: a figure computed by code from records the chain cites (services/fact_table.py)
         if digits not in re.sub(r"[^\d.]", " ", cited_text).split() and digits not in chain_text:
             problems.append("number_not_in_chain:" + figure)
             break
@@ -378,7 +481,7 @@ def perception_problems(candidate: Mapping[str, Any], view: Mapping[str, Any], r
 # than if it is wrong (gap >= 0.25). That is the Bayesian core of ACH and of ICD 203's indicators, without
 # the matrix ritual that failed in the human experiments (Dhami, Belton & Mandel 2019). "OpenAI files a
 # demurrer" is about 0.95 either way, so it fails without a hand-written list.
-OUTSIDE_VIEW_RANGE = (0.2, 0.8)
+OUTSIDE_VIEW_RANGE = (0.15, 0.85)   # v13.31: analyst report - a base rate between 15% and 85%
 MIN_DIAGNOSTIC_GAP = 0.25
 
 
@@ -430,13 +533,61 @@ def ablation_prompt(candidate: Mapping[str, Any]) -> str:
 
 
 def number_is_decorative(candidate: Mapping[str, Any], ask: Callable[[str], Any]) -> bool | None:
-    if not _FIGURE.search(_clean(candidate.get("insight") or candidate.get("text"))):
+    if not _figures(_clean(candidate.get("insight") or candidate.get("text"))):
         return None
     try:
         value = _parse(ask(ablation_prompt(candidate))).get("still_follows")
     except Exception:
         return None
     return value if isinstance(value, bool) else None
+
+
+# ---------------------------------------------------------------- 3i. contradiction pass (v13.31)
+# Analyst report: novel claims were contradicted by the source 9.4-28.6% of the time in AnalysisBank's human
+# audit, against 4.7-15.3% for all claims - every novel claim needs a verification pass. A yes/no check.
+def contradiction_prompt(candidate: Mapping[str, Any], evidence_lines: Sequence[str]) -> str:
+    return ("Do these source records CONTRADICT any statement in the insight? Contradict means a record says the "
+            "opposite or gives a different fact (date, number, party, outcome); missing support is NOT a "
+            "contradiction.\nINSIGHT: " + _clean(candidate.get("insight") or candidate.get("text"))[:1500]
+            + "\n\nRECORDS:\n" + "\n".join(list(evidence_lines)[:30])
+            + '\n\nReturn JSON {"contradicted": true|false, "statement": "", "evidence_id": "", "record_says": ""}.')
+
+
+def contradiction(candidate: Mapping[str, Any], evidence_lines: Sequence[str], ask: Callable[[str], Any]) -> dict[str, Any]:
+    try:
+        data = _parse(ask(contradiction_prompt(candidate, evidence_lines)))
+    except Exception as error:
+        return {"checked": False, "error": type(error).__name__}
+    if not isinstance(data.get("contradicted"), bool):
+        return {"checked": False, "error": "bad_answer"}
+    return {"checked": True, "contradicted": data["contradicted"] and bool(_clean(data.get("evidence_id"))),
+            "statement": _clean(data.get("statement"))[:300], "evidence_id": _clean(data.get("evidence_id"))[:60],
+            "record_says": _clean(data.get("record_says"))[:300]}
+
+
+# ---------------------------------------------------------------- 3j. thesis length in code (v13.31)
+# The v13.30 report: length limits fail in the prompt (gpt-4-turbo violated them 44-49% of the time, Yuan et al.;
+# only 7 of 26 models met word counts in LIFEBench) and self-counting rewrites fail the same way - your 28-36
+# word theses survived rewrites. So: a short call on the thesis sentence ALONE, then code counts.
+def thesis_of(text: str) -> str:
+    first = re.split(r"(?<=[.!?])\s+", _clean(text), maxsplit=1)
+    return first[0] if first else ""
+
+
+def shorten_prompt(sentence: str, limit: int) -> str:
+    return (f"Rewrite this sentence in at most {limit - 3} words. Keep every name, number and date; drop "
+            f"adjectives and clauses that add no fact. Return JSON {{\"sentence\": \"...\"}}.\nSENTENCE: {sentence}")
+
+
+def apply_short_thesis(candidate: Mapping[str, Any], answer: Any, limit: int) -> dict[str, Any] | None:
+    sentence = _clean(_parse(answer).get("sentence"))
+    if not sentence or len(sentence.split()) > limit:
+        return None
+    text = _clean(candidate.get("insight") or candidate.get("text"))
+    rest = text[len(thesis_of(text)):].strip()
+    out = dict(candidate)
+    out["insight"] = (sentence + " " + rest).strip()
+    return out
 
 
 # ---------------------------------------------------------------- 2b. structured analogies (stage C)
@@ -628,6 +779,17 @@ NEEDS_TEXT = {
     "forecast_not_diagnostic": ("choose a forecast that is much more likely if the thesis is right than if it is wrong "
                                 "(a specific ruling, settlement term, policy change or another party's move)"),
     "number_decorative": "the conclusion holds without its number - use a number the mechanism depends on, or none",
+    "too_close_to_existing": "say something the closest existing statements (listed below) do not",
+    "near_copy_of_existing": "it is nearly a copy of something already said; find the step it does not state",
+    "case_not_in_library": "use a case from PAST CASES by its ID, or none - not a case from memory",
+    "no_disanalogy": "say in variant_perception.disanalogy where the past case differs from this one",
+    "forecast_scheduled_event": ("the forecast asks whether a scheduled event happens on schedule; forecast what "
+                                 "comes out of it (a ruling, a settlement term, a changed rule) instead"),
+    "link_unquoted": "quote in each mechanism step the exact words of the cited record it rests on",
+    "link_quote_not_in_source": "each step's quote must be copied exactly from the record it cites",
+    "link_not_connected": ("each mechanism step must connect to the next through a record that mentions both - "
+                           "drop a fact that only sits beside the story"),
+    "contradicted_by_source": "a record contradicts a statement (shown below); correct it from the record",
     "routine_call": ("the forecast is a routine step that almost always happens (a defendant answering, moving to "
                      "dismiss or appealing). Forecast something genuinely uncertain that this insight's point predicts "
                      "and its opposite would not: a ruling, a settlement, a product, price or policy change, or "
@@ -638,6 +800,9 @@ NEEDS_TEXT = {
 def need_text(code: str) -> str:
     if code in NEEDS_TEXT:
         return NEEDS_TEXT[code]
+    for prefix in ("link_unquoted", "link_quote_not_in_source", "link_not_connected"):
+        if code.startswith(prefix + ":"):
+            return NEEDS_TEXT[prefix] + " (step " + code.split(":", 1)[1] + ")"
     if code.startswith("number_not_in_chain:"):
         return ("the number " + code.split(":", 1)[1] + " is not in any record the mechanism chain cites; make it a "
                 "link of the chain or drop it")
@@ -669,7 +834,8 @@ def repair_prompt(candidate: Mapping[str, Any], problems: Sequence[str], evidenc
             + '\n\nReturn JSON {"insight":"revised text, thesis first","forecast_contract":{"question":"yes/no",'
               '"deadline":"ISO date","resolution_criteria":"public source and rule"},"holder":"named actor",'
               '"variant_perception":{"consensus_quote":"","overlooked_evidence_id":"","why_consensus_misses_it":"",'
-              '"mechanism_chain":[{"step":"","evidence_ids":[]}],"rival_hypothesis":"","load_bearing_assumption":""}}.'
+              '"mechanism_chain":[{"step":"","evidence_ids":[],"quote":"exact words of the cited record"}],"rival_hypothesis":"",'
+              '"load_bearing_assumption":"","case_id":"","disanalogy":"","prior_relation":""}}.'
             + ("\nCURRENT VARIANT PERCEPTION: " + json.dumps(_vp(candidate), ensure_ascii=False)[:1500] if _vp(candidate) else ""))
 
 
@@ -690,10 +856,12 @@ def apply_repair(candidate: Mapping[str, Any], answer: Any, problems: Sequence[s
     perception = _mapping(data.get("variant_perception"))
     if perception and any(_clean(v) for k, v in perception.items() if k != "mechanism_chain"):
         chain = [{"step": _clean(_mapping(x).get("step"))[:400],
-                  "evidence_ids": [_clean(e) for e in _mapping(x).get("evidence_ids") or [] if _clean(e)][:6]}
+                  "evidence_ids": [_clean(e) for e in _mapping(x).get("evidence_ids") or [] if _clean(e)][:6],
+                  "quote": _clean(_mapping(x).get("quote"))[:400]}
                  for x in perception.get("mechanism_chain") or [] if _clean(_mapping(x).get("step"))]
         fixed = {k: _clean(perception.get(k))[:400] for k in ("consensus_quote", "overlooked_evidence_id",
-                 "why_consensus_misses_it", "rival_hypothesis", "load_bearing_assumption")}
+                 "why_consensus_misses_it", "rival_hypothesis", "load_bearing_assumption", "case_id",
+                 "disanalogy", "prior_relation")}
         fixed["mechanism_chain"] = chain[:6]
         out["variant_perception"] = fixed
         meta["variant_perception"] = fixed

@@ -1208,3 +1208,107 @@ Second research report of 22 Nov ("Making AI Event Intelligence produce original
 - **The repair could not fix "consensus not quoted".** It was told to copy a consensus line word for word but was never shown the consensus lines. They are now included in every repair.
 - **A story could send nothing on.** v13.29 added about a dozen checks. When every candidate of a story still missed one after its repair, the story produced nothing at all; in the test run on saved data with no paid calls, all 4 candidates of a story were held back. Now the candidate with the fewest problems goes on to the claim check, ranked last and labelled `variant_passed_on_with_problems`. The claim check, non-obviousness test and editor's bar still decide whether it is released.
 - **Tests:** `tests/test_v13_29_1_fixes.py`.
+
+## v13.29.2 (22 Nov 2026): dates are not stray numbers; yes/no checks on Groq's gpt-oss-20b
+
+From the 22 Nov `try_variants` test with the Groq judge (21 Gemini calls; 0 of 8 ideas passed every check).
+- **Dates counted as stray numbers.** Two Texas drafts were held back only by `number_not_in_chain:15,` - the
+  15 of "January 15, 2027" in their forecast sentence. A day of the month (month-day, day-month or ISO dates)
+  is no longer a figure for the number checks (`variant_view._figures`).
+- **The laptop cannot load a local judge.** qwen3:14b failed with "failed to allocate buffer of size
+  6311116800" (7.9 GB RAM, under 1 GB free), so the pre-mortem and the decorative-number check never ran.
+  The yes/no checks now go to openai/gpt-oss-20b on Groq by default - Groq's free-plan limits apply per model,
+  so it has its own 200,000 tokens a day next to gpt-oss-120b's. OUTSIDE_JUDGE_SIMPLE_PROVIDER=ollama brings
+  the local model back for machines that can load it.
+- **A model that cannot load stops at once** (memory errors), instead of failing three times; a daily limit
+  stops only the model that reached it.
+- tools/check_judge.py tests both the hard and the yes/no judge.
+- tests/test_v13_29_2_fixes.py (4); the routing test in test_v13_29_groq_judge.py updated.
+- Not changed (owner's decision): the 2-12 week forecast horizon. In the test, California's forecasts were 220
+  and 404 days out and still out of range after 4 rewrites; the second research report says the horizon must
+  match the court calendar.
+
+## v13.30 (22 Nov 2026): inputs, not filters - fact table, wider consensus, meaning-based novelty
+
+Both research reports of 22 Nov: quality comes from what the generator is given to reason with.
+- **Fact table (report 1, Method 1).** services/fact_table.py extracts every date (month-only too), money
+  amount, percentage and counted quantity from a story's records with its evidence ID, and computes in code:
+  date gaps between the story's dated events, how long after an event a record reported it, money ratios and
+  percentage-point gaps within one record (never across records - different things), and counts per month.
+  The table and the computed facts go into every lens prompt; a figure computed by code from records the
+  mechanism chain cites counts as sourced. Measured on the saved run RUN-4367 (no model calls): 271 figures
+  and 30 computed comparisons for the run (the old extractor found 0 with its settings on the same records);
+  the California slot gets "in July to Nov 17, 2026: about 4 months" and "in September to Nov 17: about 2
+  months".
+- **Wider consensus (Method 5).** Five searches per story (analysis, agency or official statements, company
+  filings, think tanks, prediction markets) instead of one; each consensus claim lists every source that
+  makes it, and the most widely held claims come first. Consensus searches per run: default 60 (was 10).
+- **Meaning-based novelty (Methods 5-6, SciMON).** services/semantic_novelty.py compares each candidate by
+  embedding (local nomic-embed-text, 274 MB) with the consensus, the published analysis found and every
+  earlier insight on the topic. At 0.80 cosine or above (Si et al.'s duplicate threshold) it is revised
+  against its three nearest, at most twice; only a near-copy (0.92) is held back as a draft. No embeddings ->
+  skipped and recorded. Thresholds: EVENT_INTELLIGENCE_NOVELTY_REVISE_AT / _BLOCK_AT.
+- **A forecast judge from another developer (report 2, P2).** The forecast probabilities are also asked of
+  Alibaba's Qwen (else Meta's Llama) on Groq's free plan, so the median is not one developer's view.
+- Logs: variant_consensus now records sources per claim, analysis found by angle, fact rows and computed facts.
+- tests/test_v13_30_fact_table.py (5), tests/test_v13_30_novelty_inputs.py (7).
+- Still to build: past-case search by mechanism routed to Exa and Google, the case library (needs the owner's
+  checks), the constraint calendar, typed cross-story joins, run-wide ranking, rubric from the owner's ratings,
+  prediction-market labels, hiding the checklist from the generator, the evaluation harness.
+
+## v13.31 (22 Nov 2026): analyst moves, link checks, limits in code, case library, quality metrics
+
+From the two research reports of 22 Nov ("v13.30: what to fix first" and "reproducing paid-grade original
+analysis"), reconciled with the earlier two: LLM judges - free or paid - answer only checkable questions
+(JudgeBench measures checkable answers; on open-ended novelty the best judge agreed with expert reviewers
+53.3% of the time against 56.1% between the reviewers themselves, Si et al.), novelty is decided by
+evidence (meaning-distance) and "at par" by blind human comparison.
+- **Quality metrics.** services/quality_scorecard.py scores every candidate on the code-checkable items of
+  an "at par" rubric derived from the publications (quotes found in sources, linked steps, mechanism,
+  quantified, alternatives, forecast, concise, not restated, uncontradicted) and every run on: candidates,
+  mean rubric score, share meeting every item, items' pass rates, original insights released, and inputs per
+  story (computed facts, consensus sources, past cases). Logged as `quality_scorecard |` lines, stored in
+  run_metrics, charted on the dashboard ("Insight quality over runs"), listed by tools/quality_scorecard.py;
+  try_variants prints it and appends data/stage_scores.csv (`--stage`). Reports before v13.31 recorded no
+  rubric, so the trend starts with the next run.
+- **Analytic moves (analyst report; AnalysisBank 2026: 1.7-3.7x more novel grounded insight).**
+  services/analytic_moves.py: ten moves of the publications - mechanism explainer (Levine, Lawfare), value
+  capture (Thompson), constraints (Papic), follow the money, sizing (Lex), structured analogy from the case
+  library (Evans, Stoller; Green & Armstrong), variant perception, second order, change against earlier
+  theses (ICD 203), absence. Chosen per story by signals read by code, one move per call, always one anchor
+  (a mechanism or a number). Each ends with the publications' structure (thesis first, mechanism, number,
+  rival, diagnostic forecast, what would change our mind; 150-300 words; assertive - Huang, Zang & Zheng
+  2014). The gate thresholds are no longer in the prompt; code enforces them. EVENT_INTELLIGENCE_ANALYTIC_MOVES=0
+  returns to the four lenses.
+- **Grounding and anti-stitching (services/link_check.py).** Every mechanism step quotes the words of its
+  cited record (checked by string match - 14 of 22 past candidates failed on unsupported premises), and
+  consecutive steps must be connected by a record that mentions both (the EU-sandbox-to-Texas link fails).
+- **Limits in code.** A thesis over 25 words gets one short call on that sentence alone, then code counts
+  (length limits fail in prompts: Yuan et al., LIFEBench). Forecast horizon 7-365 days (ForecastBench
+  horizons; median federal civil disposition 15.6 months) with docket/agency milestones preferred; base rate
+  15-85%.
+- **Contradiction pass.** A yes/no check that no record contradicts the insight (AnalysisBank: novel claims
+  contradicted 9.4-28.6% of the time); one repair.
+- **The LLM novelty verdict is a note, not a gate** (EVENT_INTELLIGENCE_LLM_NOVELTY_GATE=1 restores it);
+  meaning-distance also covers the run's other kept candidates (one idea per mechanism across stories).
+- **Case library (services/case_library.py, tools/build_case_library.py).** Drafts from CourtListener with
+  mechanism tags; only cases the owner approves are used; retrieved by mechanism; cited by case ID (a case
+  from memory is flagged).
+- **Earlier theses** on the same actors are shown, with extends / corrects / contradicts asked for.
+- **Labels and proof.** tools/rate_insights.py (rate new insights, least-sure first, toward 200+ labels);
+  tools/calibrate_par.py now reports kappa, true-positive and true-negative rates and held-out metrics;
+  tools/blind_pairs.py makes blind A/B sheets against analyst paragraphs and scores the win rate with a
+  95% Wilson interval (about 193 judgments to tell 40% from 50%).
+- Llama is gone from Groq's free tier (16 Aug 2026); the second forecast judge is Qwen only.
+- Not done: MiniCheck entailment (needs free RAM the laptop lacks), the 300-600 paragraph move corpus
+  (needs subscriptions; moves are hand-written from the report), splitting the orchestrator into modules.
+- tests/test_v13_31_quality.py (10); older tests updated for the horizon and quotes.
+- **Review pass (same version).** Fixed: a candidate with no variant perception scored as passing four rubric
+  items; earlier theses were matched on the story label's bylines and photo credits ("Getty Images") instead of
+  the names in its records; CourtListener v4 search puts snippets under opinions[]. Added from the reports: a
+  forecast of whether a scheduled event happens (a hearing held, a rule taking effect) is rejected; an analogy
+  must state where it differs; the owner's two most similar approved insights are the few-shot standard in each
+  move prompt (v13.30 report, step 2); the most similar past case's outcome is the forecast's starting point
+  (Green & Armstrong); the LLM novelty call is off by default (EVENT_INTELLIGENCE_LLM_NOVELTY=1) - it was
+  advisory and cost Groq's daily tokens; the scorecard also counts every claim-check attempt, so saved reports
+  give a baseline (0 of 22 passed across the last six runs).

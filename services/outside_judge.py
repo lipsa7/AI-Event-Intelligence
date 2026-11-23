@@ -31,7 +31,7 @@ try:
 except Exception:
     pass
 
-VERSION = "outside-judge-v4-groq"
+VERSION = "outside-judge-v5-groq-two-models"
 logger = logging.getLogger("event_intelligence.services.outside_judge")
 _STATS = {"calls": 0, "failed": 0}
 # v13.29 (owner, 22 Nov: "groq, free plan"; research report of 22 Nov, section 5): the judge can be a
@@ -43,7 +43,13 @@ _STATS = {"calls": 0, "failed": 0}
 # reached the judge stops for the run and checks say "not judged" (never Gemini).
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 GROQ_DEFAULT_MODEL = "openai/gpt-oss-120b"
-_RECENT_TOKENS: list[tuple[float, int]] = []
+# v13.29.2: the yes/no checks use gpt-oss-20b on Groq. Groq's free-plan limits apply per model (Groq community
+# answer: "They also apply per model"), and gpt-oss-20b has its own 30 requests/min, 1,000/day, 8,000 tokens/min,
+# 200,000 tokens/day - so it doubles the free daily budget. The owner's laptop (7.9 GB RAM, under 1 GB free)
+# cannot load a local judge model: qwen3:14b failed with "failed to allocate buffer of size 6311116800".
+GROQ_SIMPLE_DEFAULT_MODEL = "openai/gpt-oss-20b"
+_RECENT_TOKENS: dict[str, list[tuple[float, int]]] = {}
+MEMORY_ERRORS = ("failed to allocate", "process has terminated", "out of memory", "requires more system memory")
 _CACHE: dict[str, Any] = {}
 EXCLUDED_FAMILIES = ("gemma", "gemini")
 EMBEDDING_WORDS = ("embed", "bge-", "minilm", "e5-", "rerank")
@@ -86,27 +92,23 @@ def _installed(get: Callable[..., Any] | None = None) -> list[str]:
 
 
 def provider(kind: str = "hard") -> str:
-    """groq | ollama for a judgment of this kind.
+    """groq | ollama for a judgment of this kind ("hard": is it original and good; "simple": yes/no checks).
 
-    v13.29 (owner: Groq free plan, no card): Groq's free plan for gpt-oss-120b allows 200,000 tokens a day -
-    about one full run if EVERY check used it. So the hard judgments ("is this original and good?": editor's
-    bar, novelty, head-to-head, tournament) go to Groq, and the classification-style checks (pre-mortem
-    evidence lookup, past-case ratings, repeat check) go to the local Ollama model when one is installed -
-    the research report of 22 Nov: a 14B model is fine for classification-style gates, not for "is this
-    original and good?". OUTSIDE_JUDGE_PROVIDER forces one provider for both."""
+    v13.29: the hard judgments go to gpt-oss-120b on Groq. v13.29.2: the simple ones go to gpt-oss-20b on Groq
+    too (separate free-plan allowance), unless OUTSIDE_JUDGE_SIMPLE_PROVIDER=ollama and a local model loads.
+    OUTSIDE_JUDGE_PROVIDER forces one provider for both. Without GROQ_API_KEY: Ollama."""
     chosen = os.getenv("OUTSIDE_JUDGE_PROVIDER", "").strip().casefold()
     if chosen in {"groq", "ollama"}:
         return chosen
     has_groq = bool(os.getenv("GROQ_API_KEY", "").strip())
-    if kind == "simple" and _installed() and not _stopped_for("ollama"):
-        return "ollama"
+    if kind == "simple":
+        local = os.getenv("OUTSIDE_JUDGE_SIMPLE_PROVIDER", "").strip().casefold() == "ollama"
+        if (local or not has_groq) and _installed() and not _stopped_for("ollama:" + _ollama_model()):
+            return "ollama"
     return "groq" if has_groq else "ollama"
 
 
-def model(get: Callable[..., Any] | None = None, kind: str = "hard") -> str:
-    if provider(kind) == "groq":
-        chosen = os.getenv("GROQ_JUDGE_MODEL", "").strip() or GROQ_DEFAULT_MODEL
-        return "" if any(family in chosen.casefold() for family in EXCLUDED_FAMILIES) else chosen
+def _ollama_model(get: Callable[..., Any] | None = None) -> str:
     # The same setting as the existing pairwise judge (services/insight_judge.py, OLLAMA_JUDGE_MODEL), so
     # one model is configured once; OUTSIDE_JUDGE_MODEL overrides it for these checks only.
     chosen = os.getenv("OUTSIDE_JUDGE_MODEL", "").strip() or os.getenv("OLLAMA_JUDGE_MODEL", "").strip()
@@ -118,20 +120,35 @@ def model(get: Callable[..., Any] | None = None, kind: str = "hard") -> str:
     return ""
 
 
+def model(get: Callable[..., Any] | None = None, kind: str = "hard") -> str:
+    if provider(kind) == "groq":
+        if kind == "simple":
+            chosen = os.getenv("GROQ_SIMPLE_MODEL", "").strip() or GROQ_SIMPLE_DEFAULT_MODEL
+        else:
+            chosen = os.getenv("GROQ_JUDGE_MODEL", "").strip() or GROQ_DEFAULT_MODEL
+        return "" if any(family in chosen.casefold() for family in EXCLUDED_FAMILIES) else chosen
+    return _ollama_model(get)
+
+
+def _lane(kind: str = "hard") -> str:
+    return provider(kind) + ":" + model(kind=kind)
+
+
 def available(get: Callable[..., Any] | None = None, kind: str = "hard") -> bool:
     if os.getenv("OUTSIDE_JUDGE", "1").strip() in {"0", "false", "no"}:
         return False
     which = provider(kind)
-    if _stopped_for(which):
+    name = model(get, kind)
+    if not name or _stopped_for(which + ":" + name):
         return False
     if which == "groq":
-        return bool(os.getenv("GROQ_API_KEY", "").strip()) and bool(model(get, kind))
-    return bool(_installed(get)) and bool(model(get, kind))
+        return bool(os.getenv("GROQ_API_KEY", "").strip())
+    return bool(_installed(get))
 
 
 def reset() -> None:
     _CACHE.clear()
-    for key in [k for k in _STATS if k.startswith("consecutive_failed") or k == "daily_limit"]:
+    for key in [k for k in _STATS if k.startswith(("consecutive_failed", "daily_limit"))]:
         _STATS.pop(key, None)
 
 
@@ -160,30 +177,34 @@ def _detail(response: Any) -> str:
         return " ".join(str(getattr(response, "text", "") or "").split())[:200]
 
 
-def _fail(reason: str, which: str = "") -> None:
-    which = which or provider()
+def _fail(reason: str, lane: str = "") -> None:
+    lane = lane or _lane()
     _STATS["failed"] += 1
-    _STATS["consecutive_failed:" + which] = _STATS.get("consecutive_failed:" + which, 0) + 1
+    _STATS["consecutive_failed:" + lane] = _STATS.get("consecutive_failed:" + lane, 0) + 1
+    if any(word in reason.casefold() for word in MEMORY_ERRORS):
+        # v13.29.2: a model that cannot be loaded will not load on the next call either - stop it now.
+        _STATS["consecutive_failed:" + lane] = MAX_CONSECUTIVE_FAILURES
     _STATS["last_error"] = reason
     if _STATS["failed"] <= 3:
-        logger.warning("outside_judge_failed=%s", json.dumps({"provider": which, "reason": reason}))
+        logger.warning("outside_judge_failed=%s", json.dumps({"lane": lane, "reason": reason}))
 
 
-def _ok(which: str) -> None:
-    _STATS["consecutive_failed:" + which] = 0
+def _ok(lane: str) -> None:
+    _STATS["consecutive_failed:" + lane] = 0
 
 
-def _stopped_for(which: str) -> bool:
-    if which == "groq" and _STATS.get("daily_limit"):
+def _stopped_for(lane: str) -> bool:
+    """lane = "provider:model" (a bare provider name is accepted too)."""
+    if _STATS.get("daily_limit:" + lane):
         return True
-    return _STATS.get("consecutive_failed:" + which, 0) >= MAX_CONSECUTIVE_FAILURES
+    return _STATS.get("consecutive_failed:" + lane, 0) >= MAX_CONSECUTIVE_FAILURES
 
 
 def stopped(kind: str = "hard") -> bool:
-    """v13.28.3: after MAX_CONSECUTIVE_FAILURES failures in a row a provider is treated as unavailable for the
+    """v13.28.3: after MAX_CONSECUTIVE_FAILURES failures in a row a lane is treated as unavailable for the
     rest of the run (each failed call can wait OUTSIDE_JUDGE_TIMEOUT seconds), so checks say "not judged".
-    v13.29: Groq also once its daily limit is reached."""
-    return _stopped_for(provider(kind))
+    v13.29: Groq also once its daily limit is reached (per model since v13.29.2)."""
+    return _stopped_for(_lane(kind))
 
 
 def _env_number(name: str, default: float) -> float:
@@ -193,31 +214,35 @@ def _env_number(name: str, default: float) -> float:
         return default
 
 
-def _pace(estimate: int, sleep: Callable[[float], Any], now: Callable[[], float]) -> None:
-    """Wait until this call fits in Groq's tokens-per-minute limit (counted from the replies' usage)."""
+def _pace(name: str, estimate: int, sleep: Callable[[float], Any], now: Callable[[], float]) -> None:
+    """Wait until this call fits in the model's tokens-per-minute limit (counted from the replies' usage)."""
     limit = _env_number("GROQ_JUDGE_TPM", 8000)
+    recent = _RECENT_TOKENS.setdefault(name, [])
     while True:
         moment = now()
-        _RECENT_TOKENS[:] = [(t, n) for t, n in _RECENT_TOKENS if moment - t < 60]
-        used = sum(n for _, n in _RECENT_TOKENS)
-        if not _RECENT_TOKENS or used + estimate <= limit:
+        recent[:] = [(t, n) for t, n in recent if moment - t < 60]
+        used = sum(n for _, n in recent)
+        if not recent or used + estimate <= limit:
             return
-        sleep(max(1.0, 60 - (moment - _RECENT_TOKENS[0][0]) + 0.5))
+        sleep(max(1.0, 60 - (moment - recent[0][0]) + 0.5))
 
 
 def _groq_ask(prompt: str, post: Callable[..., Any], sleep: Callable[[float], Any],
-              now: Callable[[], float]) -> str:
+              now: Callable[[], float], name: str = "") -> str:
+    name = name or model()
+    lane = "groq:" + name
     key = os.getenv("GROQ_API_KEY", "").strip()
     max_out = int(_env_number("GROQ_JUDGE_MAX_COMPLETION_TOKENS", 1500))
-    body = {"model": model(), "temperature": 0, "response_format": {"type": "json_object"},
+    body = {"model": name, "temperature": 0, "response_format": {"type": "json_object"},
             "reasoning_effort": os.getenv("GROQ_JUDGE_REASONING_EFFORT", "medium").strip() or "medium",
             "max_completion_tokens": max_out,
             "messages": [{"role": "system", "content": "You are a strict evaluator. Answer only with the JSON asked for."},
                          {"role": "user", "content": prompt}]}
     estimate = len(prompt) // 3 + max_out
+    recent = _RECENT_TOKENS.setdefault(name, [])
     errors: list[str] = []
     for _ in range(4):
-        _pace(estimate, sleep, now)
+        _pace(name, estimate, sleep, now)
         try:
             response = post(GROQ_URL, headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
                             data=json.dumps(body), timeout=_timeout())
@@ -228,14 +253,14 @@ def _groq_ask(prompt: str, post: Callable[..., Any], sleep: Callable[[float], An
         if status == 429:
             detail = _detail(response)
             if "per day" in detail.casefold() or "(tpd)" in detail.casefold() or "(rpd)" in detail.casefold():
-                _STATS["daily_limit"] = detail
+                _STATS["daily_limit:" + lane] = detail
                 errors.append("groq: daily limit reached - " + detail)
                 break
             try:
                 wait = float((getattr(response, "headers", {}) or {}).get("retry-after") or 10)
             except (TypeError, ValueError):
                 wait = 10.0
-            _RECENT_TOKENS.append((now(), estimate))
+            recent.append((now(), estimate))
             sleep(min(65.0, max(1.0, wait)))
             errors.append("groq: HTTP 429")
             continue
@@ -248,15 +273,15 @@ def _groq_ask(prompt: str, post: Callable[..., Any], sleep: Callable[[float], An
             errors.append(f"groq: unreadable reply ({type(error).__name__})")
             break
         used = (data.get("usage") or {}).get("total_tokens") if isinstance(data, dict) else None
-        _RECENT_TOKENS.append((now(), int(used) if isinstance(used, (int, float)) else estimate))
+        recent.append((now(), int(used) if isinstance(used, (int, float)) else estimate))
         text = _strip_thinking(str(((data.get("choices") or [{}])[0].get("message") or {}).get("content") or ""))
         if text:
-            _ok("groq")
+            _ok(lane)
             return text
         errors.append("groq: empty reply (raise GROQ_JUDGE_MAX_COMPLETION_TOKENS if reasoning used it all)")
         break
     reason = "; ".join(errors[-2:]) or "no reply"
-    _fail(reason, "groq")
+    _fail(reason, lane)
     raise RuntimeError("outside judge " + reason)
 
 
@@ -273,7 +298,8 @@ def ask(prompt: str, post: Callable[..., Any] | None = None, sleep: Callable[[fl
     name = model(kind=kind)
     if not name:
         raise RuntimeError("no open-source judge model (set GROQ_API_KEY, or start Ollama / set OUTSIDE_JUDGE_MODEL)")
-    if _stopped_for(which):
+    lane = which + ":" + name
+    if _stopped_for(lane):
         raise RuntimeError("outside judge stopped after repeated failures: " + str(_STATS.get("last_error", "")))
     if post is None:
         import requests
@@ -281,7 +307,7 @@ def ask(prompt: str, post: Callable[..., Any] | None = None, sleep: Callable[[fl
     _STATS["calls"] += 1
     if which == "groq":
         import time
-        return _groq_ask(prompt, post, sleep or time.sleep, now or time.monotonic)
+        return _groq_ask(prompt, post, sleep or time.sleep, now or time.monotonic, name=name)
     system = "You are a strict evaluator. Answer only with the JSON asked for."
     errors = []
     attempts = (
@@ -315,16 +341,18 @@ def ask(prompt: str, post: Callable[..., Any] | None = None, sleep: Callable[[fl
             text = str(((data.get("choices") or [{}])[0].get("message") or {}).get("content") or "")
         text = _strip_thinking(text)
         if text:
-            _ok("ollama")
+            _ok(lane)
             return text
         errors.append(f"{path}: empty reply")
     reason = "; ".join(errors) or "no reply"
-    _fail(reason, "ollama")
+    _fail(reason, lane)
     raise RuntimeError("outside judge " + reason)
 
 
 def _same_provider() -> bool:
-    return provider("simple") == provider("hard")
+    """True when the yes/no checks use the same model as the hard judgments (then the plain ask() is used,
+    which tests can replace)."""
+    return _lane("simple") == _lane("hard")
 
 
 def available_simple() -> bool:
@@ -345,3 +373,38 @@ def judge_or(fallback: Callable[[str], Any]) -> tuple[Callable[[str], Any], str]
     if available():
         return ask, "outside:" + model()
     return fallback, "self-judged:gemini"
+
+
+# v13.30 (research report of 22 Nov, P2): forecasts are estimated by models from different developers. Groq's
+# free plan also serves Alibaba's Qwen and Meta's Llama (each with its own per-model limits); the first that
+# answers is used for the rest of the run. GROQ_OTHER_MODELS overrides the list (comma-separated).
+# v13.31: Llama 3.1 8B and 3.3 70B were shut down on Groq's free tiers on 16 Aug 2026 (research report of 22 Nov),
+# so Alibaba's Qwen preview is the only non-OpenAI family there.
+OTHER_DEVELOPER_MODELS = ("qwen/qwen3.8-27b", "qwen/qwen3-32b")
+
+
+def ask_other_developer(prompt: str, post: Callable[..., Any] | None = None) -> str:
+    import time
+    if not os.getenv("GROQ_API_KEY", "").strip():
+        raise RuntimeError("no GROQ_API_KEY")
+    names = [n.strip() for n in os.getenv("GROQ_OTHER_MODELS", "").split(",") if n.strip()] or list(OTHER_DEVELOPER_MODELS)
+    working = _CACHE.get("other_model")
+    if working:
+        names = [working] + [n for n in names if n != working]
+    if post is None:
+        import requests
+        post = requests.post
+    last: Exception | None = None
+    for name in names:
+        if _stopped_for("groq:" + name):
+            continue
+        try:
+            text = _groq_ask(prompt, post, time.sleep, time.monotonic, name=name)
+        except Exception as error:   # e.g. model not served (HTTP 404) - try the next developer's model
+            last = error
+            _STATS["consecutive_failed:groq:" + name] = MAX_CONSECUTIVE_FAILURES if "404" in str(error) else \
+                _STATS.get("consecutive_failed:groq:" + name, 0)
+            continue
+        _CACHE["other_model"] = name
+        return text
+    raise RuntimeError("no other-developer model answered: " + str(last or "none available"))

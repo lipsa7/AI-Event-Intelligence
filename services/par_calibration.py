@@ -161,3 +161,49 @@ def rate_next(scored: Sequence[Mapping[str, Any]], limit: int = 5) -> list[dict[
     rows = [dict(r) for r in scored if isinstance(r.get("probability"), (int, float))]
     rows.sort(key=lambda r: abs(float(r["probability"]) - 0.5))
     return [{"text": str(r.get("text") or "")[:400], "probability": r["probability"]} for r in rows[:limit]]
+
+
+# ---------------------------------------------------------------- v13.31: held-out metrics (Yan; Husain)
+# Research report of 22 Nov (v13.30 plan): report a judge's fail-class recall, precision and Cohen's kappa on a
+# held-out test set (Eugene Yan: 75% of labels to align, 25% held out; kappa 0.4-0.6 substantial, above 0.7
+# excellent; human raters are often only 0.2-0.3), never raw agreement - a judge that always says "pass"
+# looks accurate when failures are rare (Husain & Shankar: TPR and TNR both above 80%).
+def kappa(pred: Sequence[int], truth: Sequence[int]) -> float | None:
+    n = len(truth)
+    if not n:
+        return None
+    observed = sum(1 for p, t in zip(pred, truth) if p == t) / n
+    p_yes = (sum(pred) / n) * (sum(truth) / n)
+    p_no = (1 - sum(pred) / n) * (1 - sum(truth) / n)
+    expected = p_yes + p_no
+    return round((observed - expected) / (1 - expected), 3) if expected < 1 else None
+
+
+def classification(pred: Sequence[int], truth: Sequence[int]) -> dict[str, Any]:
+    tp = sum(1 for p, t in zip(pred, truth) if p and t)
+    tn = sum(1 for p, t in zip(pred, truth) if not p and not t)
+    fp = sum(1 for p, t in zip(pred, truth) if p and not t)
+    fn = sum(1 for p, t in zip(pred, truth) if not p and t)
+    return {"tpr": round(tp / (tp + fn), 3) if tp + fn else None, "tnr": round(tn / (tn + fp), 3) if tn + fp else None,
+            "precision": round(tp / (tp + fp), 3) if tp + fp else None,
+            "fail_recall": round(tn / (tn + fp), 3) if tn + fp else None, "kappa": kappa(pred, truth), "n": len(truth)}
+
+
+def holdout(x: Sequence[Sequence[float]], y: Sequence[int], share: float = 0.25, seed: int = 22) -> dict[str, Any]:
+    """Fit on 75%, score the held-out 25% (stratified) at the threshold chosen on the 75%."""
+    rng = np.random.default_rng(seed)
+    test: list[int] = []
+    for label in (0, 1):
+        idx = [i for i, v in enumerate(y) if v == label]
+        rng.shuffle(idx)
+        test += idx[: max(1, round(len(idx) * share))]
+    train = [i for i in range(len(y)) if i not in set(test)]
+    if len({y[i] for i in train}) < 2:
+        return {}
+    xs, ys = [x[i] for i in train], [y[i] for i in train]
+    threshold = choose_threshold(cross_validate(xs, ys), ys).get("threshold")
+    weights, bias = fit(xs, ys)
+    if threshold is None:
+        return {"threshold": None, "n": len(test)}
+    pred = [1 if _prob(weights, bias, x[i]) >= threshold else 0 for i in test]
+    return dict(classification(pred, [y[i] for i in test]), threshold=threshold)

@@ -22,8 +22,8 @@ def test_structure_gate_accepts_a_checkable_variant_view():
 
 def test_structure_gate_rejects_what_cannot_be_checked_in_weeks():
     assert "no_number" in variant_view.structure_problems(cand("OpenAI will change its testing."), today=TODAY)
-    assert variant_view.structure_problems(cand("Fine of $2,500 per violation.", days=270), today=TODAY) == ["call_horizon_270_days"]
-    assert variant_view.structure_problems(cand("Fine of $2,500 per violation.", days=5), today=TODAY) == ["call_horizon_5_days"]
+    assert variant_view.structure_problems(cand("Fine of $2,500 per violation.", days=400), today=TODAY) == ["call_horizon_400_days"]
+    assert variant_view.structure_problems(cand("Fine of $2,500 per violation.", days=3), today=TODAY) == ["call_horizon_3_days"]
     assert "no_dated_call" in variant_view.structure_problems(cand("Fine of $2,500.", days=None), today=TODAY)
     assert "no_named_actor" in variant_view.structure_problems(
         cand("fines of $2,500 will rise.", holder=""), today=TODAY)
@@ -82,7 +82,7 @@ def test_orchestrator_select_drops_uncheckable_and_keeps_the_winner(monkeypatch)
     monkeypatch.setenv("EVENT_INTELLIGENCE_VARIANT_VIEW", "1")
     service = S.__new__(S)
     service._ask_briefing_model = lambda prompt: {"better": "B"}
-    long_call = cand("Fine of $2,500 per violation.", days=300)
+    long_call = cand("Fine of $2,500 per violation.", days=400)
     other = cand("A second variant: 80 escapes means a 2027 consent decree for OpenAI.", days=60)
     near = dict(GOOD)
     near["forecast_contract"] = dict(GOOD["forecast_contract"],

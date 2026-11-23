@@ -88,6 +88,12 @@ def _no_variant_view_in_tests(monkeypatch):
     # v13.29: the variant-perception, diagnosticity and load-bearing-number checks need fields and judges the
     # older fixtures do not have; tests/test_v13_29_variant_perception.py turns them on.
     monkeypatch.setenv("EVENT_INTELLIGENCE_VARIANT_PERCEPTION", "0")
+    # v13.30: no embedding calls to a local Ollama from tests; tests that need them use a fake service.
+    monkeypatch.setenv("EVENT_INTELLIGENCE_SEMANTIC_NOVELTY", "0")
+    # v13.31: older lens tests expect the four lenses; tests/test_v13_31_*.py turn the analytic moves on.
+    monkeypatch.setenv("EVENT_INTELLIGENCE_ANALYTIC_MOVES", "0")
+    from services import semantic_novelty
+    semantic_novelty.reset()
 
 
 @pytest.fixture(autouse=True)
