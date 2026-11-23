@@ -18765,7 +18765,21 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
                           and _clean(e.get("event_id")).upper() in wanted_events]
             sub_evidence = [r for r in evidence if isinstance(r, Mapping)
                             and _clean(r.get("evidence_id")) in wanted_evidence]
-            entry = {"developments": combo["labels"], "events": len(sub_events), "records": len(sub_evidence)}
+            # v13.31.3: every slot was given ALL the run's context records (v13.11), so on 23 Nov the California
+            # lawsuit story's consensus map opened with IDC's "$121.4 billion" AI-spending figure and its kept
+            # insight was about storage makers' share of that spending. A context record now stays in a story's
+            # slot only if it shares distinctive words with the story's own records (the same test the primary
+            # records pass, services/primary_data.relevant).
+            from services import primary_data as _pd
+            own = [r for r in sub_evidence if _clean(r.get("evidence_id")) in set(combo["evidence_ids"])]
+            story_text = " ".join(list(combo["labels"]) + [_clean(r.get("text"))[:600] for r in own])
+            corpus = [_clean(r.get("text"))[:600] for r in evidence if isinstance(r, Mapping)]
+            context = [r for r in sub_evidence if _clean(r.get("evidence_id")) not in set(combo["evidence_ids"])]
+            kept_context = {_clean(c.get("evidence_id")) for c in context
+                            if _pd.relevant([{"text": _clean(c.get("text"))}], story_text, corpus)[0]}
+            sub_evidence = own + [c for c in context if _clean(c.get("evidence_id")) in kept_context]
+            entry = {"developments": combo["labels"], "events": len(sub_events), "records": len(sub_evidence),
+                     "context_off_story": len(context) - len(kept_context)}
             # v13.23 (22 Nov 2026): consensus first, then competing variant views (services/variant_view.py).
             if "_semantic_earlier" not in self.__dict__:
                 # v13.31.1: loaded BEFORE the consensus view, which looks up earlier theses on this story; it was

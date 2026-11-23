@@ -1331,3 +1331,17 @@ evidence (meaning-distance) and "at par" by blind human comparison.
   Covers every repair site (rule repair, semantic-novelty revision, forecast repair, contradiction fix).
 - Case library: 21 cases, 20 with sourced outcomes (court/official links in `outcome_source`).
 - Test: tests/test_v13_31_2_reshorten.py.
+
+## v13.31.3 (23 Nov 2026): stories keep to their own facts; only relevant past cases
+
+- **Every story saw the whole run's background records.** Since v13.11, each slot received every context record from the run. In the 23 Nov test, the California lawsuit's consensus map opened with IDC's "$121.4 billion" AI-spending figure, and the insight the story kept was about storage makers' share of that spending. The articles were grouped correctly; the cause was the background records passed to each slot. A context record now stays in a story's slot only if it shares distinctive words with the story's own records (the same test primary records pass). The log shows how many were left out (`context_off_story`).
+- **Unrelated past cases were always shown.** The case search always returned the top 3, however distant (Gonzalez v. Google for a state attorney-general lawsuit), and untagged drafts with empty descriptions still got scores. Cases with no legal theory and no mechanism tags are now skipped, and a case must reach a similarity of 0.55 (adjustable with `EVENT_INTELLIGENCE_CASE_MIN_SIMILARITY`; not yet calibrated).
+- **Tests:** `tests/test_v13_31_3_story_context.py`.
+
+## v13.31.4 (23 Nov 2026) - stage test prints every field in full
+- `try_variants.py` cut the variant perception at 600 characters and other fields at 300-400, so the rival view
+  of the Texas insight was read half-finished and its ending guessed. Every field now prints in full (variant
+  perception indented), the winner line shows its word count (the brief asks for 150-300), and every winning
+  candidate is appended in full to `data/stage_candidates.jsonl`.
+- Case library: 15 cases (public nuisance, Section 230/platforms, AI copyright, antitrust, agency power), all with
+  sourced outcomes, 14 with durations.

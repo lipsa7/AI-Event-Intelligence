@@ -65,15 +65,27 @@ def main() -> int:
                 print(f"  DRAFT [{dropped.get('move')}] rubric {score} {dropped['problems']}: {dropped['insight']}")
             for item in candidates:
                 meta = item.get("metadata") or {}
-                print("  WINNER:", item.get("insight") or item.get("text"))
+                text = item.get("insight") or item.get("text") or ""
+                # v13.31.4: every field printed in full - judging truncated text led to guessed endings
+                # (the rival view of 23 Nov was cut at 600 characters and filled in by hand).
+                print(f"  WINNER ({len(text.split())} words):", text)
                 print("    rubric:", json.dumps(meta.get("rubric")))
-                print("    call:", json.dumps(item.get("forecast_contract") or meta.get("forecast_contract"), ensure_ascii=False)[:400])
-                print("    lens:", item.get("analytical_lenses"), "| novelty:", json.dumps(meta.get("variant_novelty"))[:300])
-                print("    pre-mortem:", json.dumps(meta.get("variant_premortem"))[:300])
-                print("    variant perception:", json.dumps(item.get("variant_perception") or meta.get("variant_perception"),
-                                                         ensure_ascii=False)[:600])
+                print("    call:", json.dumps(item.get("forecast_contract") or meta.get("forecast_contract"), ensure_ascii=False))
+                print("    lens:", item.get("analytical_lenses"), "| novelty:", json.dumps(meta.get("variant_novelty"), ensure_ascii=False))
+                print("    pre-mortem:", json.dumps(meta.get("variant_premortem"), ensure_ascii=False))
+                print("    variant perception:")
+                print(json.dumps(item.get("variant_perception") or meta.get("variant_perception"), ensure_ascii=False, indent=6))
                 print("    forecast diagnosticity:", json.dumps({k: v for k, v in (meta.get("variant_diagnosticity") or {}).items()
-                                                              if k != "answers"})[:300])
+                                                              if k != "answers"}, ensure_ascii=False))
+                try:    # v13.31.4: the full candidate kept on disk, so the text is never lost to a screen buffer
+                    from datetime import datetime as _dt
+                    out = Path(__file__).resolve().parent / "data" / "stage_candidates.jsonl"
+                    with out.open("a", encoding="utf-8") as handle:
+                        handle.write(json.dumps({"when": _dt.now().isoformat(timespec="seconds"),
+                                                 "run_id": checkpoint["run_id"], "story": combo["labels"],
+                                                 "candidate": item}, ensure_ascii=False, default=str) + "\n")
+                except OSError as error:
+                    print(f"    (candidate not saved: {error})")
             if not candidates:
                 print("  No candidate survived (abstained for this story).")
     finally:

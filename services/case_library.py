@@ -57,6 +57,9 @@ def retrieve(story_text: str, cases: Sequence[Mapping[str, Any]] | None = None, 
              embed: Any = None) -> list[dict[str, Any]]:
     """The k cases whose mechanism description is closest to the story (embeddings when available, else words)."""
     cases = list(cases if cases is not None else load())
+    # v13.31.3: a case with neither a legal theory nor mechanism tags has an empty description, and an empty
+    # description still gets a similarity score - so on 23 Nov untagged drafts ranked among the "past cases".
+    cases = [c for c in cases if _clean(c.get("legal_theory")) or (c.get("mechanism_tags") or [])]
     if not cases or not _clean(story_text):
         return []
     if embed is not None:
@@ -70,7 +73,15 @@ def retrieve(story_text: str, cases: Sequence[Mapping[str, Any]] | None = None, 
         story = _bag(story_text)
         scores = [len(story & _bag(describe(c))) / max(1, len(_bag(describe(c)))) for c in cases]
     ranked = sorted(zip(scores, cases), key=lambda pair: -float(pair[0]))
-    return [dict(case, similarity=round(float(score), 3)) for score, case in ranked[:k] if float(score) > 0]
+    # v13.31.3: embedding scores are never zero, so the top 3 came back however unrelated (Gonzalez v. Google
+    # for a state AG suit). A floor keeps only cases that are actually close; uncalibrated, set by
+    # EVENT_INTELLIGENCE_CASE_MIN_SIMILARITY until approved cases with outcomes allow measuring it.
+    try:
+        floor = float(os.getenv("EVENT_INTELLIGENCE_CASE_MIN_SIMILARITY", "") or (0.55 if embed is not None else 0.0))
+    except ValueError:
+        floor = 0.55 if embed is not None else 0.0
+    return [dict(case, similarity=round(float(score), 3)) for score, case in ranked[:k]
+            if float(score) > 0 and float(score) >= floor]
 
 
 def base_rate(cases: Sequence[Mapping[str, Any]], outcome_word: str) -> dict[str, Any]:

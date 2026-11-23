@@ -151,7 +151,10 @@ def test_exploration_runs_when_no_candidate_passes_and_its_candidate_is_gated(mo
     call = obj.analyze_calls[0]
     assert "SYSTEMATIC EXPLORATION" in call["refinement_context"]["instruction"]
     assert len(call["current_events"]) < len(events)                       # only that combination's events
-    assert any(r["evidence_id"] == "EVID-RULE" for r in call["evidence"])    # gap context stays available
+    # v13.31.3: a context record stays in a story's slot only if it is about that story; the placeholder
+    # "rule" shares no words with the story's records, so it is left out and counted.
+    assert not any(r["evidence_id"] == "EVID-RULE" for r in call["evidence"])
+    assert any(c.get("context_off_story", 0) >= 1 for c in state["claim_support_gate"]["exploration"]["combinations"])
     attempts = state["claim_support_gate"]["attempts"]
     assert [a["origin"] for a in attempts] == ["pipeline", "exploration"]
     assert state["claim_support_gate"]["exploration"]["combinations"]
