@@ -18421,7 +18421,15 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
         except Exception as error:
             logger.info("variant_repair failed: %s", type(error).__name__)
             return None
-        return variant_view.apply_repair(item, answer, problems)
+        repaired = variant_view.apply_repair(item, answer, problems)
+        # v13.31.2 (run of 23 Nov: 5 of 8 candidates failed 'concise'): a repair rewrites the whole insight and
+        # can lengthen the thesis the shortener had already fixed, so the length is fixed again here, by a
+        # short call on the thesis sentence alone, after every repair.
+        if repaired is not None and any(p.startswith("thesis_") for p in variant_view.plain_language_problems(repaired)):
+            shorter = self._shorten_thesis(repaired)
+            if shorter is not None:
+                repaired = shorter
+        return repaired
 
     def _shorten_thesis(self, item: Mapping[str, Any]) -> dict[str, Any] | None:
         """v13.31: one short call on the thesis sentence alone (length limits fail in prompts and in

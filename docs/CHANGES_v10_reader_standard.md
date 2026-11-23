@@ -1321,3 +1321,13 @@ evidence (meaning-distance) and "at par" by blind human comparison.
 - **The meaning-based novelty check measured the wrong thing.** It used the search mode of the embedding model: the candidate embedded as a search query and the references as documents. That scores even near-paraphrases well below the 0.80 duplicate threshold, so the check rarely fired. Both sides now use the model's similarity mode ("clustering").
 - **The first story missed its earlier theses.** Earlier insights were loaded after the consensus view that looks them up, and never reloaded in a second run in the same app session. They now load before it, fresh each run.
 - **Tests:** `tests/test_v13_31_1_fixes.py`.
+
+## v13.31.2 (23 Nov 2026) - thesis shortened again after every repair
+- Run RUN-4367E5FE6BE84506BBC92CBB (2 stories, 8 candidates): mean rubric 0.726, 0 of 8 met every item, 2 kept;
+  most-failed item "concise" (5 of 8). The shortener ran before the repair, and the repair rewrote the whole
+  insight and lengthened the thesis again; both kept insights were passed on with problems, so the forecast,
+  pre-mortem and contradiction checks never ran on them.
+- `_variant_repair` now re-runs the thesis shortener whenever its output's thesis is over THESIS_MAX_WORDS.
+  Covers every repair site (rule repair, semantic-novelty revision, forecast repair, contradiction fix).
+- Case library: 21 cases, 20 with sourced outcomes (court/official links in `outcome_source`).
+- Test: tests/test_v13_31_2_reshorten.py.
