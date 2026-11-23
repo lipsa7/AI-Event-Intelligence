@@ -17501,6 +17501,7 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
             pass
         self._par_scored = []   # v13.28: judge probabilities this run (rate_next)
         self._run_kept_texts = []   # v13.31: this run's kept candidates (meaning-distance across stories)
+        self.__dict__.pop("_semantic_earlier", None)   # v13.31.1: reload earlier insights each run (not the app's first run's)
         try:   # v13.3: the Exa fallback's per-run cap (services/exa_contents.py) starts again each run
             from services import exa_contents
             exa_contents.reset_run_budget()
@@ -18758,6 +18759,14 @@ Return at most ONE candidate. A useful connection may be returned with an empty 
                             and _clean(r.get("evidence_id")) in wanted_evidence]
             entry = {"developments": combo["labels"], "events": len(sub_events), "records": len(sub_evidence)}
             # v13.23 (22 Nov 2026): consensus first, then competing variant views (services/variant_view.py).
+            if "_semantic_earlier" not in self.__dict__:
+                # v13.31.1: loaded BEFORE the consensus view, which looks up earlier theses on this story; it was
+                # loaded after it, so the first story never saw its earlier theses.
+                try:
+                    from services import earlier_insights
+                    self._semantic_earlier = list(earlier_insights.load(topic))[:400]
+                except Exception:
+                    self._semantic_earlier = []
             view = self._consensus_view(combo["labels"], sub_evidence, evidence)
             entry["consensus"] = _clean(view.get("consensus"))[:200]
             entry["consensus_claims"] = len(view.get("claims") or [])

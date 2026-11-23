@@ -22,7 +22,7 @@ import logging
 import os
 from typing import Any, Mapping, Sequence
 
-VERSION = "semantic-novelty-v1"
+VERSION = "semantic-novelty-v1.1-symmetric"
 logger = logging.getLogger("event_intelligence.services.semantic_novelty")
 # Si et al. (ICLR 2025) treat ideas at 0.8 cosine or above as duplicates. A candidate this close is revised
 # against its nearest neighbours; it is held back only if it is still a near-copy (BLOCK) after the revisions.
@@ -63,6 +63,20 @@ def thresholds() -> tuple[float, float]:
     return number("EVENT_INTELLIGENCE_NOVELTY_REVISE_AT", REVISE_AT), number("EVENT_INTELLIGENCE_NOVELTY_BLOCK_AT", BLOCK_AT)
 
 
+def _symmetric(service: Any, text: str, others: Sequence[str]) -> list[float]:
+    """v13.31.1: "does this say the same thing?" is a symmetric question, so both sides get the same prefix.
+    VectorService.similarities() is built for search: it embeds the candidate as a "search_query" and the
+    references as "search_document" (nomic-embed-text's retrieval prefixes), which puts even near-paraphrases
+    well below the 0.80 duplicate line taken from Si et al. (who compared ideas with one symmetric model).
+    Nomic's own guidance: use the "clustering" prefix on both sides for semantic similarity."""
+    embed = getattr(service, "embed", None)
+    if not callable(embed):
+        return list(service.similarities(text, others))
+    from services.vector_service import cosine
+    vectors = embed([text] + list(others), purpose="clustering")
+    return [cosine(vectors[0], v) for v in vectors[1:]]
+
+
 def reference_texts(view: Mapping[str, Any], earlier: Sequence[str] = ()) -> list[dict[str, str]]:
     rows = []
     for claim in view.get("claims") or []:
@@ -85,7 +99,7 @@ def check(candidate_text: str, references: Sequence[Mapping[str, str]], service:
     if service is None or not text or not references:
         return {"checked": False, "reason": "no_embeddings" if service is None else "nothing_to_compare"}
     try:
-        scores = service.similarities(text, [r["text"] for r in references])
+        scores = _symmetric(service, text, [r["text"] for r in references])
     except Exception as error:
         return {"checked": False, "reason": "embedding_failed:" + type(error).__name__}
     ranked = sorted(zip(scores, references), key=lambda pair: -float(pair[0]))

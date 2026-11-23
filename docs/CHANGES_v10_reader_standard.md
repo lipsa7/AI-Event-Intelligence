@@ -1312,3 +1312,12 @@ evidence (meaning-distance) and "at par" by blind human comparison.
   (Green & Armstrong); the LLM novelty call is off by default (EVENT_INTELLIGENCE_LLM_NOVELTY=1) - it was
   advisory and cost Groq's daily tokens; the scorecard also counts every claim-check attempt, so saved reports
   give a baseline (0 of 22 passed across the last six runs).
+
+## v13.31.1 (23 Nov 2026): review of v13.29.2-v13.31
+
+- **The fact table invented a rate.** A record mentioning "around 80 other incidents", a 30 Sep subpoena and a 17 Nov lawsuit became "about 50.7 incidents a month". No source says that, and because it was "computed", the number checks counted it as sourced. A rate now needs the count and both dates in the same sentence.
+- **Mentions of old events were treated as late disclosures.** "Reported later" counted any article that mentions an earlier date. It now uses the first record in the story that mentions the date.
+- **The least useful gaps came first.** The fact table was sorted by the longest gap, so "December 2015 (founding) to November 2026: about 131 months" topped every story. Now late disclosures and gaps under about 13 months come first.
+- **The meaning-based novelty check measured the wrong thing.** It used the search mode of the embedding model: the candidate embedded as a search query and the references as documents. That scores even near-paraphrases well below the 0.80 duplicate threshold, so the check rarely fired. Both sides now use the model's similarity mode ("clustering").
+- **The first story missed its earlier theses.** Earlier insights were loaded after the consensus view that looks them up, and never reloaded in a second run in the same app session. They now load before it, fresh each run.
+- **Tests:** `tests/test_v13_31_1_fixes.py`.

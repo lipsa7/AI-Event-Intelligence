@@ -27,7 +27,7 @@ from typing import Any, Mapping, Sequence
 
 from services import delta_extractor
 
-VERSION = "fact-table-v1"
+VERSION = "fact-table-v1.1"
 MIN_DATE_GAP_DAYS = 7
 MAX_COMPUTED = 30
 _COUNT = re.compile(r"\b(\d{1,3}(?:,\d{3})*|\d+)\s+(?:other\s+|more\s+|new\s+|separate\s+)?"
@@ -117,15 +117,21 @@ def compute(rows: Sequence[Mapping[str, Any]], limit: int = MAX_COMPUTED) -> lis
         out.append({"kind": "date_gap", "days": days, "evidence_ids": sorted({a["evidence_id"], b["evidence_id"]}),
                     "figures": ([str(days), str(round(days / 7))] if exact else []) + [str(months)],
                     "text": f'{a["words"]} to {b["words"]}: {span}'})
+    # v13.31.1: "reported later" = the FIRST record in the story that mentions the date. Any later article that
+    # looks back at an event ("a subpoena on September 30", in a 18 Nov story) is not a late disclosure.
     published = {r["evidence_id"]: r["value"] for r in rows if r.get("kind") == "published"}
+    first_mention: dict[str, tuple[str, Mapping[str, Any]]] = {}
     for row in [r for r in dates if r.get("exact_day")]:
         pub = published.get(row["evidence_id"])
-        if pub and row["value"] < pub:
-            days = _days(row["value"], pub)
+        if pub and (row["value"] not in first_mention or pub < first_mention[row["value"]][0]):
+            first_mention[row["value"]] = (pub, row)
+    for value, (pub, row) in first_mention.items():
+        if value < pub:
+            days = _days(value, pub)
             if days >= 28:
                 out.append({"kind": "reported_later", "days": days, "evidence_ids": [row["evidence_id"]],
                             "figures": [str(days), str(round(days / 7)), str(round(days / 30.4))],
-                            "text": f'{row["words"]} was reported in a record published {pub}: {days} days later'})
+                            "text": f'{row["words"]} first appears in a record published {pub}: {days} days later'})
     # Amounts and percentages are compared only within one record: across records they are usually different
     # things (a quarterly spend and a market forecast), and a ratio between them is the stapling the second
     # report warns about. Dates may be compared across the story's records.
@@ -143,10 +149,14 @@ def compute(rows: Sequence[Mapping[str, Any]], limit: int = MAX_COMPUTED) -> lis
             gap = round(abs(a["value"] - b["value"]), 1)
             out.append({"kind": "percentage_points", "points": gap, "evidence_ids": sorted({a["evidence_id"], b["evidence_id"]}),
                         "figures": [str(gap)], "text": f'{a["words"]} against {b["words"]}: {gap} percentage points apart'})
-    by_record: dict[str, list[Mapping[str, Any]]] = {}
+    # v13.31.1: a rate only when the count and BOTH dates are in the same SENTENCE. Per record, "around 80
+    # other incidents" and the dates of a subpoena and a lawsuit became "about 50.7 incidents a month" - a
+    # figure no source states and nothing supports, which the number checks then treated as sourced.
+    by_sentence: dict[tuple[str, str], list[Mapping[str, Any]]] = {}
     for row in rows:
-        by_record.setdefault(row["evidence_id"], []).append(row)
-    for eid, items in by_record.items():
+        if row.get("sentence"):
+            by_sentence.setdefault((row["evidence_id"], row["sentence"]), []).append(row)
+    for (eid, _sentence), items in by_sentence.items():
         record_dates = sorted({r["value"] for r in items if r.get("kind") == "date" and r.get("exact_day")})
         counts = [r for r in items if r.get("kind") == "count" and r.get("unit") not in {"day", "week", "month"}]
         if len(record_dates) >= 2 and counts:
@@ -161,7 +171,14 @@ def compute(rows: Sequence[Mapping[str, Any]], limit: int = MAX_COMPUTED) -> lis
     unique: dict[str, dict[str, Any]] = {}
     for row in out:
         unique.setdefault(row["text"], row)
-    out = sorted(unique.values(), key=lambda r: (-(r.get("days") or 0), -(r.get("ratio") or 0)))
+    # v13.31.1: most useful first. Sorting by the longest gap put "December 2015 (founding) to November 2026:
+    # about 131 months" at the top of every story's table.
+    def rank(row: Mapping[str, Any]) -> tuple:
+        kind, days = row.get("kind"), row.get("days") or 0
+        group = (0 if kind == "reported_later" else 1 if kind == "date_gap" and days <= 400
+                 else 2 if kind in {"money_ratio", "percentage_points"} else 3 if kind == "rate" else 4)
+        return (group, -days if group < 2 else days, -(row.get("ratio") or 0))
+    out = sorted(unique.values(), key=rank)
     for n, row in enumerate(out[:limit], start=1):
         row["calc_id"] = f"CALC-{n}"
     return out[:limit]
